@@ -1,1 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>整理券発行</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+      background-color: #f8f8f8;
+    }
+    h1 {
+      margin-bottom: 1em;
+    }
+    #ticket {
+      margin-top: 2em;
+      padding: 1.5em;
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      display: none;
+    }
+    .big {
+      font-size: 2em;
+      font-weight: bold;
+    }
+    #qrcode canvas {
+      margin: 1em auto;
+      display: block;
+    }
+    #timer {
+      color: #d9534f;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+    button {
+      padding: 1em 2em;
+      font-size: 1em;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎟 整理券発行画面</h1>
+  <button onclick="issueTicket()">整理券を発行</button>
+
+  <div id="ticket">
+    <p class="big">あなたの整理番号：<span id="number">SB000</span></p>
+    <div id="qrcode"></div>
+    <p>有効期限：<span id="timer">10:00</span></p>
+  </div>
+
+  <script>
+    function generateRandomNumber() {
+      const num = Math.floor(Math.random() * 900 + 100); // 100-999
+      return `SB${num}`;
+    }
+
+    function issueTicket() {
+      const number = generateRandomNumber();
+      document.getElementById('number').innerText = number;
+
+      const qrDiv = document.getElementById('qrcode');
+      qrDiv.innerHTML = ''; // 前のQRを削除
+      const url = `${window.location.origin}/ticket.html?code=${number}`;
+      QRCode.toCanvas(url, { errorCorrectionLevel: 'H' }, function (err, canvas) {
+        if (err) {
+          console.error(err);
+          alert("QRコードの生成に失敗しました");
+          return;
+        }
+        qrDiv.appendChild(canvas);
+      });
+
+      document.getElementById('ticket').style.display = 'block';
+      startCountdown(10 * 60); // 10分
+    }
+
+    function startCountdown(seconds) {
+      const timerEl = document.getElementById('timer');
+      clearInterval(window.countdownInterval);
+      window.countdownInterval = setInterval(() => {
+        if (seconds <= 0) {
+          clearInterval(window.countdownInterval);
+          timerEl.innerText = '期限切れ';
+          return;
+        }
+        const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const secs = String(seconds % 60).padStart(2, '0');
+        timerEl.innerText = `${minutes}:${secs}`;
+        seconds--;
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
 
