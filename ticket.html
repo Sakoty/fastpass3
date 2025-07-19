@@ -1,1 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>整理券確認</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    .status { font-size: 1.5rem; margin-top: 10px; }
+    button { font-size: 1rem; padding: 10px 20px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>整理券の確認</h1>
+  <div id="ticket-info"></div>
+  <div class="status" id="status"></div>
+  <button id="useBtn">使用済みにする</button>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const ticketInfo = document.getElementById("ticket-info");
+    const statusEl = document.getElementById("status");
+    const btn = document.getElementById("useBtn");
+
+    if (!code) {
+      ticketInfo.innerText = "整理券番号が見つかりません。";
+      btn.style.display = "none";
+    } else {
+      ticketInfo.innerText = `整理券番号：${code}`;
+      const used = localStorage.getItem(`ticket_${code}`) === "used";
+
+      const updateStatus = () => {
+        const status = localStorage.getItem(`ticket_${code}`);
+        if (status === "used") {
+          statusEl.innerText = "状態：使用済み";
+          btn.disabled = true;
+        } else {
+          statusEl.innerText = "状態：有効";
+          btn.disabled = false;
+        }
+      };
+
+      updateStatus();
+
+      btn.onclick = () => {
+        localStorage.setItem(`ticket_${code}`, "used");
+        updateStatus();
+      };
+    }
+  </script>
+</body>
+</html>
 
