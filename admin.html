@@ -1,1 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>整理券管理ページ</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2em;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2em;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 1em;
+      border-bottom: 1px solid #ddd;
+      text-align: center;
+    }
+    th {
+      background-color: #007bff;
+      color: white;
+    }
+    .expired {
+      color: red;
+      font-weight: bold;
+    }
+    button {
+      padding: 0.5em 1em;
+      border: none;
+      border-radius: 6px;
+      background-color: #dc3545;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #c82333;
+    }
+    .refresh-btn {
+      background-color: #28a745;
+      margin-top: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎫 整理券管理画面</h1>
+
+  <table id="ticketTable">
+    <thead>
+      <tr>
+        <th>整理番号</th>
+        <th>発行時間</th>
+        <th>残り時間</th>
+        <th>状態</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="ticketBody">
+      <!-- 動的にチケットが挿入されます -->
+    </tbody>
+  </table>
+
+  <button class="refresh-btn" onclick="renderTickets()">🔄 最新情報を更新</button>
+
+  <script>
+    const TICKET_DURATION = 10 * 60 * 1000; // 10分
+
+    // サンプルデータ（本来はローカルストレージ or サーバー連携）
+    const sampleTickets = [
+      { number: 'SB123', createdAt: Date.now() - 2 * 60 * 1000 },
+      { number: 'SB456', createdAt: Date.now() - 11 * 60 * 1000 },
+      { number: 'SB789', createdAt: Date.now() - 5 * 60 * 1000 },
+    ];
+
+    function renderTickets() {
+      const tbody = document.getElementById("ticketBody");
+      tbody.innerHTML = '';
+
+      sampleTickets.forEach((ticket, index) => {
+        const now = Date.now();
+        const elapsed = now - ticket.createdAt;
+        const remaining = TICKET_DURATION - elapsed;
+        const expired = remaining <= 0;
+
+        const tr = document.createElement('tr');
+
+        const numberTd = document.createElement('td');
+        numberTd.textContent = ticket.number;
+
+        const timeTd = document.createElement('td');
+        timeTd.textContent = new Date(ticket.createdAt).toLocaleTimeString();
+
+        const remainTd = document.createElement('td');
+        remainTd.textContent = expired ? '00:00' : formatTime(remaining);
+
+        const statusTd = document.createElement('td');
+        statusTd.textContent = expired ? '期限切れ' : '有効';
+        if (expired) statusTd.classList.add('expired');
+
+        const deleteTd = document.createElement('td');
+        const btn = document.createElement('button');
+        btn.textContent = '削除';
+        btn.onclick = () => {
+          sampleTickets.splice(index, 1);
+          renderTickets();
+        };
+        deleteTd.appendChild(btn);
+
+        tr.appendChild(numberTd);
+        tr.appendChild(timeTd);
+        tr.appendChild(remainTd);
+        tr.appendChild(statusTd);
+        tr.appendChild(deleteTd);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function formatTime(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const min = String(Math.floor(totalSec / 60)).padStart(2, '0');
+      const sec = String(totalSec % 60).padStart(2, '0');
+      return `${min}:${sec}`;
+    }
+
+    renderTickets();
+    setInterval(renderTickets, 10000); // 10秒ごとに更新
+  </script>
+</body>
+</html>
 
