@@ -1,43 +1,42 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ファストパス システム</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ファストパスシステム トップページ</title>
   <style>
     body {
       font-family: sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
       text-align: center;
-      padding: 40px;
     }
     h1 {
-      margin-bottom: 40px;
+      margin-bottom: 30px;
     }
-    .link-button {
+    a {
       display: block;
-      margin: 20px auto;
-      padding: 15px 30px;
-      font-size: 18px;
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 8px;
+      margin: 15px 0;
+      padding: 15px;
+      font-size: 1.2em;
       text-decoration: none;
-      width: 80%;
-      max-width: 300px;
+      background-color: #28a745;
+      color: white;
+      border-radius: 10px;
     }
-    .link-button:hover {
-      background-color: #0056b3;
+    a:hover {
+      background-color: #1e7e34;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス 管理メニュー</h1>
+  <h1>ファストパス システム</h1>
 
-  <a class="link-button" href="issue.html">ファストパスを発行する</a>
-  <a class="link-button" href="admin.html">ファストパス一覧・呼出</a>
-  <a class="link-button" href="scan.html">ファストパス読み取り</a>
-  <a class="link-button" href="setting.html">設定・特別ファストパス発行</a>
+  <a href="issue.html">🎟️ ファストパスを発行する（来場者用）</a>
+  <a href="admin.html">🛠️ 管理ページ（呼出・操作）</a>
+  <a href="scan.html">📷 QRコード読み取り（使用済みにする）</a>
+  <a href="settings.html">⚙️ 発券設定（時間帯・特別パス）</a>
 
 </body>
 </html>
