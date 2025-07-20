@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ファストパス発券</title>
   <style>
     body {
@@ -64,10 +64,10 @@
   <h1>ファストパス発券</h1>
   <form id="fastpassForm">
     <label>名前:
-      <input type="text" name="name" required>
+      <input type="text" name="name" required />
     </label>
     <label>人数:
-      <input type="number" name="count" required min="1" value="1">
+      <input type="number" name="count" required min="1" value="1" />
     </label>
     <button type="submit">ファストパスを発券</button>
   </form>
@@ -105,7 +105,7 @@
 
     function estimateTime(ticketCount) {
       const now = new Date();
-      const delayMinutes = ticketCount * 2; // 2分/件（例）
+      const delayMinutes = ticketCount * 2; // 2分遅れを想定
       now.setMinutes(now.getMinutes() + delayMinutes);
       return now.toLocaleTimeString("ja-JP", { hour: '2-digit', minute: '2-digit' });
     }
@@ -116,24 +116,30 @@
       const name = form.name.value.trim();
       const count = parseInt(form.count.value.trim());
       if (!name || isNaN(count) || count < 1) {
-        return alert("正しい名前と人数を入力してください。");
+        alert("正しい名前と人数を入力してください。");
+        return;
       }
 
       const snapshot = await getDocs(collection(db, "fastpasses"));
       const ticketCount = snapshot.docs.length;
       const id = await generateNextId();
-      const time = estimateTime(ticketCount);
+      const guideTime = estimateTime(ticketCount);
 
       await setDoc(doc(db, "fastpasses", id), {
+        id,
         name,
         count,
-        status: "有効",
+        status: "valid",
         issuedAt: new Date(),
-        guideTime: time
+        guideTime
       });
 
-      result.innerHTML = `発券ID: ${id}<br>案内時間: ${time}`;
-      QRCode.toCanvas(qrCanvas, id);
+      result.innerHTML = `発券ID: ${id}<br>案内時間: ${guideTime}`;
+
+      // QRコード生成（発券IDのURL形式で）
+      const url = `${location.origin}/scan.html?id=${id}`;
+      QRCode.toCanvas(qrCanvas, url);
+      form.reset();
     });
   </script>
 </body>
