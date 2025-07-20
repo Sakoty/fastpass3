@@ -16,33 +16,39 @@
 
   <script>
     // Firebase設定
-   const firebaseConfig = {
-  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain: "fastpass-system.firebaseapp.com",
-  projectId: "fastpass-system",
-  storageBucket: "fastpass-system.firebasestorage.app",
-  messagingSenderId: "858745521872",
-  appId: "1:858745521872:web:29289b673855097e1200d5",
-  measurementId: "G-SLPKMCNY53"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+      authDomain: "fastpass-system.firebaseapp.com",
+      projectId: "fastpass-system",
+      storageBucket: "fastpass-system.firebasestorage.app",
+      messagingSenderId: "858745521872",
+      appId: "1:858745521872:web:29289b673855097e1200d5",
+      measurementId: "G-SLPKMCNY53"
+    };
+
+    // 初期化
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
     async function issueTicket() {
-      // 既存チケット数を取得
+      // 現在のチケット数を取得
       const snapshot = await db.collection("tickets").get();
       const count = snapshot.size + 1;
       const ticketId = "SB" + String(count).padStart(3, '0');
 
-      // Firestoreへ保存
+      const now = new Date();
+
+      // Firestoreに保存
       await db.collection("tickets").doc(ticketId).set({
         id: ticketId,
-        issuedAt: new Date(),
+        issuedAt: firebase.firestore.Timestamp.fromDate(now),
         used: false
       });
 
       // 表示
       document.getElementById("ticketInfo").innerText = `整理番号：${ticketId}`;
 
-      // QRコード表示（内容はIDだけ）
+      // QRコード生成
       QRCode.toCanvas(document.getElementById('qrCanvas'), ticketId, {
         width: 200
       }, function (error) {
