@@ -3,112 +3,123 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>管理画面 - 発券一覧</title>
+  <title>ファストパス管理</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    .clock { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 8px; border: 1px solid #ccc; text-align: center; }
-    tr.used { background-color: #eee; color: #999; }
-    button { padding: 4px 8px; margin: 2px; font-size: 12px; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      text-align: center;
+    }
+    #currentNumber {
+      font-size: 2em;
+      margin-top: 20px;
+    }
+    #list {
+      margin-top: 30px;
+      text-align: left;
+    }
+    .ticket {
+      padding: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1em;
+    }
   </style>
 </head>
 <body>
-  <h1>管理画面 - 現在の発券状況</h1>
-  <div class="clock" id="clock"></div>
-  <table id="ticketTable">
-    <thead>
-      <tr>
-        <th>整理番号</th>
-        <th>名前</th>
-        <th>人数</th>
-        <th>ステータス</th>
-        <th>案内時間</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <h1>ファストパス管理</h1>
+  <div id="currentNumber">現在呼び出し中：--</div>
+  <button id="nextBtn">次のファストパスを呼び出す</button>
+
+  <div id="list"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot,
-      doc, updateDoc, deleteDoc
+      getFirestore, collection, query, orderBy, getDocs, doc, updateDoc, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5",
-      measurementId: "G-SLPKMCNY53"
+      appId: "1:858745521872:web:29289b673855097e1200d5"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const ticketsRef = collection(db, "tickets");
-    const tbody = document.querySelector("#ticketTable tbody");
 
-    function formatTime(date) {
-      if (!date) return "-";
-      const d = date.toDate ? date.toDate() : new Date(date);
-      const hh = d.getHours().toString().padStart(2, "0");
-      const mm = d.getMinutes().toString().padStart(2, "0");
-      return `${hh}:${mm}`;
+    const currentNumberEl = document.getElementById("currentNumber");
+    const listEl = document.getElementById("list");
+    const nextBtn = document.getElementById("nextBtn");
+
+    let currentIndex = -1;
+    let tickets = [];
+
+    async function loadTickets() {
+      const q = query(collection(db, "tickets"), orderBy("createdAt"));
+      const querySnapshot = await getDocs(q);
+
+      tickets = [];
+      listEl.innerHTML = "";
+
+      querySnapshot.forEach((docSnap, i) => {
+        const data = docSnap.data();
+        tickets.push({ id: docSnap.id, ...data });
+
+        const ticketDiv = document.createElement("div");
+        ticketDiv.className = "ticket";
+        ticketDiv.innerHTML = `
+          <strong>${data.id}</strong> - ${data.name || "名前なし"}（${data.people || 1}名）
+          - 状態: ${data.status}
+        `;
+        listEl.appendChild(ticketDiv);
+
+        if (data.status === "calling") {
+          currentIndex = i;
+          currentNumberEl.textContent = `現在呼び出し中：${data.id}`;
+        }
+      });
     }
 
-    onSnapshot(ticketsRef, (snapshot) => {
-      tbody.innerHTML = "";
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        const tr = document.createElement("tr");
-        if (data.status === "used") tr.classList.add("used");
+    async function callNext() {
+      if (currentIndex >= 0 && currentIndex < tickets.length) {
+        const currentTicket = tickets[currentIndex];
+        const ref = doc(db, "tickets", currentTicket.docId);
+        await updateDoc(doc(db, "tickets", currentTicket.id), { status: "issued" });
+      }
 
-        const guideStart = formatTime(data.guideStart);
-        const guideEnd = formatTime(data.guideEnd);
-        const guideText = (guideStart !== "-" && guideEnd !== "-") ? `${guideStart}〜${guideEnd}` : "-";
+      let nextIndex = -1;
+      for (let i = currentIndex + 1; i < tickets.length; i++) {
+        if (tickets[i].status === "issued") {
+          nextIndex = i;
+          break;
+        }
+      }
 
-        tr.innerHTML = `
-          <td>${data.id || ""}</td>
-          <td>${data.name || ""}</td>
-          <td>${data.count || ""}</td>
-          <td>${data.status === "used" ? "使用済み" : "有効"}</td>
-          <td>${guideText}</td>
-          <td>
-            <button onclick="invalidateTicket('${docSnap.id}')">無効にする</button>
-            <button onclick="deleteTicket('${docSnap.id}')">削除</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    });
+      if (nextIndex === -1) {
+        currentNumberEl.textContent = "現在呼び出し中：なし";
+        currentIndex = -1;
+      } else {
+        const nextTicket = tickets[nextIndex];
+        await updateDoc(doc(db, "tickets", nextTicket.id), { status: "calling" });
+        currentNumberEl.textContent = `現在呼び出し中：${nextTicket.id}`;
+        currentIndex = nextIndex;
+      }
 
-    // ステータスをusedにする
-    window.invalidateTicket = async (id) => {
-      const ticketRef = doc(db, "tickets", id);
-      await updateDoc(ticketRef, { status: "used" });
-    };
+      await loadTickets();
+    }
 
-    // チケットを削除
-    window.deleteTicket = async (id) => {
-      const confirmDelete = confirm("本当に削除しますか？");
-      if (!confirmDelete) return;
-      const ticketRef = doc(db, "tickets", id);
-      await deleteDoc(ticketRef);
-    };
+    nextBtn.addEventListener("click", callNext);
 
-    // デジタル時計
-    const clock = document.getElementById("clock");
-    setInterval(() => {
-      const now = new Date();
-      const hh = now.getHours().toString().padStart(2, "0");
-      const mm = now.getMinutes().toString().padStart(2, "0");
-      const ss = now.getSeconds().toString().padStart(2, "0");
-      clock.textContent = `現在時刻：${hh}:${mm}:${ss}`;
-    }, 1000);
+    loadTickets();
   </script>
 </body>
 </html>
