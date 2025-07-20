@@ -6,53 +6,47 @@
   <title>ファストパス読み取り</title>
   <style>
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: sans-serif;
       padding: 20px;
       max-width: 600px;
       margin: auto;
       text-align: center;
-      background: #f0f4f8;
     }
     video {
       width: 100%;
       max-width: 400px;
-      border-radius: 12px;
       border: 1px solid #ccc;
+      border-radius: 8px;
     }
     #message {
-      margin-top: 20px;
+      margin-top: 15px;
       font-weight: bold;
-      font-size: 1.3em;
-      color: #334e68;
+      font-size: 1.2em;
+      color: #333;
     }
     #resetBtn {
       margin-top: 20px;
-      padding: 10px 24px;
-      font-size: 1em;
-      border: none;
-      background-color: #3b82f6;
-      color: white;
-      border-radius: 8px;
-      cursor: pointer;
       display: none;
-      transition: background-color 0.3s;
-    }
-    #resetBtn:hover {
-      background-color: #2563eb;
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
   <h1>ファストパス読み取り</h1>
-  <video id="video" autoplay playsinline></video>
-  <div id="message">ファストパスのQRコードをカメラにかざしてください。</div>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="message">QRコードをカメラにかざしてください。</div>
   <button id="resetBtn">リセット</button>
 
+  <!-- jsQR ライブラリ -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getFirestore, doc, getDoc, updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -77,6 +71,7 @@
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         video.srcObject = videoStream;
+        await video.play();  // iOS Safari対応に必須
         scanning = true;
         scanLoop();
       } catch (err) {
@@ -92,15 +87,15 @@
       scanning = false;
     }
 
-    resetBtn.addEventListener("click", () => {
-      reset();
-    });
-
     function reset() {
-      message.textContent = "ファストパスのQRコードをカメラにかざしてください。";
+      message.textContent = "QRコードをカメラにかざしてください。";
       resetBtn.style.display = "none";
       startCamera();
     }
+
+    resetBtn.addEventListener("click", () => {
+      reset();
+    });
 
     async function processQRCode(text) {
       try {
@@ -113,17 +108,16 @@
           return;
         }
 
-        const passDocRef = doc(db, "passes", docId);
-        const passSnap = await getDoc(passDocRef);
-        if (!passSnap.exists()) {
+        const ticketDocRef = doc(db, "tickets", docId);
+        const ticketSnap = await getDoc(ticketDocRef);
+        if (!ticketSnap.exists()) {
           message.textContent = "ファストパス情報が見つかりません。";
           resetBtn.style.display = "inline-block";
           stopCamera();
           return;
         }
 
-        const data = passSnap.data();
-
+        const data = ticketSnap.data();
         if (data.status === "used") {
           message.textContent = `ファストパス ${data.id} は既に使用済みです。`;
           resetBtn.style.display = "inline-block";
@@ -132,7 +126,7 @@
         }
 
         // 使用済みに更新
-        await updateDoc(passDocRef, { status: "used", usedAt: serverTimestamp() });
+        await updateDoc(ticketDocRef, { status: "used", usedAt: new Date() });
 
         message.textContent = `ファストパス ${data.id} を使用済みにしました。ありがとうございます！`;
         resetBtn.style.display = "inline-block";
@@ -148,6 +142,11 @@
 
     function scanLoop() {
       if (!scanning) return;
+
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        requestAnimationFrame(scanLoop);
+        return;
+      }
 
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
