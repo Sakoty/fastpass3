@@ -16,16 +16,15 @@
 
   <script>
     // Firebase設定
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_MSG_ID",
-      appId: "YOUR_APP_ID"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+   const firebaseConfig = {
+  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.firebasestorage.app",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5",
+  measurementId: "G-SLPKMCNY53"
+};
 
     async function issueTicket() {
       // 既存チケット数を取得
