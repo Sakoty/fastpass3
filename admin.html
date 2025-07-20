@@ -65,7 +65,7 @@
   <table>
     <thead>
       <tr>
-        <th>整理番号</th>
+        <th>整理番号（ID）</th>
         <th>名前</th>
         <th>人数</th>
         <th>案内時間</th>
@@ -104,17 +104,18 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const passesRef = collection(db, "passes");
+    // コレクション名を「fastpasses」に統一
+    const passesRef = collection(db, "fastpasses");
 
     const tableBody = document.getElementById("passesTableBody");
     const errorDiv = document.getElementById("error");
     const messageDiv = document.getElementById("message");
 
-    // 日付を見やすくフォーマット
+    // 日付を見やすくフォーマット（日本語ローカル）
     function formatDate(ts) {
       if (!ts) return "-";
       const date = ts.toDate ? ts.toDate() : new Date(ts);
-      return date.toLocaleString();
+      return date.toLocaleString('ja-JP');
     }
 
     // 状態テキスト用クラス
@@ -141,7 +142,7 @@
     async function updateStatus(docId, newStatus) {
       clearMessages();
       try {
-        const docRef = doc(db, "passes", docId);
+        const docRef = doc(db, "fastpasses", docId);
         await updateDoc(docRef, {
           status: newStatus,
           updatedAt: Timestamp.now()
@@ -178,9 +179,9 @@
 
         const tr = document.createElement("tr");
 
-        // 整理番号
+        // 整理番号（FirestoreドキュメントID）
         const tdId = document.createElement("td");
-        tdId.textContent = data.id || "-";
+        tdId.textContent = docSnap.id;
         tr.appendChild(tdId);
 
         // 名前
@@ -212,7 +213,6 @@
         // 操作
         const tdAction = document.createElement("td");
 
-        // 有効なら「使用済み」「キャンセル」ボタンを表示
         if(data.status === "valid") {
           const usedBtn = document.createElement("button");
           usedBtn.textContent = "使用済みにする";
