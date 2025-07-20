@@ -88,6 +88,7 @@
       orderBy,
       onSnapshot,
       updateDoc,
+      deleteDoc,
       doc,
       Timestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -104,21 +105,18 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    // コレクション名を「fastpasses」に統一
     const passesRef = collection(db, "fastpasses");
 
     const tableBody = document.getElementById("passesTableBody");
     const errorDiv = document.getElementById("error");
     const messageDiv = document.getElementById("message");
 
-    // 日付を見やすくフォーマット（日本語ローカル）
     function formatDate(ts) {
       if (!ts) return "-";
       const date = ts.toDate ? ts.toDate() : new Date(ts);
       return date.toLocaleString('ja-JP');
     }
 
-    // 状態テキスト用クラス
     function getStatusClass(status) {
       switch(status) {
         case "valid": return "status-valid";
@@ -128,7 +126,6 @@
       }
     }
 
-    // 状態の表示名
     function getStatusText(status) {
       switch(status) {
         case "valid": return "有効";
@@ -138,7 +135,6 @@
       }
     }
 
-    // 更新処理（使用済み・キャンセル）
     async function updateStatus(docId, newStatus) {
       clearMessages();
       try {
@@ -154,7 +150,19 @@
       }
     }
 
-    // メッセージ表示
+    async function deletePass(docId) {
+      clearMessages();
+      if (!confirm(`整理番号 ${docId} を削除します。よろしいですか？`)) return;
+      try {
+        const docRef = doc(db, "fastpasses", docId);
+        await deleteDoc(docRef);
+        showMessage(`整理番号 ${docId} を削除しました。`);
+      } catch (e) {
+        showError("削除中にエラーが発生しました。");
+        console.error(e);
+      }
+    }
+
     function showMessage(msg) {
       messageDiv.textContent = msg;
       errorDiv.textContent = "";
@@ -168,7 +176,6 @@
       messageDiv.textContent = "";
     }
 
-    // リアルタイム取得と表示
     const q = query(passesRef, orderBy("createdAt", "asc"));
     onSnapshot(q, (snapshot) => {
       clearMessages();
@@ -218,15 +225,22 @@
           usedBtn.textContent = "使用済みにする";
           usedBtn.addEventListener("click", () => updateStatus(docSnap.id, "used"));
           tdAction.appendChild(usedBtn);
-
-          const cancelBtn = document.createElement("button");
-          cancelBtn.textContent = "キャンセル";
-          cancelBtn.style.backgroundColor = "#f66";
-          cancelBtn.addEventListener("click", () => updateStatus(docSnap.id, "canceled"));
-          tdAction.appendChild(cancelBtn);
+        } else if(data.status === "used") {
+          const validBtn = document.createElement("button");
+          validBtn.textContent = "有効に戻す";
+          validBtn.addEventListener("click", () => updateStatus(docSnap.id, "valid"));
+          tdAction.appendChild(validBtn);
         } else {
           tdAction.textContent = "-";
         }
+
+        // 削除ボタンは常に表示
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "削除";
+        deleteBtn.style.backgroundColor = "#f66";
+        deleteBtn.addEventListener("click", () => deletePass(docSnap.id));
+        tdAction.appendChild(deleteBtn);
+
         tr.appendChild(tdAction);
 
         tableBody.appendChild(tr);
@@ -244,7 +258,6 @@
       showError("データ取得に失敗しました。");
       console.error(error);
     });
-
   </script>
 </body>
 </html>
