@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>発券設定ページ</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 10px; }
+    input[type="time"] { width: 120px; margin-right: 10px; }
+    .range { display: flex; align-items: center; margin-bottom: 10px; }
+    button { margin-top: 20px; }
+    .status { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>発券設定</h1>
+
+  <div>
+    <h2>案内可能な時間帯（最大3枠）</h2>
+    <div id="ranges">
+      <div class="range">
+        <label>枠1: <input type="time" id="start1" /> ～ <input type="time" id="end1" /></label>
+      </div>
+      <div class="range">
+        <label>枠2: <input type="time" id="start2" /> ～ <input type="time" id="end2" /></label>
+      </div>
+      <div class="range">
+        <label>枠3: <input type="time" id="start3" /> ～ <input type="time" id="end3" /></label>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2>発券をコントロール</h2>
+    <button onclick="setIssueStatus(true)">発券を開始</button>
+    <button onclick="setIssueStatus(false)">発券を停止</button>
+    <div class="status" id="currentStatus">状態を取得中...</div>
+  </div>
+
+  <button onclick="saveSettings()">保存する</button>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, onSnapshot
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+      authDomain: "fastpass-system.firebaseapp.com",
+      projectId: "fastpass-system",
+      storageBucket: "fastpass-system.firebasestorage.app",
+      messagingSenderId: "858745521872",
+      appId: "1:858745521872:web:29289b673855097e1200d5"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const configRef = doc(db, "settings", "config");
+
+    async function saveSettings() {
+      const timeRanges = [];
+      for (let i = 1; i <= 3; i++) {
+        const start = document.getElementById(`start${i}`).value;
+        const end = document.getElementById(`end${i}`).value;
+        if (start && end) {
+          timeRanges.push({ start, end });
+        }
+      }
+
+      await setDoc(configRef, { timeRanges }, { merge: true });
+      alert("設定を保存しました！");
+    }
+
+    async function setIssueStatus(enabled) {
+      await setDoc(configRef, { issueEnabled: enabled }, { merge: true });
+    }
+
+    onSnapshot(configRef, (docSnap) => {
+      const data = docSnap.data();
+      if (!data) return;
+
+      const ranges = data.timeRanges || [];
+      ranges.forEach((range, index) => {
+        if (index < 3) {
+          document.getElementById(`start${index + 1}`).value = range.start;
+          document.getElementById(`end${index + 1}`).value = range.end;
+        }
+      });
+
+      const statusText = data.issueEnabled ? "発券中" : "停止中";
+      document.getElementById("currentStatus").innerText = `現在の状態：${statusText}`;
+    });
+  </script>
+</body>
+</html>
