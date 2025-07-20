@@ -2,28 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ファストパス読み取り</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      max-width: 600px;
-      margin: auto;
-      text-align: center;
-    }
-    #message {
-      margin-top: 20px;
-      font-weight: bold;
-      font-size: 1.2em;
-      color: #333;
-    }
-  </style>
-</head>
-<body>
-  <h1>ファストパス読み取り</h1>
-  <div id="message">ファストパス情報を読み込み中...</div>
-
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -40,45 +21,62 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const message = document.getElementById("message");
+    const resultElem = document.getElementById("result");
 
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("id");
+    const startScanner = () => {
+      const qr = new Html5Qrcode("reader");
 
-    if (!id) {
-      message.textContent = "ファストパス情報がありません。";
-      throw new Error("URLにidパラメータがありません");
-    }
+      qr.start({ facingMode: "environment" }, {
+        fps: 10,
+        qrbox: 250
+      }, async (decodedText) => {
+        try {
+          const docRef = doc(db, "fastpasses", decodedText);
+          const docSnap = await getDoc(docRef);
 
-    async function markUsed() {
-      try {
-        const fastpassRef = doc(db, "fastpasses", id);
-        const fastpassSnap = await getDoc(fastpassRef);
-
-        if (!fastpassSnap.exists()) {
-          message.textContent = "ファストパス情報が見つかりません。";
-          return;
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.status === "使用済み") {
+              resultElem.innerHTML = `<p>このファストパスはすでに使用済みです。</p>`;
+            } else {
+              await updateDoc(docRef, { status: "使用済み" });
+              resultElem.innerHTML = `<p>ファストパスを使用済みに更新しました。</p>`;
+            }
+          } else {
+            resultElem.innerHTML = "<p>ファストパス情報が見つかりません。</p>";
+          }
+        } catch (err) {
+          resultElem.innerHTML = `<p>エラー: ${err.message}</p>`;
         }
+      }, (error) => {
+        console.warn(`QRコード読み取りエラー: ${error}`);
+      });
+    };
 
-        const data = fastpassSnap.data();
-
-        if (data.status === "used") {
-          message.textContent = `ファストパス ${data.id || id} はすでに使用済みです。`;
-          return;
-        }
-
-        await updateDoc(fastpassRef, { status: "used", usedAt: new Date() });
-
-        message.textContent = `ファストパス ${data.id || id} を使用済みにしました。ありがとうございます！`;
-
-      } catch (e) {
-        console.error(e);
-        message.textContent = "ファストパスの更新に失敗しました。";
-      }
-    }
-
-    markUsed();
+    document.addEventListener("DOMContentLoaded", () => {
+      startScanner();
+    });
   </script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    #reader {
+      width: 100%;
+      max-width: 300px;
+      margin: auto;
+    }
+    #result p {
+      font-size: 16px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>ファストパス読み取り</h1>
+  <div id="reader"></div>
+  <div id="result"></div>
 </body>
 </html>
-
