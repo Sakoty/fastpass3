@@ -1,79 +1,250 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>管理画面</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ファストパス管理（admin）</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    button { padding: 5px 10px; margin: 2px; }
-    .clock { font-size: 1.2em; text-align: right; }
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+      margin: 0 2px;
+    }
+    .status-valid {
+      color: green;
+      font-weight: bold;
+    }
+    .status-used {
+      color: gray;
+      text-decoration: line-through;
+    }
+    .status-canceled {
+      color: red;
+      font-weight: bold;
+    }
+    #error, #message {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    #error {
+      color: red;
+    }
+    #message {
+      color: green;
+    }
   </style>
 </head>
 <body>
-  <h1>整理券 管理画面</h1>
-  <div class="clock" id="clock"></div>
+  <h1>ファストパス管理（admin）</h1>
+  <div id="error"></div>
+  <div id="message"></div>
   <table>
     <thead>
       <tr>
-        <th>番号</th><th>名前</th><th>人数</th><th>時間帯</th><th>状態</th><th>操作</th>
+        <th>整理番号</th>
+        <th>名前</th>
+        <th>人数</th>
+        <th>案内時間</th>
+        <th>状態</th>
+        <th>発行日時</th>
+        <th>操作</th>
       </tr>
     </thead>
-    <tbody id="ticketTable"></tbody>
+    <tbody id="passesTableBody">
+      <!-- ここにファストパスリストが入る -->
+    </tbody>
   </table>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getFirestore,
+      collection,
+      query,
+      orderBy,
+      onSnapshot,
+      updateDoc,
+      doc,
+      Timestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    const app = initializeApp({
+    // Firebase 設定
+    const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-    });
+      storageBucket: "fastpass-system.appspot.com",
+      messagingSenderId: "858745521872",
+      appId: "1:858745521872:web:29289b673855097e1200d5"
+    };
 
+    const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const ticketsRef = collection(db, "tickets");
-    const table = document.getElementById("ticketTable");
+    const passesRef = collection(db, "passes");
 
-    onSnapshot(ticketsRef, (snapshot) => {
-      table.innerHTML = "";
-      snapshot.forEach((docSnap) => {
+    const tableBody = document.getElementById("passesTableBody");
+    const errorDiv = document.getElementById("error");
+    const messageDiv = document.getElementById("message");
+
+    // 日付を見やすくフォーマット
+    function formatDate(ts) {
+      if (!ts) return "-";
+      const date = ts.toDate ? ts.toDate() : new Date(ts);
+      return date.toLocaleString();
+    }
+
+    // 状態テキスト用クラス
+    function getStatusClass(status) {
+      switch(status) {
+        case "valid": return "status-valid";
+        case "used": return "status-used";
+        case "canceled": return "status-canceled";
+        default: return "";
+      }
+    }
+
+    // 状態の表示名
+    function getStatusText(status) {
+      switch(status) {
+        case "valid": return "有効";
+        case "used": return "使用済み";
+        case "canceled": return "キャンセル";
+        default: return status;
+      }
+    }
+
+    // 更新処理（使用済み・キャンセル）
+    async function updateStatus(docId, newStatus) {
+      clearMessages();
+      try {
+        const docRef = doc(db, "passes", docId);
+        await updateDoc(docRef, {
+          status: newStatus,
+          updatedAt: Timestamp.now()
+        });
+        showMessage(`整理番号 ${docId} を「${getStatusText(newStatus)}」に更新しました。`);
+      } catch (e) {
+        showError("更新中にエラーが発生しました。");
+        console.error(e);
+      }
+    }
+
+    // メッセージ表示
+    function showMessage(msg) {
+      messageDiv.textContent = msg;
+      errorDiv.textContent = "";
+    }
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      messageDiv.textContent = "";
+    }
+    function clearMessages() {
+      errorDiv.textContent = "";
+      messageDiv.textContent = "";
+    }
+
+    // リアルタイム取得と表示
+    const q = query(passesRef, orderBy("createdAt", "asc"));
+    onSnapshot(q, (snapshot) => {
+      clearMessages();
+      tableBody.innerHTML = "";
+
+      snapshot.forEach(docSnap => {
         const data = docSnap.data();
+
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${data.id}</td>
-          <td>${data.name}</td>
-          <td>${data.count}</td>
-          <td>${data.startTime}〜${data.endTime}</td>
-          <td>${data.status === "used" ? "使用済み" : "有効"}</td>
-          <td>
-            <button onclick="markUsed('${data.id}')">無効</button>
-            <button onclick="removeTicket('${data.id}')">削除</button>
-          </td>`;
-        table.appendChild(tr);
+
+        // 整理番号
+        const tdId = document.createElement("td");
+        tdId.textContent = data.id || "-";
+        tr.appendChild(tdId);
+
+        // 名前
+        const tdName = document.createElement("td");
+        tdName.textContent = data.name || "-";
+        tr.appendChild(tdName);
+
+        // 人数
+        const tdCount = document.createElement("td");
+        tdCount.textContent = data.count || "-";
+        tr.appendChild(tdCount);
+
+        // 案内時間
+        const tdTime = document.createElement("td");
+        tdTime.textContent = data.startTime || "-";
+        tr.appendChild(tdTime);
+
+        // 状態
+        const tdStatus = document.createElement("td");
+        tdStatus.textContent = getStatusText(data.status);
+        tdStatus.className = getStatusClass(data.status);
+        tr.appendChild(tdStatus);
+
+        // 発行日時
+        const tdCreatedAt = document.createElement("td");
+        tdCreatedAt.textContent = formatDate(data.createdAt);
+        tr.appendChild(tdCreatedAt);
+
+        // 操作
+        const tdAction = document.createElement("td");
+
+        // 有効なら「使用済み」「キャンセル」ボタンを表示
+        if(data.status === "valid") {
+          const usedBtn = document.createElement("button");
+          usedBtn.textContent = "使用済みにする";
+          usedBtn.addEventListener("click", () => updateStatus(docSnap.id, "used"));
+          tdAction.appendChild(usedBtn);
+
+          const cancelBtn = document.createElement("button");
+          cancelBtn.textContent = "キャンセル";
+          cancelBtn.style.backgroundColor = "#f66";
+          cancelBtn.addEventListener("click", () => updateStatus(docSnap.id, "canceled"));
+          tdAction.appendChild(cancelBtn);
+        } else {
+          tdAction.textContent = "-";
+        }
+        tr.appendChild(tdAction);
+
+        tableBody.appendChild(tr);
       });
+
+      if(snapshot.empty) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 7;
+        td.textContent = "データがありません。";
+        tr.appendChild(td);
+        tableBody.appendChild(tr);
+      }
+    }, (error) => {
+      showError("データ取得に失敗しました。");
+      console.error(error);
     });
 
-    window.markUsed = async (id) => {
-      const ref = doc(db, "tickets", id);
-      await updateDoc(ref, { status: "used" });
-    };
-
-    window.removeTicket = async (id) => {
-      if (confirm(`整理券 ${id} を削除しますか？`)) {
-        await deleteDoc(doc(db, "tickets", id));
-      }
-    };
-
-    // 時計表示
-    setInterval(() => {
-      const now = new Date();
-      document.getElementById("clock").innerText =
-        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    }, 1000);
   </script>
 </body>
 </html>
