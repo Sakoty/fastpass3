@@ -1,16 +1,75 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>整理券発行ページ</title>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 16px;
+      margin: 0;
+      background: #f8f8f8;
+    }
+    h1 {
+      font-size: 1.8em;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-bottom: 12px;
+      font-weight: bold;
+    }
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      font-size: 1em;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      font-size: 1.1em;
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+    #ticketInfo {
+      margin-top: 24px;
+      font-size: 1.2em;
+      text-align: center;
+      word-break: break-word;
+    }
+    #qrCanvas {
+      display: block;
+      margin: 24px auto 0;
+      max-width: 90vw;
+      height: auto;
+    }
+  </style>
 </head>
 <body>
   <h1>整理券発行</h1>
-  <label>名前: <input id="nameInput" type="text" /></label><br/>
-  <label>人数: <input id="countInput" type="number" value="1" min="1" /></label><br/>
+  <label for="nameInput">名前</label>
+  <input id="nameInput" type="text" placeholder="お名前を入力してください" />
+
+  <label for="countInput">人数</label>
+  <input id="countInput" type="number" value="1" min="1" />
+
   <button onclick="issueTicket()">発券する</button>
 
   <p id="ticketInfo"></p>
@@ -33,8 +92,12 @@
     async function issueTicket() {
       const name = document.getElementById("nameInput").value.trim();
       const count = parseInt(document.getElementById("countInput").value);
-      if (!name || count < 1) {
-        alert("名前と人数を正しく入力してください");
+      if (!name) {
+        alert("名前を入力してください");
+        return;
+      }
+      if (!count || count < 1) {
+        alert("人数を1以上で入力してください");
         return;
       }
 
@@ -44,22 +107,22 @@
 
       const now = new Date();
       const startTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const validMinutes = 30;
+      const guideMinutes = 30; // ご案内時間（分）
 
       await db.collection("tickets").doc(ticketId).set({
         id: ticketId,
         name: name,
         count: count,
         startTime: startTime,
-        validMinutes: validMinutes,
+        guideMinutes: guideMinutes,
         status: "active",
         issuedAt: firebase.firestore.Timestamp.fromDate(now),
         isCalling: false
       });
 
-      document.getElementById("ticketInfo").innerText = `整理番号：${ticketId}`;
+      document.getElementById("ticketInfo").innerText = `整理番号：${ticketId}\nご案内時間：${guideMinutes}分以内にお越しください`;
 
-      // QRコードに読み取りページのURL＋IDを埋め込む
+      // QRコードに読み取りページURL＋IDを埋め込む
       const baseUrl = "https://fastpass3.vercel.app/scan.html";
       const qrData = `${baseUrl}?id=${ticketId}`;
 
@@ -72,4 +135,3 @@
   </script>
 </body>
 </html>
-
