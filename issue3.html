@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>整理券発券</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <h1>整理券発券</h1>
+  <button onclick="issueTicket()">整理券を発券する</button>
+  <div id="ticketInfo"></div>
+
+  <script>
+    // ✅ Firebaseの設定（あなたのプロジェクトに合わせて編集）
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function issueTicket() {
+      const ticketsRef = db.collection("tickets");
+
+      // 既存のチケット数をカウント
+      const snapshot = await ticketsRef.get();
+      const count = snapshot.size + 1;
+      const ticketNumber = "SB" + String(count).padStart(3, '0');
+
+      // 現在時刻と案内予定時刻を計算（例：5分ずつ後ろ倒し）
+      const now = new Date();
+      const guideTime = new Date(now.getTime() + count * 5 * 60000); // 発券数×5分後
+      const expiry = new Date(guideTime.getTime() + 15 * 60000);     // 有効時間15分
+
+      await ticketsRef.add({
+        number: ticketNumber,
+        issuedAt: now,
+        guideTime: guideTime,
+        expiryTime: expiry,
+        used: false
+      });
+
+      document.getElementById("ticketInfo").innerHTML = `
+        整理番号: ${ticketNumber}<br>
+        ご案内時刻: ${guideTime.toLocaleTimeString()}<br>
+        有効期限: ${expiry.toLocaleTimeString()}
+      `;
+    }
+  <
