@@ -1,60 +1,78 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>整理券 使用済みチェック</title>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-</head>
-<body>
-  <h1>整理券 使用済みチェック</h1>
-  <div id="status">読み込み中...</div>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    query,
+    where,
+    getDocs,
+    updateDoc,
+    doc
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain: "fastpass-system.firebaseapp.com",
-  projectId: "fastpass-system",
-  storageBucket: "fastpass-system.firebasestorage.app",
-  messagingSenderId: "858745521872",
-  appId: "1:858745521872:web:29289b673855097e1200d5",
-  measurementId: "G-SLPKMCNY53"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+  const firebaseConfig = {
+    apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+    authDomain: "fastpass-system.firebaseapp.com",
+    projectId: "fastpass-system",
+    storageBucket: "fastpass-system.firebasestorage.app",
+    messagingSenderId: "858745521872",
+    appId: "1:858745521872:web:29289b673855097e1200d5",
+    measurementId: "G-SLPKMCNY53"
+  };
 
-    // URLパラメータからID取得
-    const urlParams = new URLSearchParams(window.location.search);
-    const ticketId = urlParams.get('id');
-    const statusDiv = document.getElementById('status');
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-    async function checkAndMarkUsed() {
-      if (!ticketId) {
-        statusDiv.textContent = '整理券IDが指定されていません。';
-        return;
-      }
+  const result = document.getElementById("result");
+  const input = document.getElementById("ticketIdInput");
+  const submitBtn = document.getElementById("submitBtn");
 
-      const docRef = db.collection('tickets').doc(ticketId);
-      const docSnap = await docRef.get();
+  // URLパラメータからidを取得する関数
+  function getIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id");
+  }
 
-      if (!docSnap.exists) {
-        statusDiv.textContent = '整理券が見つかりません。';
-        return;
-      }
-
-      const data = docSnap.data();
-
-      if (data.used) {
-        statusDiv.textContent = `整理券「${ticketId}」はすでに使用済みです。`;
-        return;
-      }
-
-      // 使用済みに更新
-      await docRef.update({ used: true });
-      statusDiv.textContent = `整理券「${ticketId}」を使用済みにしました。ありがとうございました！`;
+  async function markUsed(ticketId) {
+    if (!ticketId) {
+      result.textContent = "整理券IDが指定されていません。";
+      return;
     }
+    result.textContent = "処理中...";
 
-    checkAndMarkUsed();
-  </script>
-</body>
-</html>
+    try {
+      const q = query(collection(db, "tickets"), where("id", "==", ticketId));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        result.textContent = "該当する整理券が見つかりません。";
+        return;
+      }
+
+      const docRef = snapshot.docs[0].ref;
+      await updateDoc(docRef, {
+        status: "used",
+        isCalling: false
+      });
+
+      result.textContent = `整理券「${ticketId}」を使用済みにしました。`;
+    } catch (err) {
+      console.error(err);
+      result.textContent = "エラーが発生しました。";
+    }
+  }
+
+  submitBtn.onclick = () => {
+    const ticketId = input.value.trim();
+    markUsed(ticketId);
+  };
+
+  // ページ読み込み時にURLにidパラメータがあれば自動実行
+  window.addEventListener("DOMContentLoaded", () => {
+    const id = getIdFromUrl();
+    if (id) {
+      input.value = id;
+      markUsed(id);
+    }
+  });
+</script>
