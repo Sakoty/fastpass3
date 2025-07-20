@@ -46,7 +46,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, getDocs, doc, getDoc
+      getFirestore, collection, addDoc, getDocs, doc, getDoc, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -90,7 +90,9 @@
     }
 
     function formatRange(startMinutes, duration) {
-      // startMinutesは0～1440（分）
+      // 0〜1439 の範囲に丸める
+      startMinutes = startMinutes % 1440;
+
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       start.setMinutes(startMinutes);
@@ -164,10 +166,12 @@
           name,
           count,
           status: "valid",
-          createdAt: new Date(),
+          createdAt: serverTimestamp(),
           startTime: startTimeStr,
           validMinutes: valid
         };
+
+        console.log("新規チケット:", newTicket);
 
         const docRef = await addDoc(ticketsRef, newTicket);
 
@@ -186,4 +190,3 @@
   </script>
 </body>
 </html>
-
