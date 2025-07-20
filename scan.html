@@ -3,100 +3,138 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>整理券QR読み取り</title>
+  <title>整理券スキャン</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; text-align: center; }
-    input { width: 280px; padding: 8px; font-size: 1em; }
-    button { padding: 8px 16px; margin-left: 8px; }
-    #result { margin-top: 20px; font-weight: bold; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      text-align: center;
+    }
+    #video {
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    #message {
+      margin-top: 20px;
+      font-size: 1.2em;
+    }
+    button {
+      margin-top: 20px;
+      font-size: 1em;
+      padding: 10px 20px;
+    }
   </style>
 </head>
 <body>
-  <h1>QRコード読み取り - 整理券使用済みにする</h1>
-  <input type="text" id="ticketIdInput" placeholder="整理券ID (例: SB001)" />
-  <button id="submitBtn">使用済みにする</button>
-  <div id="result"></div>
+  <h1>整理券スキャン</h1>
+  <video id="video" autoplay muted playsinline></video>
+  <div id="message">QRコードをカメラにかざしてください。</div>
+  <button id="resetBtn" style="display:none;">もう一度スキャン</button>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore,
-      collection,
-      query,
-      where,
-      getDocs,
-      updateDoc,
-      doc
+      getFirestore, doc, getDoc, updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Firebase設定
+    // Firebase設定（あなたの設定に差し替えてください）
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5",
-      measurementId: "G-SLPKMCNY53"
+      appId: "1:858745521872:web:29289b673855097e1200d5"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const input = document.getElementById("ticketIdInput");
-    const submitBtn = document.getElementById("submitBtn");
-    const result = document.getElementById("result");
+    const video = document.getElementById('video');
+    const message = document.getElementById('message');
+    const resetBtn = document.getElementById('resetBtn');
 
-    // URLのidパラメータ取得
-    function getIdFromUrl() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("id");
-    }
+    // ZXingライブラリをCDNから読み込む
+    import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/esm/index.min.js').then(({ BrowserMultiFormatReader }) => {
+      const codeReader = new BrowserMultiFormatReader();
 
-    // 整理券を使用済みにする関数
-    async function markUsed(ticketId) {
-      if (!ticketId) {
-        result.textContent = "整理券IDが指定されていません。";
-        return;
+      resetBtn.addEventListener('click', () => {
+        message.textContent = "QRコードをカメラにかざしてください。";
+        resetBtn.style.display = "none";
+        startScanner();
+      });
+
+      function startScanner() {
+        codeReader
+          .listVideoInputDevices()
+          .then((videoInputDevices) => {
+            if (videoInputDevices.length === 0) {
+              message.textContent = "カメラが見つかりません。";
+              return;
+            }
+            const deviceId = videoInputDevices[0].deviceId;
+            codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
+              if (result) {
+                codeReader.reset();
+                processQRCode(result.getText());
+              }
+              if (err && !(err.name === 'NotFoundException')) {
+                console.error(err);
+              }
+            });
+          })
+          .catch((err) => {
+            message.textContent = "カメラの使用に失敗しました。エラー：" + err.message;
+          });
       }
 
-      result.textContent = "処理中です...";
+      async function processQRCode(text) {
+        message.textContent = "QRコード読み取り中…";
 
-      try {
-        const q = query(collection(db, "tickets"), where("id", "==", ticketId));
-        const snapshot = await getDocs(q);
+        try {
+          // URLの例: https://yourdomain/scan.html?id=ドキュメントID
+          // QRコードにはscan.html?id=docIdのURLが入っている想定なのでdocIdを取り出す
+          const url = new URL(text);
+          const docId = url.searchParams.get("id");
+          if (!docId) {
+            message.textContent = "不正なQRコードです。";
+            resetBtn.style.display = "inline-block";
+            return;
+          }
 
-        if (snapshot.empty) {
-          result.textContent = `整理券「${ticketId}」は見つかりません。`;
-          return;
+          const ticketDocRef = doc(db, "tickets", docId);
+          const ticketSnap = await getDoc(ticketDocRef);
+          if (!ticketSnap.exists()) {
+            message.textContent = "整理券情報が見つかりません。";
+            resetBtn.style.display = "inline-block";
+            return;
+          }
+
+          const data = ticketSnap.data();
+          if (data.status === "used") {
+            message.textContent = `整理番号 ${data.id} は既に使用済みです。`;
+            resetBtn.style.display = "inline-block";
+            return;
+          }
+
+          // Firestoreでステータスを使用済みに更新
+          await updateDoc(ticketDocRef, { status: "used", usedAt: new Date() });
+
+          message.textContent = `整理番号 ${data.id} を使用済みにしました。ありがとうございます！`;
+          resetBtn.style.display = "inline-block";
+
+        } catch (e) {
+          console.error(e);
+          message.textContent = "QRコードの処理中にエラーが発生しました。";
+          resetBtn.style.display = "inline-block";
         }
-
-        const docRef = snapshot.docs[0].ref;
-
-        // Firestore更新
-        await updateDoc(docRef, {
-          status: "used",
-          isCalling: false
-        });
-
-        result.textContent = `整理券「${ticketId}」を使用済みにしました。`;
-      } catch (error) {
-        console.error(error);
-        result.textContent = "エラーが発生しました。";
       }
-    }
 
-    submitBtn.addEventListener("click", () => {
-      const ticketId = input.value.trim();
-      markUsed(ticketId);
-    });
-
-    window.addEventListener("DOMContentLoaded", () => {
-      const id = getIdFromUrl();
-      if (id) {
-        input.value = id;
-        markUsed(id);
-      }
+      startScanner();
     });
   </script>
 </body>
