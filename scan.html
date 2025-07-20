@@ -47,7 +47,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // QRコード読み取り処理
+    // QRコード読み取り成功時の処理
     function onScanSuccess(decodedText) {
       document.getElementById("status").textContent = `読み取り成功：${decodedText}`;
 
@@ -67,12 +67,12 @@
       });
     }
 
+    // 読み取り失敗時の処理
     function onScanFailure(error) {
-      // 読み取り失敗時のログ（不要なら消してもOK）
       console.warn(`読み取り失敗: ${error}`);
     }
 
-    // QRリーダー起動
+    // QRリーダー初期化
     const html5QrCode = new Html5Qrcode("reader");
 
     Html5Qrcode.getCameras().then((devices) => {
@@ -86,15 +86,19 @@
         cameraId,
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 }
+          qrbox: { width: 250, height: 250 },
+          rememberLastUsedCamera: true,
+          disableFlip: true
         },
         onScanSuccess,
         onScanFailure
       ).catch((err) => {
-        document.getElementById("status").textContent = `❌ カメラの起動に失敗しました: ${err}`;
+        console.error("カメラ起動エラー:", err);
+        document.getElementById("status").textContent = `❌ カメラの起動に失敗しました: ${err.message || err}`;
       });
     }).catch((err) => {
-      document.getElementById("status").textContent = `❌ カメラの取得に失敗しました: ${err}`;
+      console.error("カメラ取得エラー:", err);
+      document.getElementById("status").textContent = `❌ カメラの取得に失敗しました: ${err.message || err}`;
     });
   </script>
 </body>
