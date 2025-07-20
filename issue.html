@@ -46,7 +46,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, getCountFromServer, doc, getDoc
+      getFirestore, collection, addDoc, getDocs, doc, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -75,6 +75,7 @@
     }
 
     function isWithinTimeRanges(time, ranges) {
+      if (!ranges || ranges.length === 0) return true; // 時間設定がなければ常にOK
       return ranges.some(range => {
         const [sh, sm] = range.start.split(":").map(Number);
         const [eh, em] = range.end.split(":").map(Number);
@@ -89,12 +90,24 @@
     }
 
     function formatRange(startMinutes, duration) {
+      // startMinutesは0～1440（分）
       const start = new Date();
-      start.setHours(0, startMinutes, 0, 0);
+      start.setHours(0, 0, 0, 0);
+      start.setMinutes(startMinutes);
+
       const end = new Date(start.getTime() + duration * 60000);
 
       const format = t => `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`;
       return `${format(start)}〜${format(end)}の間にお越しください`;
+    }
+
+    async function generateQRCode(text) {
+      return new Promise((resolve, reject) => {
+        QRCode.toCanvas(document.createElement("canvas"), text, { width: 200 }, (err, canvas) => {
+          if (err) reject(err);
+          else resolve(canvas);
+        });
+      });
     }
 
     form.addEventListener("submit", async (e) => {
@@ -105,57 +118,70 @@
 
       const name = document.getElementById("name").value.trim();
       const count = Number(document.getElementById("count").value);
-      if (!name || !count || count < 1) {
-        warning.textContent = "正しい名前と人数を入力してください。";
+      if (!name) {
+        warning.textContent = "名前を入力してください。";
+        return;
+      }
+      if (!count || count < 1) {
+        warning.textContent = "人数は1以上で入力してください。";
         return;
       }
 
-      const configSnap = await getDoc(configRef);
-      if (!configSnap.exists()) {
-        warning.textContent = "設定が見つかりません。";
-        return;
+      try {
+        const configSnap = await getDoc(configRef);
+        if (!configSnap.exists()) {
+          warning.textContent = "設定が見つかりません。";
+          return;
+        }
+        const config = configSnap.data();
+
+        if (!config.issueEnabled) {
+          warning.textContent = "現在、発券は停止されています。";
+          return;
+        }
+
+        const nowTime = getCurrentTime();
+        if (!isWithinTimeRanges(nowTime, config.timeRanges)) {
+          warning.textContent = "現在は発券できる時間帯ではありません。";
+          return;
+        }
+
+        // 発券済み枚数をカウント
+        const ticketsSnapshot = await getDocs(ticketsRef);
+        const countIssued = ticketsSnapshot.size;
+        const newId = "SB" + String(countIssued + 1).padStart(3, "0");
+
+        const interval = config.intervalMinutes || 5;
+        const valid = config.validMinutes || 15;
+        const startOffset = countIssued * interval;
+        const now = new Date();
+        const startMinutes = now.getHours() * 60 + now.getMinutes() + startOffset;
+
+        const startTimeStr = formatRange(startMinutes, valid);
+
+        const newTicket = {
+          id: newId,
+          name,
+          count,
+          status: "valid",
+          createdAt: new Date(),
+          startTime: startTimeStr,
+          validMinutes: valid
+        };
+
+        const docRef = await addDoc(ticketsRef, newTicket);
+
+        info.textContent = `整理番号 ${newId} を発行しました。${startTimeStr}`;
+        const scanUrl = `${location.origin}/scan.html?id=${docRef.id}`;
+        const canvas = await generateQRCode(scanUrl);
+        qr.appendChild(canvas);
+
+        form.reset();
+
+      } catch (error) {
+        warning.textContent = "エラーが発生しました：" + error.message;
+        console.error(error);
       }
-
-      const config = configSnap.data();
-      if (!config.issueEnabled) {
-        warning.textContent = "現在、発券は停止されています。";
-        return;
-      }
-
-      const nowTime = getCurrentTime();
-      if (!isWithinTimeRanges(nowTime, config.timeRanges)) {
-        warning.textContent = "現在は発券できる時間帯ではありません。";
-        return;
-      }
-
-      const snap = await getCountFromServer(ticketsRef);
-      const countIssued = snap.data().count;
-      const newId = "SB" + String(countIssued + 1).padStart(3, "0");
-
-      const interval = config.intervalMinutes || 5;
-      const valid = config.validMinutes || 15;
-      const startOffset = countIssued * interval;
-      const startMinutes = new Date().getHours() * 60 + new Date().getMinutes() + startOffset;
-
-      const newTicket = {
-        id: newId,
-        name,
-        count,
-        status: "valid",
-        createdAt: new Date(),
-        startTime: formatRange(startMinutes, valid),
-        validMinutes: valid
-      };
-
-      const docRef = await addDoc(ticketsRef, newTicket);
-
-      info.textContent = `整理番号 ${newId} を発行しました。${newTicket.startTime}`;
-      const url = `${location.origin}/scan.html?id=${docRef.id}`;
-      QRCode.toCanvas(document.createElement("canvas"), url, { width: 200 }, (err, canvas) => {
-        if (!err) qr.appendChild(canvas);
-      });
-
-      form.reset();
     });
   </script>
 </body>
