@@ -5,104 +5,174 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ファストパス発券</title>
 <style>
-  body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
-  input, button { width: 100%; font-size: 1.1em; margin-bottom: 15px; padding: 10px; }
-  #qrcode { text-align: center; margin-top: 20px; }
-  .info { font-size: 1em; margin-top: 10px; }
-  .warning { color: red; font-weight: bold; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f4f8;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+    padding: 30px 40px;
+    width: 100%;
+    max-width: 400px;
+    box-sizing: border-box;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 24px;
+    color: #334e68;
+    font-weight: 700;
+    font-size: 1.8rem;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+  }
+  input[type="text"],
+  input[type="number"] {
+    padding: 14px 16px;
+    font-size: 1rem;
+    border: 1.8px solid #cbd2d9;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    transition: border-color 0.3s;
+  }
+  input[type="text"]:focus,
+  input[type="number"]:focus {
+    border-color: #3b82f6;
+    outline: none;
+  }
+  button {
+    background-color: #3b82f6;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 0;
+    font-size: 1.1rem;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  button:hover {
+    background-color: #2563eb;
+  }
+  #warning {
+    margin-top: 14px;
+    color: #ef4444; /* 赤 */
+    font-weight: 600;
+    text-align: center;
+  }
+  #info {
+    margin-top: 14px;
+    color: #16a34a; /* 緑 */
+    font-weight: 600;
+    text-align: center;
+  }
+  #qrcode {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+  }
 </style>
 </head>
 <body>
+
+<div class="container">
   <h1>ファストパス発券</h1>
   <form id="fastpassForm">
     <input type="text" id="name" placeholder="名前（必須）" required />
     <input type="number" id="count" placeholder="人数（必須）" min="1" required />
     <button type="submit">発券する</button>
   </form>
+  <div id="warning"></div>
+  <div id="info"></div>
   <div id="qrcode"></div>
-  <div class="info" id="info"></div>
-  <div class="warning" id="warning"></div>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, collection, addDoc, getDocs, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, getDocs, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-      authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
-      messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
-    };
+  const firebaseConfig = {
+    apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+    authDomain: "fastpass-system.firebaseapp.com",
+    projectId: "fastpass-system",
+    storageBucket: "fastpass-system.appspot.com",
+    messagingSenderId: "858745521872",
+    appId: "1:858745521872:web:29289b673855097e1200d5"
+  };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const passesRef = collection(db, "passes");
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const passesRef = collection(db, "passes");
 
-    const form = document.getElementById("fastpassForm");
-    const warning = document.getElementById("warning");
-    const info = document.getElementById("info");
-    const qr = document.getElementById("qrcode");
+  const form = document.getElementById("fastpassForm");
+  const warning = document.getElementById("warning");
+  const info = document.getElementById("info");
+  const qr = document.getElementById("qrcode");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      warning.textContent = "";
-      info.textContent = "";
-      qr.innerHTML = "";
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    warning.textContent = "";
+    info.textContent = "";
+    qr.innerHTML = "";
 
-      const name = document.getElementById("name").value.trim();
-      const count = Number(document.getElementById("count").value);
+    const name = document.getElementById("name").value.trim();
+    const count = Number(document.getElementById("count").value);
 
-      if (!name) {
-        warning.textContent = "名前を入力してください。";
-        return;
-      }
-      if (!count || count < 1) {
-        warning.textContent = "人数は1以上で入力してください。";
-        return;
-      }
+    if (!name) {
+      warning.textContent = "名前を入力してください。";
+      return;
+    }
+    if (!count || count < 1) {
+      warning.textContent = "人数は1以上で入力してください。";
+      return;
+    }
 
-      try {
-        // 発券済み枚数をカウント
-        const snapshot = await getDocs(passesRef);
-        const issuedCount = snapshot.size;
+    try {
+      const snapshot = await getDocs(passesRef);
+      const issuedCount = snapshot.size;
 
-        // 整理番号を作成
-        const passId = "FP" + String(issuedCount + 1).padStart(3, "0");
+      const passId = "FP" + String(issuedCount + 1).padStart(3, "0");
 
-        // 案内時間などは適宜設定してください（ここは例）
-        const now = new Date();
-        const startTime = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-        const validMinutes = 15;
+      const now = new Date();
+      const startTime = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
+      const validMinutes = 15;
 
-        const newPass = {
-          id: passId,
-          name,
-          count,
-          status: "valid",
-          createdAt: serverTimestamp(),
-          startTime: `${startTime}～${(now.getHours()).toString().padStart(2,"0")}:${(now.getMinutes() + validMinutes).toString().padStart(2,"0")}`,
-          validMinutes
-        };
+      const newPass = {
+        id: passId,
+        name,
+        count,
+        status: "valid",
+        createdAt: serverTimestamp(),
+        startTime: `${startTime}～${(now.getHours()).toString().padStart(2,"0")}:${(now.getMinutes() + validMinutes).toString().padStart(2,"0")}`,
+        validMinutes
+      };
 
-        const docRef = await addDoc(passesRef, newPass);
+      const docRef = await addDoc(passesRef, newPass);
 
-        info.textContent = `ファストパス ${passId} を発行しました。案内時間: ${newPass.startTime}`;
-        const scanUrl = `${location.origin}/scan.html?id=${docRef.id}`;
-        const canvas = await QRCode.toCanvas(document.createElement("canvas"), scanUrl, { width: 200 });
-        qr.appendChild(canvas);
+      info.textContent = `ファストパス ${passId} を発行しました。案内時間: ${newPass.startTime}`;
+      const scanUrl = `${location.origin}/scan.html?id=${docRef.id}`;
+      const canvas = await QRCode.toCanvas(document.createElement("canvas"), scanUrl, { width: 200 });
+      qr.appendChild(canvas);
 
-        form.reset();
+      form.reset();
 
-      } catch (e) {
-        warning.textContent = "発券中にエラーが発生しました: " + e.message;
-        console.error(e);
-      }
-    });
-  </script>
+    } catch (e) {
+      warning.textContent = "発券中にエラーが発生しました: " + e.message;
+      console.error(e);
+    }
+  });
+</script>
+
 </body>
 </html>
