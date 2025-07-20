@@ -49,8 +49,9 @@
     button:hover {
       background: #005fa3;
     }
-    #issuedId {
+    #result {
       margin-top: 1rem;
+      text-align: center;
       font-weight: bold;
       color: #0077cc;
     }
@@ -70,13 +71,13 @@
     </label>
     <button type="submit">ファストパスを発券</button>
   </form>
-  <p id="issuedId"></p>
+  <div id="result"></div>
   <canvas id="qrcode"></canvas>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+    import * as QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.esm.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -91,8 +92,8 @@
     const db = getFirestore(app);
 
     const form = document.getElementById("fastpassForm");
-    const qrCodeCanvas = document.getElementById("qrcode");
-    const issuedId = document.getElementById("issuedId");
+    const result = document.getElementById("result");
+    const qrCanvas = document.getElementById("qrcode");
 
     async function generateNextId() {
       const snapshot = await getDocs(collection(db, "fastpasses"));
@@ -102,25 +103,37 @@
       return `FP${String(nextNum).padStart(3, "0")}`;
     }
 
+    function estimateTime(ticketCount) {
+      const now = new Date();
+      const delayMinutes = ticketCount * 2; // 2分/件（例）
+      now.setMinutes(now.getMinutes() + delayMinutes);
+      return now.toLocaleTimeString("ja-JP", { hour: '2-digit', minute: '2-digit' });
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+
       const name = form.name.value.trim();
       const count = parseInt(form.count.value.trim());
-
       if (!name || isNaN(count) || count < 1) {
         return alert("正しい名前と人数を入力してください。");
       }
 
+      const snapshot = await getDocs(collection(db, "fastpasses"));
+      const ticketCount = snapshot.docs.length;
       const id = await generateNextId();
+      const time = estimateTime(ticketCount);
+
       await setDoc(doc(db, "fastpasses", id), {
         name,
         count,
         status: "有効",
-        issuedAt: new Date()
+        issuedAt: new Date(),
+        guideTime: time
       });
 
-      issuedId.innerText = `発券ID: ${id}`;
-      QRCode.toCanvas(qrCodeCanvas, id);
+      result.innerHTML = `発券ID: ${id}<br>案内時間: ${time}`;
+      QRCode.toCanvas(qrCanvas, id);
     });
   </script>
 </body>
