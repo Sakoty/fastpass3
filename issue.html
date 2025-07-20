@@ -2,83 +2,42 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ファストパス発券</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     body {
-      font-family: "Helvetica Neue", sans-serif;
-      background: linear-gradient(to bottom, #f0f8ff, #dfefff);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem;
+      font-family: "Arial", sans-serif;
+      margin: 0;
+      padding: 1em;
+      background: #f0f8ff;
+      text-align: center;
     }
     h1 {
-      font-size: 2rem;
-      color: #0077cc;
-      margin-bottom: 1rem;
+      color: #0066cc;
     }
-    form {
-      background: white;
-      padding: 1.5rem;
-      border-radius: 1rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 400px;
-    }
-    label {
-      display: block;
-      margin-bottom: 1rem;
-    }
-    input {
-      width: 100%;
-      padding: 0.6rem;
-      border-radius: 0.5rem;
-      border: 1px solid #ccc;
-    }
-    button {
-      width: 100%;
-      padding: 0.7rem;
-      background: #0077cc;
-      color: white;
-      font-weight: bold;
-      border: none;
-      border-radius: 0.5rem;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #005fa3;
-    }
-    #result {
-      margin-top: 1rem;
-      text-align: center;
-      font-weight: bold;
-      color: #0077cc;
+    input, button {
+      font-size: 1.2em;
+      margin: 0.5em;
+      padding: 0.5em;
     }
     #qrcode {
-      margin-top: 1rem;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス発券</h1>
-  <form id="fastpassForm">
-    <label>名前:
-      <input type="text" name="name" required />
-    </label>
-    <label>人数:
-      <input type="number" name="count" required min="1" value="1" />
-    </label>
-    <button type="submit">ファストパスを発券</button>
-  </form>
-  <div id="result"></div>
-  <canvas id="qrcode"></canvas>
+  <h1>🎟 ファストパス発券 🎟</h1>
+  <input type="text" id="name" placeholder="名前" required /><br>
+  <input type="number" id="count" placeholder="人数" min="1" required /><br>
+  <button onclick="issuePass()">発券する</button>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import * as QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.esm.js";
+  <div id="result" style="margin-top: 1em;"></div>
+  <div id="qrcode"></div>
 
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -87,60 +46,50 @@
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5"
     };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    async function issuePass() {
+      const name = document.getElementById("name").value.trim();
+      const count = parseInt(document.getElementById("count").value);
 
-    const form = document.getElementById("fastpassForm");
-    const result = document.getElementById("result");
-    const qrCanvas = document.getElementById("qrcode");
-
-    async function generateNextId() {
-      const snapshot = await getDocs(collection(db, "fastpasses"));
-      const ids = snapshot.docs.map(doc => doc.id);
-      const numbers = ids.map(id => parseInt(id.replace("FP", ""))).filter(n => !isNaN(n));
-      const nextNum = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-      return `FP${String(nextNum).padStart(3, "0")}`;
-    }
-
-    function estimateTime(ticketCount) {
-      const now = new Date();
-      const delayMinutes = ticketCount * 2; // 2分遅れを想定
-      now.setMinutes(now.getMinutes() + delayMinutes);
-      return now.toLocaleTimeString("ja-JP", { hour: '2-digit', minute: '2-digit' });
-    }
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const name = form.name.value.trim();
-      const count = parseInt(form.count.value.trim());
-      if (!name || isNaN(count) || count < 1) {
-        alert("正しい名前と人数を入力してください。");
+      if (!name || !count) {
+        alert("名前と人数を入力してください。");
         return;
       }
 
-      const snapshot = await getDocs(collection(db, "fastpasses"));
-      const ticketCount = snapshot.docs.length;
-      const id = await generateNextId();
-      const guideTime = estimateTime(ticketCount);
+      const snapshot = await db.collection("fastpasses").get();
+      const newIdNumber = snapshot.size + 1;
+      const id = `FP${String(newIdNumber).padStart(3, "0")}`;
 
-      await setDoc(doc(db, "fastpasses", id), {
+      const now = new Date();
+      const start = new Date(now.getTime() + newIdNumber * 2 * 60000); // 1枚あたり2分遅らせる
+      const end = new Date(start.getTime() + 15 * 60000);
+      const formatTime = (d) => `${d.getHours()}時${String(d.getMinutes()).padStart(2, "0")}分`;
+      const guidanceTime = `${formatTime(start)}〜${formatTime(end)}にお越しください`;
+
+      await db.collection("fastpasses").doc(id).set({
         id,
         name,
         count,
-        status: "valid",
-        issuedAt: new Date(),
-        guideTime
+        status: "有効",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        guidanceTime
       });
 
-      result.innerHTML = `発券ID: ${id}<br>案内時間: ${guideTime}`;
+      document.getElementById("result").innerHTML = `
+        <h2>発券完了！</h2>
+        <p>ファストパスID：<strong>${id}</strong></p>
+        <p>${guidanceTime}</p>
+      `;
 
-      // QRコード生成（発券IDのURL形式で）
-      const url = `${location.origin}/scan.html?id=${id}`;
-      QRCode.toCanvas(qrCanvas, url);
-      form.reset();
-    });
+      document.getElementById("qrcode").innerHTML = "";
+      new QRCode(document.getElementById("qrcode"), {
+        text: id,
+        width: 200,
+        height: 200
+      });
+    }
   </script>
 </body>
 </html>
