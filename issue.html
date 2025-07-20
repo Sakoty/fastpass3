@@ -1,105 +1,73 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>整理券発行</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 2em;
-      background-color: #f8f8f8;
-    }
-    h1 {
-      margin-bottom: 1em;
-    }
-    #ticket {
-      margin-top: 2em;
-      padding: 1.5em;
-      background-color: white;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      display: none;
-    }
-    .big {
-      font-size: 2em;
-      font-weight: bold;
-    }
-    #qrcode canvas {
-      margin: 1em auto;
-      display: block;
-    }
-    #timer {
-      color: #d9534f;
-      font-weight: bold;
-      font-size: 1.2em;
-    }
-    button {
-      padding: 1em 2em;
-      font-size: 1em;
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-  </style>
+  <meta charset="UTF-8">
+  <title>整理券発行ページ</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
 </head>
 <body>
-  <h1>🎟 整理券発行画面</h1>
-  <button onclick="issueTicket()">整理券を発行</button>
+  <h1>整理券発行</h1>
+  <label>名前: <input id="nameInput" type="text" /></label><br/>
+  <label>人数: <input id="countInput" type="number" value="1" min="1" /></label><br/>
+  <button onclick="issueTicket()">発券する</button>
 
-  <div id="ticket">
-    <p class="big">あなたの整理番号：<span id="number">SB000</span></p>
-    <div id="qrcode"></div>
-    <p>有効期限：<span id="timer">10:00</span></p>
-  </div>
+  <p id="ticketInfo"></p>
+  <canvas id="qrCanvas"></canvas>
 
   <script>
-    function generateRandomNumber() {
-      const num = Math.floor(Math.random() * 900 + 100); // 100-999
-      return `SB${num}`;
-    }
+    // Firebase設定
+    const firebaseConfig = {
+      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+      authDomain: "fastpass-system.firebaseapp.com",
+      projectId: "fastpass-system",
+      storageBucket: "fastpass-system.firebasestorage.app",
+      messagingSenderId: "858745521872",
+      appId: "1:858745521872:web:29289b673855097e1200d5",
+      measurementId: "G-SLPKMCNY53"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    function issueTicket() {
-      const number = generateRandomNumber();
-      document.getElementById('number').innerText = number;
+    async function issueTicket() {
+      const name = document.getElementById("nameInput").value.trim();
+      const count = parseInt(document.getElementById("countInput").value);
+      if (!name || count < 1) {
+        alert("名前と人数を正しく入力してください");
+        return;
+      }
 
-      const qrDiv = document.getElementById('qrcode');
-      qrDiv.innerHTML = ''; // 前のQRを削除
-      const url = `${window.location.origin}/ticket.html?code=${number}`;
-      QRCode.toCanvas(url, { errorCorrectionLevel: 'H' }, function (err, canvas) {
-        if (err) {
-          console.error(err);
-          alert("QRコードの生成に失敗しました");
-          return;
-        }
-        qrDiv.appendChild(canvas);
+      const snapshot = await db.collection("tickets").get();
+      const ticketNumber = snapshot.size + 1;
+      const ticketId = "SB" + String(ticketNumber).padStart(3, '0');
+
+      const now = new Date();
+      const startTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const validMinutes = 30;
+
+      await db.collection("tickets").doc(ticketId).set({
+        id: ticketId,
+        name: name,
+        count: count,
+        startTime: startTime,
+        validMinutes: validMinutes,
+        status: "active",
+        issuedAt: firebase.firestore.Timestamp.fromDate(now),
+        isCalling: false
       });
 
-      document.getElementById('ticket').style.display = 'block';
-      startCountdown(10 * 60); // 10分
-    }
+      document.getElementById("ticketInfo").innerText = `整理番号：${ticketId}`;
 
-    function startCountdown(seconds) {
-      const timerEl = document.getElementById('timer');
-      clearInterval(window.countdownInterval);
-      window.countdownInterval = setInterval(() => {
-        if (seconds <= 0) {
-          clearInterval(window.countdownInterval);
-          timerEl.innerText = '期限切れ';
-          return;
-        }
-        const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
-        const secs = String(seconds % 60).padStart(2, '0');
-        timerEl.innerText = `${minutes}:${secs}`;
-        seconds--;
-      }, 1000);
+      // QRコードに読み取りページのURL＋IDを埋め込む
+      const baseUrl = "https://fastpass3.vercel.app/scan.html";
+      const qrData = `${baseUrl}?id=${ticketId}`;
+
+      QRCode.toCanvas(document.getElementById('qrCanvas'), qrData, {
+        width: 200
+      }, function (error) {
+        if (error) console.error(error);
+      });
     }
   </script>
 </body>
