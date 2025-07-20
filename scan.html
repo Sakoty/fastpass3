@@ -17,10 +17,11 @@
     #reader {
       width: 100%;
       max-width: 400px;
-      margin: auto;
+      margin: 0 auto;
       padding: 10px;
       border: 2px solid #ccc;
       background: white;
+      min-height: 300px;
     }
     #status {
       margin-top: 1em;
@@ -35,7 +36,7 @@
   <div id="status">QRコードをカメラにかざしてください。</div>
 
   <script>
-    // Firebase設定
+    // Firebase 設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -67,38 +68,35 @@
       });
     }
 
-    // 読み取り失敗時の処理
     function onScanFailure(error) {
+      // 読み取り失敗ログ
       console.warn(`読み取り失敗: ${error}`);
     }
 
-    // QRリーダー初期化
+    // カメラ起動
     const html5QrCode = new Html5Qrcode("reader");
 
-    Html5Qrcode.getCameras().then((devices) => {
-      if (devices.length === 0) {
-        document.getElementById("status").textContent = "❌ 利用可能なカメラが見つかりませんでした。";
-        return;
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        // 環境カメラを選択
+        html5QrCode.start(
+          { facingMode: "environment" }, // iPhone 対応
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+          },
+          onScanSuccess,
+          onScanFailure
+        ).then(() => {
+          document.getElementById("status").textContent = "✅ カメラ起動中。QRコードをかざしてください。";
+        }).catch(err => {
+          document.getElementById("status").textContent = `❌ カメラ起動エラー: ${err}`;
+        });
+      } else {
+        document.getElementById("status").textContent = "❌ 利用可能なカメラが見つかりません。";
       }
-
-      const cameraId = devices[0].id;
-      html5QrCode.start(
-        cameraId,
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          rememberLastUsedCamera: true,
-          disableFlip: true
-        },
-        onScanSuccess,
-        onScanFailure
-      ).catch((err) => {
-        console.error("カメラ起動エラー:", err);
-        document.getElementById("status").textContent = `❌ カメラの起動に失敗しました: ${err.message || err}`;
-      });
-    }).catch((err) => {
-      console.error("カメラ取得エラー:", err);
-      document.getElementById("status").textContent = `❌ カメラの取得に失敗しました: ${err.message || err}`;
+    }).catch(err => {
+      document.getElementById("status").textContent = `❌ カメラ取得エラー: ${err}`;
     });
   </script>
 </body>
