@@ -4,12 +4,71 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ファストパス発券</title>
+  <style>
+    body {
+      font-family: "Helvetica Neue", sans-serif;
+      background: linear-gradient(to bottom, #f0f8ff, #dfefff);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 2rem;
+      color: #0077cc;
+      margin-bottom: 1rem;
+    }
+    form {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 1rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+    label {
+      display: block;
+      margin-bottom: 1rem;
+    }
+    input {
+      width: 100%;
+      padding: 0.6rem;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      padding: 0.7rem;
+      background: #0077cc;
+      color: white;
+      font-weight: bold;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005fa3;
+    }
+    #issuedId {
+      margin-top: 1rem;
+      font-weight: bold;
+      color: #0077cc;
+    }
+    #qrcode {
+      margin-top: 1rem;
+    }
+  </style>
 </head>
 <body>
   <h1>ファストパス発券</h1>
   <form id="fastpassForm">
-    <label>名前: <input type="text" name="name" required></label>
-    <button type="submit">発券</button>
+    <label>名前:
+      <input type="text" name="name" required>
+    </label>
+    <label>人数:
+      <input type="number" name="count" required min="1" value="1">
+    </label>
+    <button type="submit">ファストパスを発券</button>
   </form>
   <p id="issuedId"></p>
   <canvas id="qrcode"></canvas>
@@ -46,11 +105,16 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = form.name.value.trim();
-      if (!name) return alert("名前は必須です。");
+      const count = parseInt(form.count.value.trim());
+
+      if (!name || isNaN(count) || count < 1) {
+        return alert("正しい名前と人数を入力してください。");
+      }
 
       const id = await generateNextId();
       await setDoc(doc(db, "fastpasses", id), {
         name,
+        count,
         status: "有効",
         issuedAt: new Date()
       });
