@@ -2,150 +2,106 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>整理券発行ページ</title>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>発券ページ</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 16px;
-      margin: 0;
-      background: #f8f8f8;
-    }
-    h1 {
-      font-size: 1.8em;
-      margin-bottom: 24px;
-      text-align: center;
-    }
-    label {
-      display: block;
-      margin-bottom: 12px;
-      font-weight: bold;
-    }
-    input[type="text"],
-    input[type="number"] {
-      width: 100%;
-      padding: 10px;
-      font-size: 1em;
-      box-sizing: border-box;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    button {
-      width: 100%;
-      padding: 14px;
-      font-size: 1.1em;
-      background-color: #0078d7;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      margin-top: 20px;
-      transition: background-color 0.3s ease;
-    }
-    button:hover {
-      background-color: #005fa3;
-    }
-    #ticketInfo {
-      margin-top: 24px;
-      font-size: 1.2em;
-      white-space: pre-line; /* 改行を表示 */
-      text-align: center;
-      word-break: break-word;
-    }
-    #qrCanvas {
-      display: block;
-      margin: 24px auto 0;
-      max-width: 90vw;
-      height: auto;
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    label { display: block; margin: 10px 0 5px; }
+    input, button { width: 100%; padding: 10px; margin-bottom: 15px; font-size: 16px; }
+    .ticket { border: 2px dashed #333; padding: 20px; text-align: center; }
+    @media (max-width: 500px) {
+      body { padding: 10px; font-size: 14px; }
+      input, button { font-size: 14px; }
     }
   </style>
 </head>
 <body>
-  <h1>整理券発行</h1>
-  <label for="nameInput">名前</label>
-  <input id="nameInput" type="text" placeholder="お名前を入力してください" />
+  <h1>整理券 発行ページ</h1>
+  <label for="name">お名前</label>
+  <input type="text" id="name" placeholder="例：山田 太郎"/>
 
-  <label for="countInput">人数</label>
-  <input id="countInput" type="number" value="1" min="1" />
+  <label for="count">人数</label>
+  <input type="number" id="count" min="1" value="1"/>
 
-  <button onclick="issueTicket()">発券する</button>
+  <button id="issueBtn">整理券を発行</button>
 
-  <p id="ticketInfo"></p>
-  <canvas id="qrCanvas"></canvas>
+  <div class="ticket" id="ticketArea" style="display:none;">
+    <h2>整理番号: <span id="ticketId"></span></h2>
+    <p>お名前: <span id="ticketName"></span></p>
+    <p>人数: <span id="ticketCount"></span></p>
+    <p>ご案内時間: <span id="guideTime"></span></p>
+    <canvas id="qrcode"></canvas>
+  </div>
 
-  <script>
-    // Firebase設定
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collection, getDocs, setDoc, doc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5",
-      measurementId: "G-SLPKMCNY53"
+      appId: "1:858745521872:web:29289b673855097e1200d5"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
 
-    // 時刻フォーマット補助（00:00形式）
-    function formatTime(date) {
-      return date.getHours().toString().padStart(2,'0') + ":" + date.getMinutes().toString().padStart(2,'0');
-    }
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-    async function issueTicket() {
-      const name = document.getElementById("nameInput").value.trim();
-      const count = parseInt(document.getElementById("countInput").value);
-      if (!name) {
-        alert("名前を入力してください");
-        return;
-      }
-      if (!count || count < 1) {
-        alert("人数を1以上で入力してください");
+    const issueBtn = document.getElementById("issueBtn");
+    const nameInput = document.getElementById("name");
+    const countInput = document.getElementById("count");
+
+    issueBtn.addEventListener("click", async () => {
+      const name = nameInput.value.trim();
+      const count = parseInt(countInput.value, 10);
+      if (!name || count <= 0) {
+        alert("名前と人数を正しく入力してください");
         return;
       }
 
-      const snapshot = await db.collection("tickets").get();
+      const snapshot = await getDocs(collection(db, "tickets"));
       const ticketNumber = snapshot.size + 1;
-      const ticketId = "SB" + String(ticketNumber).padStart(3, '0');
+      const ticketId = "SB" + String(ticketNumber).padStart(3, "0");
 
-      const now = new Date();
-      const guideDurationMinutes = 30; // ご案内時間の長さ（分）
+      // 案内時間を決定（9:00開始、1枚あたり5分刻み）
+      const interval = 5;
+      const baseHour = 9;
+      const baseMinute = 0;
+      const totalMinutes = baseHour * 60 + baseMinute + (ticketNumber - 1) * interval;
+      const startHour = Math.floor(totalMinutes / 60);
+      const startMin = totalMinutes % 60;
+      const endHour = Math.floor((totalMinutes + interval) / 60);
+      const endMin = (totalMinutes + interval) % 60;
+      const guideTime = `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}〜${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')} にお越しください`;
 
-      // 開始時刻＝現在時刻（発券時刻）
-      const startTime = now;
-
-      // 終了時刻＝開始時刻 + ご案内時間（分）
-      const endTime = new Date(startTime.getTime() + guideDurationMinutes * 60000);
-
-      // 表示用テキスト
-      const guideTimeText = `${formatTime(startTime)}から${formatTime(endTime)}までにお越しください`;
-
-      await db.collection("tickets").doc(ticketId).set({
+      const ticketData = {
         id: ticketId,
-        name: name,
-        count: count,
-        guideStart: firebase.firestore.Timestamp.fromDate(startTime),
-        guideEnd: firebase.firestore.Timestamp.fromDate(endTime),
-        status: "active",
-        issuedAt: firebase.firestore.Timestamp.fromDate(now),
-        isCalling: false
-      });
+        name,
+        count,
+        status: "valid",
+        createdAt: new Date(),
+        guideTime: guideTime
+      };
 
-      document.getElementById("ticketInfo").innerText = `整理番号：${ticketId}\nご案内時間：${guideTimeText}`;
+      await setDoc(doc(db, "tickets", ticketId), ticketData);
 
-      // QRコードに読み取りページURL＋IDを埋め込む
-      const baseUrl = "https://fastpass3.vercel.app/scan.html";
-      const qrData = `${baseUrl}?id=${ticketId}`;
+      // 表示
+      document.getElementById("ticketId").textContent = ticketId;
+      document.getElementById("ticketName").textContent = name;
+      document.getElementById("ticketCount").textContent = count;
+      document.getElementById("guideTime").textContent = guideTime;
+      document.getElementById("ticketArea").style.display = "block";
 
-      QRCode.toCanvas(document.getElementById('qrCanvas'), qrData, {
-        width: 200
-      }, function (error) {
+      const url = `https://fastpass3.vercel.app/scan.html?id=${ticketId}`;
+      QRCode.toCanvas(document.getElementById("qrcode"), url, { width: 200 }, function (error) {
         if (error) console.error(error);
       });
-    }
+    });
   </script>
 </body>
 </html>
