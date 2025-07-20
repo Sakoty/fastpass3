@@ -2,43 +2,52 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>発券ページ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>整理券発券</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    label { display: block; margin: 10px 0 5px; }
-    input, button { width: 100%; padding: 10px; margin-bottom: 15px; font-size: 16px; }
-    .ticket { border: 2px dashed #333; padding: 20px; text-align: center; }
-    @media (max-width: 500px) {
-      body { padding: 10px; font-size: 14px; }
-      input, button { font-size: 14px; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+    input, button {
+      width: 100%;
+      font-size: 1.1em;
+      margin-bottom: 15px;
+      padding: 10px;
+    }
+    #qrcode {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .info {
+      font-size: 1em;
+      margin-top: 10px;
+    }
+    .warning {
+      color: red;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <h1>整理券 発行ページ</h1>
-  <label for="name">お名前</label>
-  <input type="text" id="name" placeholder="例：山田 太郎"/>
+  <h1>整理券発券</h1>
+  <form id="ticketForm">
+    <input type="text" id="name" placeholder="名前" required />
+    <input type="number" id="count" placeholder="人数" min="1" required />
+    <button type="submit">発券する</button>
+  </form>
+  <div id="qrcode"></div>
+  <div class="info" id="ticketInfo"></div>
+  <div class="warning" id="warning"></div>
 
-  <label for="count">人数</label>
-  <input type="number" id="count" min="1" value="1"/>
-
-  <button id="issueBtn">整理券を発行</button>
-
-  <div class="ticket" id="ticketArea" style="display:none;">
-    <h2>整理番号: <span id="ticketId"></span></h2>
-    <p>お名前: <span id="ticketName"></span></p>
-    <p>人数: <span id="ticketCount"></span></p>
-    <p>ご案内時間: <span id="guideTime"></span></p>
-    <canvas id="qrcode"></canvas>
-  </div>
-
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, getDocs, setDoc, doc
+      getFirestore, collection, addDoc, getCountFromServer, doc, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -51,57 +60,104 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const ticketsRef = collection(db, "tickets");
+    const configRef = doc(db, "settings", "config");
 
-    const issueBtn = document.getElementById("issueBtn");
-    const nameInput = document.getElementById("name");
-    const countInput = document.getElementById("count");
+    const form = document.getElementById("ticketForm");
+    const warning = document.getElementById("warning");
+    const info = document.getElementById("ticketInfo");
+    const qr = document.getElementById("qrcode");
 
-    issueBtn.addEventListener("click", async () => {
-      const name = nameInput.value.trim();
-      const count = parseInt(countInput.value, 10);
-      if (!name || count <= 0) {
-        alert("名前と人数を正しく入力してください");
+    function getCurrentTime() {
+      const now = new Date();
+      return now.getHours().toString().padStart(2, "0") + ":" +
+             now.getMinutes().toString().padStart(2, "0");
+    }
+
+    function isWithinTimeRanges(time, ranges) {
+      return ranges.some(range => {
+        const [sh, sm] = range.start.split(":").map(Number);
+        const [eh, em] = range.end.split(":").map(Number);
+        const [ch, cm] = time.split(":").map(Number);
+
+        const start = sh * 60 + sm;
+        const end = eh * 60 + em;
+        const current = ch * 60 + cm;
+
+        return current >= start && current <= end;
+      });
+    }
+
+    function formatRange(startMinutes, duration) {
+      const start = new Date();
+      start.setHours(0, startMinutes, 0, 0);
+      const end = new Date(start.getTime() + duration * 60000);
+
+      const format = t => `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`;
+      return `${format(start)}〜${format(end)}の間にお越しください`;
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      warning.textContent = "";
+      info.textContent = "";
+      qr.innerHTML = "";
+
+      const name = document.getElementById("name").value.trim();
+      const count = Number(document.getElementById("count").value);
+      if (!name || !count || count < 1) {
+        warning.textContent = "正しい名前と人数を入力してください。";
         return;
       }
 
-      const snapshot = await getDocs(collection(db, "tickets"));
-      const ticketNumber = snapshot.size + 1;
-      const ticketId = "SB" + String(ticketNumber).padStart(3, "0");
+      const configSnap = await getDoc(configRef);
+      if (!configSnap.exists()) {
+        warning.textContent = "設定が見つかりません。";
+        return;
+      }
 
-      // 案内時間を決定（9:00開始、1枚あたり5分刻み）
-      const interval = 5;
-      const baseHour = 9;
-      const baseMinute = 0;
-      const totalMinutes = baseHour * 60 + baseMinute + (ticketNumber - 1) * interval;
-      const startHour = Math.floor(totalMinutes / 60);
-      const startMin = totalMinutes % 60;
-      const endHour = Math.floor((totalMinutes + interval) / 60);
-      const endMin = (totalMinutes + interval) % 60;
-      const guideTime = `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}〜${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')} にお越しください`;
+      const config = configSnap.data();
+      if (!config.issueEnabled) {
+        warning.textContent = "現在、発券は停止されています。";
+        return;
+      }
 
-      const ticketData = {
-        id: ticketId,
+      const nowTime = getCurrentTime();
+      if (!isWithinTimeRanges(nowTime, config.timeRanges)) {
+        warning.textContent = "現在は発券できる時間帯ではありません。";
+        return;
+      }
+
+      const snap = await getCountFromServer(ticketsRef);
+      const countIssued = snap.data().count;
+      const newId = "SB" + String(countIssued + 1).padStart(3, "0");
+
+      const interval = config.intervalMinutes || 5;
+      const valid = config.validMinutes || 15;
+      const startOffset = countIssued * interval;
+      const startMinutes = new Date().getHours() * 60 + new Date().getMinutes() + startOffset;
+
+      const newTicket = {
+        id: newId,
         name,
         count,
         status: "valid",
         createdAt: new Date(),
-        guideTime: guideTime
+        startTime: formatRange(startMinutes, valid),
+        validMinutes: valid
       };
 
-      await setDoc(doc(db, "tickets", ticketId), ticketData);
+      const docRef = await addDoc(ticketsRef, newTicket);
 
-      // 表示
-      document.getElementById("ticketId").textContent = ticketId;
-      document.getElementById("ticketName").textContent = name;
-      document.getElementById("ticketCount").textContent = count;
-      document.getElementById("guideTime").textContent = guideTime;
-      document.getElementById("ticketArea").style.display = "block";
-
-      const url = `https://fastpass3.vercel.app/scan.html?id=${ticketId}`;
-      QRCode.toCanvas(document.getElementById("qrcode"), url, { width: 200 }, function (error) {
-        if (error) console.error(error);
+      info.textContent = `整理番号 ${newId} を発行しました。${newTicket.startTime}`;
+      const url = `${location.origin}/scan.html?id=${docRef.id}`;
+      QRCode.toCanvas(document.createElement("canvas"), url, { width: 200 }, (err, canvas) => {
+        if (!err) qr.appendChild(canvas);
       });
+
+      form.reset();
     });
   </script>
 </body>
 </html>
+
