@@ -2,22 +2,17 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>管理画面 - 発券一覧</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
-    h1, h2 { margin-top: 0; }
-    #callingNumber { font-size: 1.2em; color: red; margin-bottom: 20px; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { padding: 8px; border: 1px solid #ccc; text-align: center; }
     tr.used { background-color: #eee; color: #999; }
-    button { padding: 4px 8px; }
   </style>
 </head>
 <body>
   <h1>管理画面 - 現在の発券状況</h1>
-  <div id="callingNumber">現在呼び出し中：<span id="currentCalling">なし</span></div>
-
   <table id="ticketTable">
     <thead>
       <tr>
@@ -26,8 +21,6 @@
         <th>人数</th>
         <th>ステータス</th>
         <th>案内時間</th>
-        <th>有効期限</th>
-        <th>操作</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -35,13 +28,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      onSnapshot,
-      updateDoc,
-      doc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -58,48 +45,39 @@
     const ticketsRef = collection(db, "tickets");
 
     const tbody = document.querySelector("#ticketTable tbody");
-    const currentCalling = document.getElementById("currentCalling");
+
+    // HH:mm形式にフォーマットする関数
+    function formatTime(date) {
+      if (!date) return "-";
+      const d = date.toDate ? date.toDate() : new Date(date);
+      const hh = d.getHours().toString().padStart(2, "0");
+      const mm = d.getMinutes().toString().padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
 
     onSnapshot(ticketsRef, (snapshot) => {
-      tbody.innerHTML = "";
-      let callingTicket = null;
-
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
+      tbody.innerHTML = ""; // リセット
+      snapshot.forEach((doc) => {
+        const data = doc.data();
         const tr = document.createElement("tr");
         if (data.status === "used") tr.classList.add("used");
 
-        if (data.isCalling) callingTicket = data;
-
-        const useButton = document.createElement("button");
-        useButton.textContent = "使用済みにする";
-        useButton.disabled = data.status === "used";
-        useButton.onclick = async () => {
-          const ticketDocRef = doc(db, "tickets", docSnap.id);
-          await updateDoc(ticketDocRef, {
-            status: "used",
-            isCalling: false
-          });
-        };
+        // ご案内時間テキスト作成
+        let guideTimeText = "-";
+        if (data.guideStart && data.guideEnd) {
+          guideTimeText = `${formatTime(data.guideStart)} 〜 ${formatTime(data.guideEnd)}`;
+        }
 
         tr.innerHTML = `
           <td>${data.id || ""}</td>
           <td>${data.name || ""}</td>
           <td>${data.count || ""}</td>
           <td>${data.status === "used" ? "使用済み" : "有効"}</td>
-          <td>${data.startTime || "-"}</td>
-          <td>${data.validMinutes ? data.validMinutes + "分" : "-"}</td>
+          <td>${guideTimeText}</td>
         `;
-        const td = document.createElement("td");
-        td.appendChild(useButton);
-        tr.appendChild(td);
-
         tbody.appendChild(tr);
       });
-
-      currentCalling.textContent = callingTicket ? callingTicket.id : "なし";
     });
   </script>
 </body>
 </html>
-
