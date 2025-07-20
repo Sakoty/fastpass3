@@ -3,123 +3,78 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ファストパス管理</title>
+  <title>ファストパス管理画面</title>
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
+      text-align: center;
       max-width: 600px;
       margin: auto;
-      text-align: center;
     }
-    #currentNumber {
+    h1 {
+      font-size: 1.8em;
+    }
+    #current {
       font-size: 2em;
-      margin-top: 20px;
-    }
-    #list {
-      margin-top: 30px;
-      text-align: left;
-    }
-    .ticket {
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
+      margin: 20px 0;
+      color: #007bff;
     }
     button {
-      margin-top: 20px;
       padding: 10px 20px;
-      font-size: 1em;
+      font-size: 1.2em;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス管理</h1>
-  <div id="currentNumber">現在呼び出し中：--</div>
-  <button id="nextBtn">次のファストパスを呼び出す</button>
-
-  <div id="list"></div>
+  <h1>ファストパス呼び出し</h1>
+  <div>現在呼び出し中の番号</div>
+  <div id="current">--- 番</div>
+  <button id="nextBtn">次を呼び出す</button>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, query, orderBy, getDocs, doc, updateDoc, getDoc
+      getFirestore, doc, getDoc, updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-      authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
-      messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const currentNumberEl = document.getElementById("currentNumber");
-    const listEl = document.getElementById("list");
+    const currentDisplay = document.getElementById("current");
     const nextBtn = document.getElementById("nextBtn");
 
-    let currentIndex = -1;
-    let tickets = [];
-
-    async function loadTickets() {
-      const q = query(collection(db, "tickets"), orderBy("createdAt"));
-      const querySnapshot = await getDocs(q);
-
-      tickets = [];
-      listEl.innerHTML = "";
-
-      querySnapshot.forEach((docSnap, i) => {
+    async function loadCurrent() {
+      const docRef = doc(db, "settings", "current");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
         const data = docSnap.data();
-        tickets.push({ id: docSnap.id, ...data });
-
-        const ticketDiv = document.createElement("div");
-        ticketDiv.className = "ticket";
-        ticketDiv.innerHTML = `
-          <strong>${data.id}</strong> - ${data.name || "名前なし"}（${data.people || 1}名）
-          - 状態: ${data.status}
-        `;
-        listEl.appendChild(ticketDiv);
-
-        if (data.status === "calling") {
-          currentIndex = i;
-          currentNumberEl.textContent = `現在呼び出し中：${data.id}`;
-        }
-      });
+        currentDisplay.textContent = `${data.currentNumber} 番`;
+      } else {
+        currentDisplay.textContent = "--- 番";
+      }
     }
 
     async function callNext() {
-      if (currentIndex >= 0 && currentIndex < tickets.length) {
-        const currentTicket = tickets[currentIndex];
-        const ref = doc(db, "tickets", currentTicket.docId);
-        await updateDoc(doc(db, "tickets", currentTicket.id), { status: "issued" });
+      const docRef = doc(db, "settings", "current");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const current = docSnap.data().currentNumber || 0;
+        await updateDoc(docRef, { currentNumber: current + 1 });
+        loadCurrent();
       }
-
-      let nextIndex = -1;
-      for (let i = currentIndex + 1; i < tickets.length; i++) {
-        if (tickets[i].status === "issued") {
-          nextIndex = i;
-          break;
-        }
-      }
-
-      if (nextIndex === -1) {
-        currentNumberEl.textContent = "現在呼び出し中：なし";
-        currentIndex = -1;
-      } else {
-        const nextTicket = tickets[nextIndex];
-        await updateDoc(doc(db, "tickets", nextTicket.id), { status: "calling" });
-        currentNumberEl.textContent = `現在呼び出し中：${nextTicket.id}`;
-        currentIndex = nextIndex;
-      }
-
-      await loadTickets();
     }
 
     nextBtn.addEventListener("click", callNext);
 
-    loadTickets();
+    loadCurrent();
   </script>
 </body>
 </html>
