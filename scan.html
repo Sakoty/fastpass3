@@ -28,7 +28,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Firebase設定（ご自身の設定に置き換えてください）
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -53,22 +52,22 @@
 
     async function markUsed() {
       try {
-        const ticketRef = doc(db, "tickets", id);
-        const ticketSnap = await getDoc(ticketRef);
+        const fastpassRef = doc(db, "fastpasses", id);
+        const fastpassSnap = await getDoc(fastpassRef);
 
-        if (!ticketSnap.exists()) {
+        if (!fastpassSnap.exists()) {
           message.textContent = "ファストパス情報が見つかりません。";
           return;
         }
 
-        const data = ticketSnap.data();
+        const data = fastpassSnap.data();
 
         if (data.status === "used") {
           message.textContent = `ファストパス ${data.id || id} はすでに使用済みです。`;
           return;
         }
 
-        await updateDoc(ticketRef, { status: "used", usedAt: new Date() });
+        await updateDoc(fastpassRef, { status: "used", usedAt: new Date() });
 
         message.textContent = `ファストパス ${data.id || id} を使用済みにしました。ありがとうございます！`;
 
@@ -82,3 +81,4 @@
   </script>
 </body>
 </html>
+
