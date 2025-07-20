@@ -3,37 +3,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパススキャン</title>
+  <title>ファストパス読み取り</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
+      background: #f0f8ff;
       padding: 1em;
-      background: #fff8dc;
       text-align: center;
-    }
-    h1 {
-      color: #d2691e;
     }
     #reader {
       width: 100%;
       max-width: 400px;
       margin: auto;
+      padding: 10px;
+      border: 2px solid #ccc;
+      background: white;
     }
-    #message {
+    #status {
       margin-top: 1em;
       font-size: 1.2em;
     }
   </style>
 </head>
 <body>
-  <h1>🎫 ファストパス スキャン 🎫</h1>
+  <h1>📷 ファストパス読み取り</h1>
   <div id="reader"></div>
-  <div id="message"></div>
+  <div id="status">QRコードをカメラにかざしてください。</div>
 
   <script>
+    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -45,40 +46,53 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const html5QrCode = new Html5Qrcode("reader");
+    // QRコード読み取り処理
+    function onScanSuccess(decodedText) {
+      document.getElementById("status").textContent = `読み取り成功：${decodedText}`;
 
-    Html5Qrcode.getCameras().then(cameras => {
-      if (cameras && cameras.length) {
+      // Firestore で該当データを検索し、使用済みに変更
+      const docRef = db.collection("fastpasses").doc(decodedText);
+
+      docRef.get().then((doc) => {
+        if (doc.exists) {
+          const data = doc.data();
+          if (data.status === "使用済み") {
+            document.getElementById("status").textContent = `⚠️ すでに使用済みのファストパスです (${decodedText})`;
+          } else {
+            docRef.update({ status: "使用済み" }).then(() => {
+              document.getElementById("status").textContent = `✅ 使用済みに更新しました：${decodedText}`;
+            });
+          }
+        } else {
+          document.getElementById("status").textContent = `❌ ファストパスIDが見つかりません：${decodedText}`;
+        }
+      });
+    }
+
+    function onScanFailure(error) {
+      // エラーはログに記録（表示は不要）
+      console.warn(`読み取りエラー: ${error}`);
+    }
+
+    // QRコードリーダー起動
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then((devices) => {
+      if (devices && devices.length) {
+        const cameraId = devices[0].id;
         html5QrCode.start(
-          { facingMode: "environment" },
+          cameraId,
           {
             fps: 10,
-            qrbox: 250
+            qrbox: { width: 250, height: 250 }
           },
-          async (decodedText) => {
-            html5QrCode.stop();
-            document.getElementById("message").textContent = `読み取り中: ${decodedText}`;
-            const doc = await db.collection("fastpasses").doc(decodedText).get();
-            if (!doc.exists) {
-              document.getElementById("message").textContent = "ファストパス情報が見つかりません。";
-              return;
-            }
-
-            const data = doc.data();
-            if (data.status === "使用済み") {
-              document.getElementById("message").textContent = `このファストパス（${decodedText}）はすでに使用済みです。`;
-            } else {
-              await db.collection("fastpasses").doc(decodedText).update({ status: "使用済み" });
-              document.getElementById("message").textContent = `✅ ファストパス（${decodedText}）を使用済みにしました。`;
-            }
-          },
-          errorMessage => {
-            console.warn(errorMessage);
-          }
+          onScanSuccess,
+          onScanFailure
         );
+      } else {
+        document.getElementById("status").textContent = "❌ カメラが検出されませんでした";
       }
-    }).catch(err => {
-      document.getElementById("message").textContent = "カメラが起動できませんでした。許可を確認してください。";
+    }).catch((err) => {
+      document.getElementById("status").textContent = `❌ カメラ起動エラー: ${err}`;
     });
   </script>
 </body>
