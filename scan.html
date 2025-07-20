@@ -34,20 +34,10 @@
 </head>
 <body>
   <h1>整理券読み取り</h1>
-  <video id="video" autoplay></video>
+  <video id="video" autoplay playsinline></video>
   <div id="message">QRコードをカメラにかざしてください。</div>
   <button id="resetBtn">リセット</button>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, doc, getDoc, updateDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // QRコード読み取り用ライブラリ jsQR
-    // https://github.com/cozmo/jsQR
-    // CDNをscriptタグで読み込みます
-  </script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
   <script type="module">
@@ -82,6 +72,7 @@
         scanning = true;
         scanLoop();
       } catch (err) {
+        console.error(err);
         message.textContent = "カメラが起動できませんでした。許可を確認してください。";
       }
     }
@@ -89,6 +80,7 @@
     function stopCamera() {
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
       }
       scanning = false;
     }
@@ -151,6 +143,11 @@
 
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
+
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        requestAnimationFrame(scanLoop);
+        return;
+      }
 
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
