@@ -3,42 +3,49 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>📷 ファストパススキャン</title>
+  <title>ファストパススキャン</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #f0f8ff;
+      font-family: 'Arial', sans-serif;
+      background: #f9f9f9;
       text-align: center;
-      padding: 1em;
+      margin: 0;
+      padding: 1rem;
     }
+
     h1 {
-      font-size: 1.6em;
-      margin-bottom: 0.5em;
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
     }
+
     #reader {
       width: 100%;
       max-width: 400px;
       margin: 0 auto;
-      border: 2px solid #4682B4;
-      border-radius: 12px;
-      overflow: hidden;
     }
+
     #result {
-      margin-top: 1em;
-      font-size: 1.2em;
+      margin-top: 1rem;
+      font-size: 1.1rem;
+      color: #333;
+    }
+
+    video {
+      width: 100% !important;
+      height: auto !important;
     }
   </style>
 </head>
 <body>
   <h1>📷 ファストパススキャン</h1>
   <div id="reader"></div>
-  <div id="result">QRコードをカメラにかざしてください</div>
+  <div id="result">カメラにQRコードをかざしてください</div>
 
   <script>
-    // Firebase 初期化
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -47,64 +54,62 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const resultDiv = document.getElementById('result');
+    const resultDiv = document.getElementById("result");
 
     function onScanSuccess(decodedText, decodedResult) {
       const passId = decodedText.trim();
-      resultDiv.innerText = `✅ 読み取り成功: ${passId}`;
+      resultDiv.textContent = `✅ 読み取り成功: ${passId}`;
 
-      // Firestore でステータス更新
       db.collection("fastpasses").doc(passId).get()
         .then(doc => {
           if (!doc.exists) {
-            resultDiv.innerText = "❌ ファストパスが存在しません";
+            resultDiv.textContent = "❌ 該当するファストパスが存在しません";
             return;
           }
           const data = doc.data();
           if (data.status === "使用済み") {
-            resultDiv.innerText = "⚠️ すでに使用済みです";
+            resultDiv.textContent = "⚠️ このファストパスはすでに使用済みです";
             return;
           }
           return db.collection("fastpasses").doc(passId).update({
             status: "使用済み"
           }).then(() => {
-            resultDiv.innerText = `🎉 使用済みにしました: ${passId}`;
+            resultDiv.textContent = `🎉 使用済みに更新しました: ${passId}`;
           });
         })
-        .catch((error) => {
+        .catch(error => {
           console.error("エラー:", error);
-          resultDiv.innerText = "⚠️ エラーが発生しました";
+          resultDiv.textContent = "⚠️ データベースエラーが発生しました";
         });
     }
 
     function onScanFailure(error) {
-      // 読み取り失敗ログ
-      console.warn(`読み取り失敗: ${error}`);
+      // 読み取り失敗時のログ出力（不要なら削除）
     }
 
-    // カメラ起動とスキャン開始
+    // カメラ起動
     const html5QrCode = new Html5Qrcode("reader");
 
     Html5Qrcode.getCameras().then(cameras => {
-      if (cameras && cameras.length > 0) {
+      if (cameras && cameras.length) {
         const cameraId = cameras[0].id;
         html5QrCode.start(
           cameraId,
           {
             fps: 10,
             qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.333 // カメラ映像を自然なサイズで表示
+            facingMode: "environment" // 背面カメラ推奨
           },
           onScanSuccess,
           onScanFailure
         ).catch(err => {
-          resultDiv.innerText = `❌ カメラ起動エラー: ${err}`;
+          resultDiv.textContent = `❌ カメラ開始エラー: ${err}`;
         });
       } else {
-        resultDiv.innerText = "📵 カメラが見つかりませんでした";
+        resultDiv.textContent = "📵 カメラが検出されませんでした";
       }
     }).catch(err => {
-      resultDiv.innerText = `📵 カメラ初期化エラー: ${err}`;
+      resultDiv.textContent = `📵 カメラ初期化エラー: ${err}`;
     });
   </script>
 </body>
