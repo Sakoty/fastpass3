@@ -2,23 +2,24 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ファストパス管理（admin）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ファストパス管理画面</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <style>
     body {
       font-family: sans-serif;
-      max-width: 700px;
-      margin: auto;
+      background: #fffaf2;
       padding: 20px;
     }
     h1 {
       text-align: center;
-      margin-bottom: 20px;
+      color: #333;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      margin-top: 1em;
     }
     th, td {
       border: 1px solid #ccc;
@@ -26,74 +27,38 @@
       text-align: center;
     }
     th {
-      background: #eee;
+      background: #ffe9c4;
     }
     button {
-      padding: 6px 12px;
-      cursor: pointer;
-      margin: 0 2px;
+      padding: 5px 10px;
+      font-size: 0.9em;
     }
-    .status-valid {
-      color: green;
-      font-weight: bold;
-    }
-    .status-used {
-      color: gray;
-      text-decoration: line-through;
-    }
-    .status-canceled {
-      color: red;
-      font-weight: bold;
-    }
-    #error, #message {
+    #current-call {
       text-align: center;
+      margin-top: 10px;
+      font-size: 1.2em;
       font-weight: bold;
-      margin-bottom: 10px;
-    }
-    #error {
-      color: red;
-    }
-    #message {
-      color: green;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス管理（admin）</h1>
-  <div id="error"></div>
-  <div id="message"></div>
+  <h1>📋 ファストパス管理</h1>
+  <div id="current-call">現在呼び出し中：<span id="current-number">未設定</span></div>
   <table>
     <thead>
       <tr>
-        <th>整理番号（ID）</th>
+        <th>ID</th>
         <th>名前</th>
         <th>人数</th>
-        <th>案内時間</th>
+        <th>案内時刻</th>
         <th>状態</th>
-        <th>発行日時</th>
         <th>操作</th>
       </tr>
     </thead>
-    <tbody id="passesTableBody">
-      <!-- ここにファストパスリストが入る -->
-    </tbody>
+    <tbody id="pass-list"></tbody>
   </table>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      query,
-      orderBy,
-      onSnapshot,
-      updateDoc,
-      deleteDoc,
-      doc,
-      Timestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // Firebase 設定
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -102,162 +67,64 @@
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5"
     };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const passesRef = collection(db, "fastpasses");
+    const listEl = document.getElementById("pass-list");
+    const currentCallEl = document.getElementById("current-number");
 
-    const tableBody = document.getElementById("passesTableBody");
-    const errorDiv = document.getElementById("error");
-    const messageDiv = document.getElementById("message");
+    function renderRow(id, data) {
+      const tr = document.createElement("tr");
 
-    function formatDate(ts) {
-      if (!ts) return "-";
-      const date = ts.toDate ? ts.toDate() : new Date(ts);
-      return date.toLocaleString('ja-JP');
+      const time = data.estimatedTime?.toDate()?.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      }) || "-";
+
+      tr.innerHTML = `
+        <td>${id}</td>
+        <td>${data.name}</td>
+        <td>${data.count}</td>
+        <td>${time}</td>
+        <td>${data.status}</td>
+        <td>
+          <button onclick="setCurrent('${id}')">呼出</button>
+          <button onclick="deletePass('${id}')">削除</button>
+        </td>
+      `;
+      return tr;
     }
 
-    function getStatusClass(status) {
-      switch(status) {
-        case "valid": return "status-valid";
-        case "used": return "status-used";
-        case "canceled": return "status-canceled";
-        default: return "";
+    async function deletePass(id) {
+      if (confirm(`${id} を削除しますか？`)) {
+        await db.collection("fastpasses").doc(id).delete();
       }
     }
 
-    function getStatusText(status) {
-      switch(status) {
-        case "valid": return "有効";
-        case "used": return "使用済み";
-        case "canceled": return "キャンセル";
-        default: return status;
-      }
+    async function setCurrent(id) {
+      await db.collection("settings").doc("current").set({ currentId: id });
     }
 
-    async function updateStatus(docId, newStatus) {
-      clearMessages();
-      try {
-        const docRef = doc(db, "fastpasses", docId);
-        await updateDoc(docRef, {
-          status: newStatus,
-          updatedAt: Timestamp.now()
+    function listenPasses() {
+      db.collection("fastpasses")
+        .orderBy("createdAt", "desc")
+        .onSnapshot(snapshot => {
+          listEl.innerHTML = "";
+          snapshot.forEach(doc => {
+            listEl.appendChild(renderRow(doc.id, doc.data()));
+          });
         });
-        showMessage(`整理番号 ${docId} を「${getStatusText(newStatus)}」に更新しました。`);
-      } catch (e) {
-        showError("更新中にエラーが発生しました。");
-        console.error(e);
-      }
     }
 
-    async function deletePass(docId) {
-      clearMessages();
-      if (!confirm(`整理番号 ${docId} を削除します。よろしいですか？`)) return;
-      try {
-        const docRef = doc(db, "fastpasses", docId);
-        await deleteDoc(docRef);
-        showMessage(`整理番号 ${docId} を削除しました。`);
-      } catch (e) {
-        showError("削除中にエラーが発生しました。");
-        console.error(e);
-      }
-    }
-
-    function showMessage(msg) {
-      messageDiv.textContent = msg;
-      errorDiv.textContent = "";
-    }
-    function showError(msg) {
-      errorDiv.textContent = msg;
-      messageDiv.textContent = "";
-    }
-    function clearMessages() {
-      errorDiv.textContent = "";
-      messageDiv.textContent = "";
-    }
-
-    const q = query(passesRef, orderBy("createdAt", "asc"));
-    onSnapshot(q, (snapshot) => {
-      clearMessages();
-      tableBody.innerHTML = "";
-
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-
-        const tr = document.createElement("tr");
-
-        // 整理番号（FirestoreドキュメントID）
-        const tdId = document.createElement("td");
-        tdId.textContent = docSnap.id;
-        tr.appendChild(tdId);
-
-        // 名前
-        const tdName = document.createElement("td");
-        tdName.textContent = data.name || "-";
-        tr.appendChild(tdName);
-
-        // 人数
-        const tdCount = document.createElement("td");
-        tdCount.textContent = data.count || "-";
-        tr.appendChild(tdCount);
-
-        // 案内時間
-        const tdTime = document.createElement("td");
-        tdTime.textContent = data.startTime || "-";
-        tr.appendChild(tdTime);
-
-        // 状態
-        const tdStatus = document.createElement("td");
-        tdStatus.textContent = getStatusText(data.status);
-        tdStatus.className = getStatusClass(data.status);
-        tr.appendChild(tdStatus);
-
-        // 発行日時
-        const tdCreatedAt = document.createElement("td");
-        tdCreatedAt.textContent = formatDate(data.createdAt);
-        tr.appendChild(tdCreatedAt);
-
-        // 操作
-        const tdAction = document.createElement("td");
-
-        if(data.status === "valid") {
-          const usedBtn = document.createElement("button");
-          usedBtn.textContent = "使用済みにする";
-          usedBtn.addEventListener("click", () => updateStatus(docSnap.id, "used"));
-          tdAction.appendChild(usedBtn);
-        } else if(data.status === "used") {
-          const validBtn = document.createElement("button");
-          validBtn.textContent = "有効に戻す";
-          validBtn.addEventListener("click", () => updateStatus(docSnap.id, "valid"));
-          tdAction.appendChild(validBtn);
-        } else {
-          tdAction.textContent = "-";
-        }
-
-        // 削除ボタンは常に表示
-        const deleteBtn = document.createElement("button");
-        deleteBtn.textContent = "削除";
-        deleteBtn.style.backgroundColor = "#f66";
-        deleteBtn.addEventListener("click", () => deletePass(docSnap.id));
-        tdAction.appendChild(deleteBtn);
-
-        tr.appendChild(tdAction);
-
-        tableBody.appendChild(tr);
+    function listenCurrentCall() {
+      db.collection("settings").doc("current").onSnapshot(doc => {
+        const id = doc.exists ? doc.data().currentId : "未設定";
+        currentCallEl.textContent = id || "未設定";
       });
+    }
 
-      if(snapshot.empty) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 7;
-        td.textContent = "データがありません。";
-        tr.appendChild(td);
-        tableBody.appendChild(tr);
-      }
-    }, (error) => {
-      showError("データ取得に失敗しました。");
-      console.error(error);
-    });
+    listenPasses();
+    listenCurrentCall();
   </script>
 </body>
 </html>
