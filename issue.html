@@ -1,87 +1,130 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>ファストパス発券</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <style>
     body {
       font-family: sans-serif;
+      background: #f4f4f4;
       text-align: center;
-      padding: 2em;
+      padding: 1rem;
     }
-    input {
-      display: block;
-      margin: 1em auto;
-      padding: 0.6em;
-      font-size: 1em;
-      width: 80%;
+    .container {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 1rem;
+      max-width: 400px;
+      margin: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    input, button {
+      width: 100%;
+      padding: 0.8rem;
+      margin-top: 1rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
     }
     button {
-      padding: 1em;
-      font-size: 1.2em;
+      background: #2563eb;
+      color: white;
+      border: none;
     }
     #qrcode {
-      margin-top: 1em;
+      margin-top: 1rem;
     }
   </style>
 </head>
 <body>
-  <h1>🎟️ ファストパス発券</h1>
-  <input type="text" id="name" placeholder="名前" />
-  <input type="number" id="count" placeholder="人数" min="1" />
-  <button onclick="issue()">発券する</button>
-
-  <div id="ticketInfo"></div>
-  <div id="qrcode"></div>
+  <div class="container">
+    <h2>ファストパス発券</h2>
+    <input type="text" id="name" placeholder="名前">
+    <input type="number" id="number" placeholder="人数">
+    <button id="issueBtn">発券</button>
+    <div id="qrcode"></div>
+    <div id="info"></div>
+  </div>
 
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system"
+      projectId: "fastpass-system",
+      storageBucket: "fastpass-system.firebasestorage.app",
+      messagingSenderId: "858745521872",
+      appId: "1:858745521872:web:29289b673855097e1200d5",
+      measurementId: "G-SLPKMCNY53"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    async function issue() {
+    document.getElementById("issueBtn").onclick = async () => {
       const name = document.getElementById("name").value.trim();
-      const count = parseInt(document.getElementById("count").value);
-      if (!name || isNaN(count)) return alert("名前と人数を入力してください");
+      const number = parseInt(document.getElementById("number").value.trim());
 
-      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
-      let nextNumber = 1;
-      if (!snapshot.empty) {
-        const lastId = snapshot.docs[0].id;
-        nextNumber = parseInt(lastId.replace("FP", "")) + 1;
+      if (!name || isNaN(number) || number <= 0) {
+        alert("名前と人数を正しく入力してください。");
+        return;
       }
-      const id = "FP" + String(nextNumber).padStart(3, "0");
 
-      const estimateTime = await calculateEstimateTime();
+      const settingDoc = await db.collection("settings").doc("timeRanges").get();
+      const ranges = settingDoc.exists ? settingDoc.data().ranges : [];
 
-      await db.collection("fastpasses").doc(id).set({
-        name, count, status: "未使用", createdAt: firebase.firestore.FieldValue.serverTimestamp(), estimateTime
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+
+      let guideTime = null;
+      for (const r of ranges) {
+        const [sh, sm] = r.start.split(":").map(Number);
+        const [eh, em] = r.end.split(":").map(Number);
+        const startMin = sh * 60 + sm;
+        const endMin = eh * 60 + em;
+
+        if (nowMin >= startMin && nowMin < endMin) {
+          const start = Math.ceil(nowMin / 10) * 10;
+          const end = start + 10;
+          guideTime = `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}～${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+          break;
+        }
+      }
+
+      if (!guideTime) {
+        alert("現在は発券できません。");
+        return;
+      }
+
+      const lastSnap = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
+      let lastNum = 0;
+      if (!lastSnap.empty) {
+        const lastId = lastSnap.docs[0].data().id;
+        lastNum = parseInt(lastId.replace("FP", ""));
+      }
+      const newId = `FP${String(lastNum + 1).padStart(3, "0")}`;
+
+      await db.collection("fastpasses").doc(newId).set({
+        id: newId,
+        name,
+        number,
+        used: false,
+        guideTime,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-      document.getElementById("ticketInfo").innerHTML = `
-        <h2>🎫 整理券: ${id}</h2>
-        <p>名前: ${name}</p>
-        <p>人数: ${count}人</p>
-        <p>案内時間: ${estimateTime}</p>
-      `;
-      QRCode.toCanvas(document.getElementById("qrcode"), id, { width: 200 });
-    }
+      document.getElementById("qrcode").innerHTML = "";
+      const canvas = document.createElement("canvas");
+      await QRCode.toCanvas(canvas, newId);
+      document.getElementById("qrcode").appendChild(canvas);
 
-    async function calculateEstimateTime() {
-      const snapshot = await db.collection("fastpasses").get();
-      const total = snapshot.size;
-      const baseTime = new Date();
-      baseTime.setMinutes(baseTime.getMinutes() + total * 2); // 1件あたり2分
-      return baseTime.toTimeString().slice(0, 5);
-    }
+      document.getElementById("info").innerHTML = `
+        <p><strong>番号:</strong> ${newId}</p>
+        <p><strong>案内時間:</strong> ${guideTime}</p>
+      `;
+    };
   </script>
 </body>
 </html>
