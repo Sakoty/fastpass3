@@ -3,34 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパス読み取り</title>
+  <title>📷 ファストパススキャン</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
   <style>
     body {
-      font-family: sans-serif;
-      background: #eef;
-      padding: 1em;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f8ff;
       text-align: center;
+      padding: 1em;
     }
     #reader {
       width: 100%;
       max-width: 400px;
-      margin: auto;
+      margin: 0 auto;
     }
-    #status {
+    #result {
       margin-top: 1em;
       font-size: 1.2em;
     }
   </style>
 </head>
 <body>
-  <h1>📷 ファストパス読み取り</h1>
-  <div id="reader">カメラの初期化中...</div>
-  <div id="status">QRコードをカメラにかざしてください。</div>
+  <h1>📷 ファストパススキャン</h1>
+  <div id="reader"></div>
+  <div id="result">QRコードをスキャンしてください</div>
 
   <script>
+    // Firebase 初期化
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -39,41 +40,65 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    const resultDiv = document.getElementById('result');
+
+    function onScanSuccess(decodedText, decodedResult) {
+      // QRコード内容がFP001などのIDであると仮定
+      const passId = decodedText.trim();
+      resultDiv.innerText = `読み取り成功: ${passId}`;
+
+      // Firestore のドキュメントを「使用済み」に変更
+      db.collection("fastpasses").doc(passId).get()
+        .then(doc => {
+          if (!doc.exists) {
+            resultDiv.innerText = "❌ ファストパスが存在しません";
+            return;
+          }
+          const data = doc.data();
+          if (data.status === "使用済み") {
+            resultDiv.innerText = "⚠️ すでに使用済みです";
+            return;
+          }
+          return db.collection("fastpasses").doc(passId).update({
+            status: "使用済み"
+          }).then(() => {
+            resultDiv.innerText = `✅ 使用済みにしました: ${passId}`;
+          });
+        })
+        .catch((error) => {
+          console.error("エラー:", error);
+          resultDiv.innerText = "⚠️ エラーが発生しました";
+        });
+    }
+
+    function onScanFailure(error) {
+      // 読み取り失敗時の処理（ログに出す程度でOK）
+      console.warn(`読み取り失敗: ${error}`);
+    }
+
+    // カメラの起動と QRコード読み取り開始
     const html5QrCode = new Html5Qrcode("reader");
 
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length) {
+    Html5Qrcode.getCameras().then(cameras => {
+      if (cameras && cameras.length) {
+        const cameraId = cameras[0].id;
+
         html5QrCode.start(
-          devices[0].id,
-          { fps: 10, qrbox: 250 },
-          async (decodedText) => {
-            html5QrCode.stop(); // 一度読み取ったら止める
-            document.getElementById("status").innerText = `読み取り成功：${decodedText}`;
-
-            const docRef = db.collection("fastpasses").doc(decodedText);
-            const doc = await docRef.get();
-
-            if (!doc.exists) {
-              document.getElementById("status").innerText = "❌ ファストパスが見つかりません";
-              return;
-            }
-
-            if (doc.data().status === "使用済み") {
-              document.getElementById("status").innerText = "⚠️ すでに使用済みです";
-            } else {
-              await docRef.update({ status: "使用済み" });
-              document.getElementById("status").innerText = "✅ 使用済みにしました";
-            }
+          cameraId,
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
           },
-          error => {
-            console.warn("QR読み取りエラー:", error);
-          }
-        );
+          onScanSuccess,
+          onScanFailure
+        ).catch(err => {
+          resultDiv.innerText = `カメラ起動失敗: ${err}`;
+        });
       } else {
-        document.getElementById("status").innerText = "❌ カメラが見つかりません";
+        resultDiv.innerText = "❌ カメラが見つかりませんでした";
       }
     }).catch(err => {
-      document.getElementById("status").innerText = `❌ カメラエラー: ${err}`;
+      resultDiv.innerText = `カメラ初期化エラー: ${err}`;
     });
   </script>
 </body>
