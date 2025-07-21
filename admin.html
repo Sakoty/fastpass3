@@ -2,19 +2,20 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパス管理画面</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ファストパス管理（Admin）</title>
   <style>
     body {
       font-family: sans-serif;
-      background: #fffaf2;
-      padding: 20px;
+      max-width: 800px;
+      margin: auto;
+      padding: 1em;
+      background: #f9f9f9;
     }
     h1 {
       text-align: center;
-      color: #333;
+      color: #0a58ca;
+      margin-bottom: 1em;
     }
     table {
       width: 100%;
@@ -23,133 +24,103 @@
     }
     th, td {
       border: 1px solid #ccc;
-      padding: 8px;
+      padding: 0.6em;
       text-align: center;
     }
     th {
-      background: #ffe9c4;
+      background-color: #0a58ca;
+      color: white;
     }
-    button {
-      padding: 5px 10px;
-      font-size: 0.9em;
+    .status-valid {
+      color: green;
+      font-weight: bold;
     }
-    #current-call {
-      text-align: center;
-      margin-top: 10px;
-      font-size: 1.2em;
+    .status-used {
+      color: red;
       font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <h1>📋 ファストパス管理</h1>
-  <div id="current-call">現在呼び出し中：<span id="current-number">未設定</span></div>
+  <h1>ファストパス管理画面</h1>
+
   <table>
     <thead>
       <tr>
-        <th>ID</th>
+        <th>整理番号</th>
         <th>名前</th>
         <th>人数</th>
-        <th>案内時刻</th>
+        <th>案内時間</th>
         <th>状態</th>
-        <th>操作</th>
       </tr>
     </thead>
-    <tbody id="pass-list"></tbody>
+    <tbody id="ticketList">
+      <!-- 発券データがここに入る -->
+    </tbody>
   </table>
 
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
   <script>
+    // Firebase設定（scan.htmlと合わせてください）
     const firebaseConfig = {
-      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-      authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
-      messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
+     apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.firebasestorage.app",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5",
+  measurementId: "G-SLPKMCNY53"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const listEl = document.getElementById("pass-list");
-    const currentCallEl = document.getElementById("current-number");
+    const ticketListElem = document.getElementById("ticketList");
 
-    let baseTime = null;
-    let intervalMinutes = 10;
-
-    async function loadSettings() {
-      const doc = await db.collection("settings").doc("timeConfig").get();
-      if (doc.exists) {
+    // 発券ドキュメントをリアルタイムで監視・一覧表示
+    db.collection("fastpasses").orderBy("createdAt").onSnapshot(snapshot => {
+      ticketListElem.innerHTML = "";
+      snapshot.forEach(doc => {
         const data = doc.data();
-        baseTime = data.baseTime.toDate();
-        intervalMinutes = data.interval || 10;
-      }
-    }
 
-    function formatRange(startTime, interval) {
-      const start = new Date(startTime);
-      const end = new Date(startTime);
-      end.setMinutes(start.getMinutes() + interval);
-      return `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')} ～ ${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`;
-    }
+        const tr = document.createElement("tr");
 
-    function renderRow(id, data, index) {
-      const tr = document.createElement("tr");
+        // 整理番号
+        const idTd = document.createElement("td");
+        idTd.textContent = data.id || doc.id;
+        tr.appendChild(idTd);
 
-      let timeDisplay = "-";
-      if (baseTime) {
-        const slotTime = new Date(baseTime.getTime());
-        slotTime.setMinutes(slotTime.getMinutes() + index * intervalMinutes);
-        timeDisplay = formatRange(slotTime, intervalMinutes);
-      }
+        // 名前
+        const nameTd = document.createElement("td");
+        nameTd.textContent = data.name || "-";
+        tr.appendChild(nameTd);
 
-      tr.innerHTML = `
-        <td>${id}</td>
-        <td>${data.name}</td>
-        <td>${data.count}</td>
-        <td>${timeDisplay}</td>
-        <td>${data.status}</td>
-        <td>
-          <button onclick="setCurrent('${id}')">呼出</button>
-          <button onclick="deletePass('${id}')">削除</button>
-        </td>
-      `;
-      return tr;
-    }
+        // 人数
+        const countTd = document.createElement("td");
+        countTd.textContent = data.count || "-";
+        tr.appendChild(countTd);
 
-    async function deletePass(id) {
-      if (confirm(`${id} を削除しますか？`)) {
-        await db.collection("fastpasses").doc(id).delete();
-      }
-    }
+        // 案内時間
+        const startTime = data.startTime || "-";
+        const endTime = data.endTime || "";
+        const timeStr = data.startTime && data.endTime ? `${data.startTime}～${data.endTime}` : (data.startTime || "-");
+        const timeTd = document.createElement("td");
+        timeTd.textContent = timeStr;
+        tr.appendChild(timeTd);
 
-    async function setCurrent(id) {
-      await db.collection("settings").doc("current").set({ currentId: id });
-    }
+        // 状態
+        const statusTd = document.createElement("td");
+        const status = data.status || "valid";
+        statusTd.textContent = (status === "使用済み" || status === "used") ? "使用済み" : "有効";
+        statusTd.className = (status === "使用済み" || status === "used") ? "status-used" : "status-valid";
+        tr.appendChild(statusTd);
 
-    async function listenPasses() {
-      await loadSettings();
-
-      db.collection("fastpasses")
-        .orderBy("createdAt", "asc")
-        .onSnapshot(snapshot => {
-          listEl.innerHTML = "";
-          let index = 0;
-          snapshot.forEach(doc => {
-            listEl.appendChild(renderRow(doc.id, doc.data(), index));
-            index++;
-          });
-        });
-    }
-
-    function listenCurrentCall() {
-      db.collection("settings").doc("current").onSnapshot(doc => {
-        const id = doc.exists ? doc.data().currentId : "未設定";
-        currentCallEl.textContent = id || "未設定";
+        ticketListElem.appendChild(tr);
       });
-    }
-
-    listenPasses();
-    listenCurrentCall();
+    }, err => {
+      ticketListElem.innerHTML = `<tr><td colspan="5" style="color:red;">エラーが発生しました：${err.message}</td></tr>`;
+    });
   </script>
 </body>
 </html>
