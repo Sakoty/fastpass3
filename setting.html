@@ -1,67 +1,76 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパス設定</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <meta charset="UTF-8">
+  <title>案内時間設定</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 2em; text-align: center; background-color: #f4f4f4; }
-    input, button { margin: 1em 0; padding: 0.6em; width: 80%; font-size: 1em; }
+    body {
+      font-family: sans-serif;
+      padding: 1rem;
+    }
+    input, button {
+      margin: 0.5rem 0;
+      padding: 0.5rem;
+    }
   </style>
 </head>
 <body>
-  <h1>⚙️ ファストパス設定</h1>
-
-  <h3>🎫 特別発券</h3>
-  <input type="text" id="manualId" placeholder="例: FP999" />
-  <input type="text" id="manualName" placeholder="名前" />
-  <input type="number" id="manualCount" placeholder="人数" min="1" />
-  <input type="text" id="manualTime" placeholder="案内時間 (例: 13:00)" />
-  <button onclick="issueSpecial()">特別発券</button>
-
-  <hr>
-
-  <h3>🗑️ 全削除</h3>
-  <button onclick="resetAll()">全削除</button>
-
-  <div id="result"></div>
+  <h2>案内時間帯設定（最大3枠）</h2>
+  <div id="timeInputs"></div>
+  <button onclick="save()">保存</button>
 
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system"
+      projectId: "fastpass-system",
+      storageBucket: "fastpass-system.firebasestorage.app",
+      messagingSenderId: "858745521872",
+      appId: "1:858745521872:web:29289b673855097e1200d5",
+      measurementId: "G-SLPKMCNY53"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    async function issueSpecial() {
-      const id = document.getElementById("manualId").value.trim();
-      const name = document.getElementById("manualName").value.trim();
-      const count = parseInt(document.getElementById("manualCount").value);
-      const time = document.getElementById("manualTime").value.trim();
+    const timeInputs = document.getElementById("timeInputs");
 
-      if (!/^FP\d{3}$/.test(id) || !name || isNaN(count) || !time) {
-        alert("正しく入力してください");
-        return;
+    for (let i = 0; i < 3; i++) {
+      timeInputs.innerHTML += `
+        <div>
+          <label>開始:</label>
+          <input type="time" id="start${i}">
+          <label>終了:</label>
+          <input type="time" id="end${i}">
+        </div>
+      `;
+    }
+
+    async function save() {
+      const ranges = [];
+      for (let i = 0; i < 3; i++) {
+        const start = document.getElementById(`start${i}`).value;
+        const end = document.getElementById(`end${i}`).value;
+        if (start && end) {
+          ranges.push({ start, end });
+        }
       }
-
-      await db.collection("fastpasses").doc(id).set({
-        name, count, estimateTime: time, status: "未使用", createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      document.getElementById("result").innerText = `${id} を特別発券しました`;
+      await db.collection("settings").doc("timeRanges").set({ ranges });
+      alert("保存しました！");
     }
 
-    async function resetAll() {
-      if (!confirm("全て削除しますか？")) return;
-      const snapshot = await db.collection("fastpasses").get();
-      const batch = db.batch();
-      snapshot.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
-      document.getElementById("result").innerText = "✅ 全て削除しました";
-    }
+    (async () => {
+      const doc = await db.collection("settings").doc("timeRanges").get();
+      if (doc.exists) {
+        const ranges = doc.data().ranges;
+        ranges.forEach((r, i) => {
+          document.getElementById(`start${i}`).value = r.start;
+          document.getElementById(`end${i}`).value = r.end;
+        });
+      }
+    })();
   </script>
 </body>
 </html>
