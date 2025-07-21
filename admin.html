@@ -73,19 +73,40 @@
     const listEl = document.getElementById("pass-list");
     const currentCallEl = document.getElementById("current-number");
 
-    function renderRow(id, data) {
+    let baseTime = null;
+    let intervalMinutes = 10;
+
+    async function loadSettings() {
+      const doc = await db.collection("settings").doc("timeConfig").get();
+      if (doc.exists) {
+        const data = doc.data();
+        baseTime = data.baseTime.toDate();
+        intervalMinutes = data.interval || 10;
+      }
+    }
+
+    function formatRange(startTime, interval) {
+      const start = new Date(startTime);
+      const end = new Date(startTime);
+      end.setMinutes(start.getMinutes() + interval);
+      return `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')} ～ ${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`;
+    }
+
+    function renderRow(id, data, index) {
       const tr = document.createElement("tr");
 
-      const time = data.estimatedTime?.toDate()?.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
-      }) || "-";
+      let timeDisplay = "-";
+      if (baseTime) {
+        const slotTime = new Date(baseTime.getTime());
+        slotTime.setMinutes(slotTime.getMinutes() + index * intervalMinutes);
+        timeDisplay = formatRange(slotTime, intervalMinutes);
+      }
 
       tr.innerHTML = `
         <td>${id}</td>
         <td>${data.name}</td>
         <td>${data.count}</td>
-        <td>${time}</td>
+        <td>${timeDisplay}</td>
         <td>${data.status}</td>
         <td>
           <button onclick="setCurrent('${id}')">呼出</button>
@@ -105,13 +126,17 @@
       await db.collection("settings").doc("current").set({ currentId: id });
     }
 
-    function listenPasses() {
+    async function listenPasses() {
+      await loadSettings();
+
       db.collection("fastpasses")
-        .orderBy("createdAt", "desc")
+        .orderBy("createdAt", "asc")
         .onSnapshot(snapshot => {
           listEl.innerHTML = "";
+          let index = 0;
           snapshot.forEach(doc => {
-            listEl.appendChild(renderRow(doc.id, doc.data()));
+            listEl.appendChild(renderRow(doc.id, doc.data(), index));
+            index++;
           });
         });
     }
