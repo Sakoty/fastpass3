@@ -1,109 +1,292 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ファストパス設定</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>発券設定ページ</title>
   <style>
-    body {
-      font-family: sans-serif;
-      background: #f0f8ff;
-      padding: 2em;
-    }
-    label {
-      display: block;
-      margin: 1em 0 0.2em;
-    }
-    input {
-      padding: 0.5em;
-      width: 100%;
-      max-width: 200px;
-      margin-bottom: 1em;
-    }
-    button {
-      padding: 0.7em 1.2em;
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 10px; }
+    input[type="time"], input[type="text"], input[type="number"] {
+      width: 150px;
+      margin-right: 10px;
+      padding: 5px;
       font-size: 1em;
-      margin-top: 1em;
     }
+    .range { display: flex; align-items: center; margin-bottom: 10px; }
+    button { margin-top: 20px; padding: 10px; font-size: 1.1em; cursor: pointer; }
+    .status { margin-top: 10px; font-weight: bold; }
+    #message { margin-top: 10px; font-weight: bold; color: green; }
+    #error { margin-top: 10px; font-weight: bold; color: red; }
+    fieldset { margin-top: 30px; padding: 15px; border: 2px solid #ccc; border-radius: 8px; }
+    legend { font-weight: bold; font-size: 1.2em; }
+    #specialIssueMessage { margin-top: 10px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>⚙️ ファストパス設定</h1>
+  <h1>発券設定</h1>
 
-  <label for="startHour">案内開始時刻（時）:</label>
-  <input type="number" id="startHour" min="0" max="23">
+  <div>
+    <h2>案内可能な時間帯（最大3枠）</h2>
+    <div id="ranges">
+      <div class="range">
+        <label>枠1: <input type="time" id="start1" /> ～ <input type="time" id="end1" /></label>
+      </div>
+      <div class="range">
+        <label>枠2: <input type="time" id="start2" /> ～ <input type="time" id="end2" /></label>
+      </div>
+      <div class="range">
+        <label>枠3: <input type="time" id="start3" /> ～ <input type="time" id="end3" /></label>
+      </div>
+    </div>
+  </div>
 
-  <label for="startMinute">案内開始時刻（分）:</label>
-  <input type="number" id="startMinute" min="0" max="59">
+  <div>
+    <h2>発券をコントロール</h2>
+    <button id="startIssueBtn">発券を開始</button>
+    <button id="stopIssueBtn">発券を停止</button>
+    <div class="status" id="currentStatus">状態を取得中...</div>
+  </div>
 
-  <label for="intervalMin">案内間隔（分）:</label>
-  <input type="number" id="intervalMin" min="1" max="60">
+  <button id="saveBtn">設定を保存する</button>
 
-  <hr>
+  <div id="message"></div>
+  <div id="error"></div>
 
-  <label for="specialHour">特別発券：案内時刻（時）:</label>
-  <input type="number" id="specialHour" min="0" max="23">
+  <fieldset>
+    <legend>特別発券（名前・人数・案内時間を指定して発券）</legend>
+    <form id="specialIssueForm">
+      <input type="text" id="specialName" placeholder="名前" required />
+      <input type="number" id="specialCount" placeholder="人数" min="1" required />
+      <input type="time" id="specialStartTime" placeholder="案内開始時間" required />
+      <input type="time" id="specialEndTime" placeholder="案内終了時間" required />
+      <button type="submit">特別発券する</button>
+    </form>
+    <div id="specialIssueMessage"></div>
+  </fieldset>
 
-  <label for="specialMinute">特別発券：案内時刻（分）:</label>
-  <input type="number" id="specialMinute" min="0" max="59">
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collection, doc, getDoc, setDoc, onSnapshot, getDocs, addDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  <button onclick="saveSetting()">保存する</button>
-
-  <p id="status"></p>
-
-  <script>
+    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
+      storageBucket: "fastpass-system.firebasestorage.app",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
 
-    async function loadSetting() {
-      const doc = await db.collection("setting").doc("config").get();
-      if (doc.exists) {
-        const data = doc.data();
-        document.getElementById("startHour").value = data.startHour ?? '';
-        document.getElementById("startMinute").value = data.startMinute ?? '';
-        document.getElementById("intervalMin").value = data.intervalMin ?? '';
-        document.getElementById("specialHour").value = data.specialHour ?? '';
-        document.getElementById("specialMinute").value = data.specialMinute ?? '';
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const configRef = doc(db, "settings", "config");
+    const ticketsRef = collection(db, "tickets");
+
+    const messageDiv = document.getElementById("message");
+    const errorDiv = document.getElementById("error");
+    const currentStatusDiv = document.getElementById("currentStatus");
+    const startIssueBtn = document.getElementById("startIssueBtn");
+    const stopIssueBtn = document.getElementById("stopIssueBtn");
+    const saveBtn = document.getElementById("saveBtn");
+
+    // 特別発券フォーム要素
+    const specialIssueForm = document.getElementById("specialIssueForm");
+    const specialIssueMessage = document.getElementById("specialIssueMessage");
+
+    // 設定の読み込みとUI反映
+    async function loadConfig() {
+      try {
+        const snap = await getDoc(configRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          const ranges = data.timeRanges || [];
+          for (let i = 0; i < 3; i++) {
+            const startInput = document.getElementById(`start${i + 1}`);
+            const endInput = document.getElementById(`end${i + 1}`);
+            if (ranges[i]) {
+              startInput.value = ranges[i].start || "";
+              endInput.value = ranges[i].end || "";
+            } else {
+              startInput.value = "";
+              endInput.value = "";
+            }
+          }
+          updateStatus(data.issueEnabled);
+        } else {
+          // 初期状態セット
+          for (let i = 1; i <= 3; i++) {
+            document.getElementById(`start${i}`).value = "";
+            document.getElementById(`end${i}`).value = "";
+          }
+          updateStatus(false);
+        }
+      } catch (e) {
+        showError("設定の読み込みに失敗しました");
+        console.error(e);
       }
     }
 
-    async function saveSetting() {
-      const startHour = parseInt(document.getElementById("startHour").value);
-      const startMinute = parseInt(document.getElementById("startMinute").value);
-      const intervalMin = parseInt(document.getElementById("intervalMin").value);
-      const specialHour = parseInt(document.getElementById("specialHour").value);
-      const specialMinute = parseInt(document.getElementById("specialMinute").value);
+    // 発券状態表示更新
+    function updateStatus(issueEnabled) {
+      currentStatusDiv.textContent = `現在の状態：${issueEnabled ? "発券中" : "停止中"}`;
+    }
 
-      if (
-        isNaN(startHour) || isNaN(startMinute) || isNaN(intervalMin) ||
-        isNaN(specialHour) || isNaN(specialMinute)
-      ) {
-        document.getElementById("status").textContent = "⚠️ すべての項目を入力してください";
+    // 設定保存
+    async function saveSettings() {
+      clearMessages();
+      try {
+        const timeRanges = [];
+        for (let i = 1; i <= 3; i++) {
+          const start = document.getElementById(`start${i}`).value || "";
+          const end = document.getElementById(`end${i}`).value || "";
+          if (start && end) {
+            timeRanges.push({ start, end });
+          }
+        }
+        const snap = await getDoc(configRef);
+        const currentData = snap.exists() ? snap.data() : {};
+        const issueEnabled = currentData.issueEnabled || false;
+
+        await setDoc(configRef, {
+          timeRanges,
+          issueEnabled
+        }, { merge: true });
+
+        showMessage("設定を保存しました。");
+      } catch (e) {
+        showError("設定の保存に失敗しました");
+        console.error(e);
+      }
+    }
+
+    // 発券開始・停止切り替え
+    async function setIssueStatus(enabled) {
+      clearMessages();
+      try {
+        await setDoc(configRef, { issueEnabled: enabled }, { merge: true });
+        updateStatus(enabled);
+        showMessage(enabled ? "発券を開始しました。" : "発券を停止しました。");
+      } catch (e) {
+        showError("状態の変更に失敗しました");
+        console.error(e);
+      }
+    }
+
+    // メッセージ表示・クリア関数
+    function showMessage(msg) {
+      messageDiv.textContent = msg;
+      errorDiv.textContent = "";
+    }
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      messageDiv.textContent = "";
+    }
+    function clearMessages() {
+      messageDiv.textContent = "";
+      errorDiv.textContent = "";
+    }
+
+    // Firestoreのリアルタイム監視でUI自動更新
+    onSnapshot(configRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+      const data = docSnap.data();
+      // 時間帯更新
+      const ranges = data.timeRanges || [];
+      for (let i = 0; i < 3; i++) {
+        const startInput = document.getElementById(`start${i + 1}`);
+        const endInput = document.getElementById(`end${i + 1}`);
+        if (ranges[i]) {
+          startInput.value = ranges[i].start || "";
+          endInput.value = ranges[i].end || "";
+        } else {
+          startInput.value = "";
+          endInput.value = "";
+        }
+      }
+      updateStatus(data.issueEnabled);
+    });
+
+    // 特別発券フォーム送信処理
+    specialIssueForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      specialIssueMessage.textContent = "";
+      clearMessages();
+
+      const name = document.getElementById("specialName").value.trim();
+      const count = Number(document.getElementById("specialCount").value);
+      const startTime = document.getElementById("specialStartTime").value;
+      const endTime = document.getElementById("specialEndTime").value;
+
+      if (!name || !count || !startTime || !endTime) {
+        specialIssueMessage.style.color = "red";
+        specialIssueMessage.textContent = "すべての項目を正しく入力してください。";
         return;
       }
 
-      await db.collection("setting").doc("config").set({
-        startHour,
-        startMinute,
-        intervalMin,
-        specialHour,
-        specialMinute
-      });
+      try {
+        // 発券可能か時間帯をチェック（設定から取得）
+        const configSnap = await getDoc(configRef);
+        if (!configSnap.exists()) {
+          specialIssueMessage.style.color = "red";
+          specialIssueMessage.textContent = "設定情報がありません。";
+          return;
+        }
+        const configData = configSnap.data();
+        const allowedRanges = configData.timeRanges || [];
 
-      document.getElementById("status").textContent = "✅ 保存しました";
-    }
+        // 特別発券の案内時間が許可された時間帯内にあるかチェック
+        const isWithinAllowed = allowedRanges.some(range => {
+          return startTime >= range.start && endTime <= range.end;
+        });
+        if (!isWithinAllowed) {
+          specialIssueMessage.style.color = "red";
+          specialIssueMessage.textContent = "案内時間が許可された時間帯外です。";
+          return;
+        }
 
-    loadSetting();
+        // 発券済み枚数をカウント
+        const ticketsSnapshot = await getDocs(ticketsRef);
+        const countIssued = ticketsSnapshot.size;
+        const newId = "FP" + String(countIssued + 1).padStart(3, "0");
+
+        const startTimeStr = `${startTime}〜${endTime}の間にお越しください`;
+
+        const newTicket = {
+          id: newId,
+          name,
+          count,
+          status: "valid",
+          createdAt: new Date(),
+          startTime: startTimeStr,
+          validMinutes: null,
+          special: true
+        };
+
+        await addDoc(ticketsRef, newTicket);
+
+        specialIssueMessage.style.color = "green";
+        specialIssueMessage.textContent = `特別発券：整理番号 ${newId} を発行しました。案内時間 ${startTimeStr}`;
+        specialIssueForm.reset();
+
+      } catch (error) {
+        specialIssueMessage.style.color = "red";
+        specialIssueMessage.textContent = "発券に失敗しました：" + error.message;
+        console.error(error);
+      }
+    });
+
+    // イベントリスナー
+    saveBtn.addEventListener("click", saveSettings);
+    startIssueBtn.addEventListener("click", () => setIssueStatus(true));
+    stopIssueBtn.addEventListener("click", () => setIssueStatus(false));
+
+    // 初期ロード
+    loadConfig();
   </script>
 </body>
 </html>
