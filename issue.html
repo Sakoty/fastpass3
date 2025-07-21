@@ -1,37 +1,69 @@
-<!-- QRコード表示位置を含めたファストパス発券ページ -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ファストパス発券</title>
+  <title>🎟️ ファストパス発券所</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
     body {
-      font-family: sans-serif;
-      background: #f8faff;
-      padding: 1em;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom, #d0e7ff, #ffffff);
+      margin: 0;
+      padding: 2em 1em;
       text-align: center;
     }
+    h1 {
+      font-size: 2em;
+      color: #005baa;
+      margin-bottom: 0.5em;
+    }
+    .card {
+      background: #fff;
+      padding: 1.5em;
+      border-radius: 15px;
+      max-width: 400px;
+      margin: auto;
+      box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    }
     input, button {
-      padding: 0.5em;
-      margin: 0.5em;
+      width: 100%;
+      padding: 0.75em;
+      margin-top: 1em;
       font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    button {
+      background: #0077cc;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005faa;
     }
     #qrcode {
-      margin-top: 20px;
+      margin-top: 1.5em;
+    }
+    #message {
+      margin-top: 1em;
+      font-weight: bold;
+      color: #007700;
     }
   </style>
 </head>
 <body>
-  <h1>🎟️ ファストパス発券</h1>
-  <input type="text" id="name" placeholder="名前" />
-  <input type="number" id="people" placeholder="人数" min="1" />
-  <button onclick="issueFastPass()">発券</button>
-  <div id="message"></div>
-  <div id="qrcode"></div>
+  <h1>🎠 ファストパス発券所</h1>
+  <div class="card">
+    <input type="text" id="name" placeholder="お名前（代表者）" />
+    <input type="number" id="people" placeholder="人数" min="1" />
+    <button onclick="issueFastPass()">ファストパスを発券</button>
+    <div id="message"></div>
+    <div id="qrcode"></div>
+  </div>
 
   <script>
     const firebaseConfig = {
@@ -69,10 +101,10 @@
         timestamp,
       });
 
-      document.getElementById("message").innerText = `発券しました：${id}`;
+      document.getElementById("message").innerText = `🎫 発券しました：${id}`;
       document.getElementById("qrcode").innerHTML = "";
 
-      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
+      QRCode.toCanvas(document.createElement("canvas"), id, { width: 180 }, (err, canvas) => {
         if (!err) {
           document.getElementById("qrcode").appendChild(canvas);
         }
