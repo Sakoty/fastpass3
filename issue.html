@@ -2,40 +2,26 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ファストパス発券</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
   <style>
-    body {
-      font-family: "Arial", sans-serif;
-      text-align: center;
-      background: #e0f7fa;
-      padding: 2em;
-    }
-    h1 {
-      font-size: 1.8em;
-      margin-bottom: 1em;
-    }
-    input, button {
-      padding: 0.5em;
-      font-size: 1em;
-      margin: 0.5em;
-    }
-    #qrcode {
-      margin: 1em auto;
-    }
+    body { font-family: sans-serif; background: #f5fbff; padding: 2em; text-align: center; }
+    input, button { font-size: 1.1em; padding: 8px; margin: 10px; width: 80%; max-width: 300px; }
+    #qrcode { margin-top: 20px; }
+    #info { margin-top: 20px; font-size: 1.2em; }
   </style>
 </head>
 <body>
-  <h1>🎫 ファストパス発券ページ</h1>
-  <input type="text" id="name" placeholder="名前を入力" required><br>
-  <input type="number" id="count" placeholder="人数を入力" required min="1"><br>
-  <button onclick="issueFastpass()">発券する</button>
+  <h1>🎟️ ファストパス発券</h1>
+  <input type="text" id="name" placeholder="名前を入力" required />
+  <input type="number" id="people" placeholder="人数を入力" min="1" value="1" required />
+  <button id="issueBtn">発券する</button>
 
-  <div id="result" style="margin-top:1em;"></div>
-  <canvas id="qrcode"></canvas>
+  <div id="info"></div>
+  <div id="qrcode"></div>
 
   <script>
     const firebaseConfig = {
@@ -49,66 +35,71 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    async function getNextId() {
-      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
-      if (snapshot.empty) return "FP001";
-      const lastId = snapshot.docs[0].id;
-      const num = parseInt(lastId.replace("FP", ""), 10) + 1;
-      return "FP" + String(num).padStart(3, "0");
-    }
+    let issuing = false;
 
-    async function getGuideTime(index) {
-      const settingDoc = await db.collection("setting").doc("config").get();
-      if (!settingDoc.exists) return "未設定";
+    document.getElementById("issueBtn").addEventListener("click", async () => {
+      if (issuing) return;
+      issuing = true;
 
-      const { startHour, startMinute, intervalMin } = settingDoc.data();
-      const baseTime = new Date();
-      baseTime.setHours(startHour, startMinute, 0, 0);
-      baseTime.setMinutes(baseTime.getMinutes() + index * intervalMin);
-
-      const start = new Date(baseTime);
-      const end = new Date(baseTime);
-      end.setMinutes(end.getMinutes() + intervalMin);
-
-      const fmt = t => `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
-      return `${fmt(start)}〜${fmt(end)}`;
-    }
-
-    async function issueFastpass() {
       const name = document.getElementById("name").value.trim();
-      const count = parseInt(document.getElementById("count").value.trim(), 10);
-
-      if (!name || isNaN(count) || count <= 0) {
+      const people = parseInt(document.getElementById("people").value);
+      if (!name || !people || people < 1) {
         alert("名前と人数を正しく入力してください");
+        issuing = false;
         return;
       }
 
-      const id = await getNextId();
-      const snapshot = await db.collection("fastpasses").get();
-      const index = snapshot.size;  // 現在の件数がインデックス
-      const guideTime = await getGuideTime(index);
+      const settings = await db.collection("settings").doc("config").get();
+      const capacityPerSlot = settings.exists ? settings.data().peoplePerSlot || 5 : 5;
+      const openTime = 10 * 60; // 10:00 in minutes
+      const slotDuration = 10; // 10 minutes
 
-      await db.collection("fastpasses").doc(id).set({
+      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
+      let nextId = 1;
+      if (!snapshot.empty) {
+        const lastId = snapshot.docs[0].id;
+        const lastNum = parseInt(lastId.replace("FP", ""), 10);
+        nextId = lastNum + 1;
+      }
+      const fastpassId = `FP${String(nextId).padStart(3, "0")}`;
+
+      const totalBefore = (await db.collection("fastpasses").get()).size;
+      const slotIndex = Math.floor(totalBefore / capacityPerSlot);
+      const startMinute = openTime + slotIndex * slotDuration;
+      const endMinute = startMinute + slotDuration;
+
+      const formatTime = (m) => {
+        const h = Math.floor(m / 60);
+        const mm = String(m % 60).padStart(2, "0");
+        return `${h}:${mm}`;
+      };
+
+      const slotText = `${formatTime(startMinute)}〜${formatTime(endMinute)}`;
+
+      const docData = {
+        id: fastpassId,
         name,
-        count,
+        people,
         status: "有効",
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        guideTime
-      });
+        slot: slotText,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
 
-      document.getElementById("result").innerHTML = `
-        <h2>🎉 発券完了！</h2>
-        <p>番号：<strong>${id}</strong></p>
-        <p>案内時間：<strong>${guideTime}</strong></p>
+      await db.collection("fastpasses").doc(fastpassId).set(docData);
+
+      document.getElementById("info").innerHTML = `
+        <strong>ファストパスID:</strong> ${fastpassId}<br/>
+        <strong>案内時刻:</strong> ${slotText}
       `;
 
-      QRCode.toCanvas(document.getElementById("qrcode"), id, { width: 200 }, function (error) {
-        if (error) console.error(error);
+      const qr = document.getElementById("qrcode");
+      qr.innerHTML = "";
+      QRCode.toCanvas(fastpassId, { width: 200 }, (err, canvas) => {
+        if (!err) qr.appendChild(canvas);
       });
 
-      document.getElementById("name").value = "";
-      document.getElementById("count").value = "";
-    }
+      issuing = false;
+    });
   </script>
 </body>
 </html>
