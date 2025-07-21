@@ -1,59 +1,50 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ファストパス読み取り</title>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #e8f5e9;
+      margin: 0; padding: 20px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+      color: #2e7d32;
       text-align: center;
-      padding: 2rem;
-      background-color: #f1f8e9;
     }
-
     h1 {
-      color: #33691e;
+      margin-bottom: 20px;
     }
-
     #reader {
-      width: 300px;
-      margin: auto;
+      margin: 0 auto;
+      width: 320px;
+      max-width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
-
-    #result {
-      margin-top: 1rem;
-      font-size: 1.2rem;
-      color: #33691e;
+    #status {
+      margin-top: 20px;
       font-weight: bold;
-    }
-
-    #error {
-      color: red;
-      margin-top: 1rem;
-    }
-
-    .used {
-      color: red;
-      font-weight: bold;
-    }
-
-    .success {
-      color: green;
-      font-weight: bold;
+      min-height: 1.5em;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパスQR読み取り</h1>
-  <div id="reader"></div>
-  <div id="result"></div>
-  <div id="error"></div>
+  <h1>ファストパス読み取り</h1>
+  <div id="reader">カメラの初期化中...</div>
+  <div id="status">QRコードをカメラにかざしてください。</div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collection, doc, getDoc, updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { Html5Qrcode } from "https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -64,73 +55,75 @@
       measurementId: "G-SLPKMCNY53"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-    const resultEl = document.getElementById("result");
-    const errorEl = document.getElementById("error");
+    const fastpassesRef = collection(db, "fastpasses");
 
-    function showResult(msg, success = false) {
-      resultEl.innerHTML = msg;
-      resultEl.className = success ? "success" : "used";
-    }
+    const readerElem = document.getElementById("reader");
+    const statusElem = document.getElementById("status");
 
-    function showError(msg) {
-      errorEl.textContent = msg;
-    }
+    function onScanSuccess(decodedText) {
+      statusElem.textContent = `読み取り成功：${decodedText}`;
 
-    async function handleScan(decodedText) {
-      showError(""); // clear error
-      try {
-        const docRef = db.collection("fastpasses").doc(decodedText);
-        const doc = await docRef.get();
-
-        if (!doc.exists) {
-          showResult("該当のファストパスが見つかりません。", false);
+      const docRef = doc(db, "fastpasses", decodedText);
+      getDoc(docRef).then((docSnap) => {
+        if (!docSnap.exists()) {
+          statusElem.textContent = "該当するファストパスがありません。";
           return;
         }
-
-        const data = doc.data();
-
-        if (data.used) {
-          showResult(`このファストパス（${decodedText}）はすでに使用済みです。`, false);
+        if (docSnap.data().used) {
+          statusElem.textContent = "このファストパスはすでに使用済みです。";
           return;
         }
+        updateDoc(docRef, { used: true })
+          .then(() => {
+            statusElem.textContent = `整理番号 ${docSnap.data().id} を使用済みにしました。`;
+          })
+          .catch(() => {
+            statusElem.textContent = "使用済み登録に失敗しました。";
+          });
+      }).catch(() => {
+        statusElem.textContent = "読み込みエラーが発生しました。";
+      });
+    }
 
-        await docRef.update({ used: true });
-        showResult(`使用確認完了：${decodedText}（${data.name}様 ${data.count}名）`, true);
-      } catch (err) {
-        console.error(err);
-        showError("読み取り処理中にエラーが発生しました。");
-      }
+    function onScanFailure(error) {
+      // 読み取り失敗時の無視しても良いログ
+      // console.warn(`QR読み取り失敗: ${error}`);
     }
 
     const html5QrCode = new Html5Qrcode("reader");
-    const qrConfig = { fps: 10, qrbox: 250 };
 
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length) {
-        html5QrCode.start(
-          { facingMode: "environment" },
-          qrConfig,
-          decodedText => {
-            html5QrCode.stop(); // 読み取り後に停止
-            handleScan(decodedText);
-            setTimeout(() => {
-              html5QrCode.start({ facingMode: "environment" }, qrConfig, decodedText => {
-                html5QrCode.stop();
-                handleScan(decodedText);
-              });
-            }, 3000); // 3秒後に再開
-          },
-          errorMessage => {
-            // エラーは無視（認識失敗など）
-          }
-        );
+    // iPhone Safari対策で環境を検査し権限取得を実施
+    async function startScanner() {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length) {
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            {
+              fps: 10,
+              qrbox: 250,
+              aspectRatio: 1.0
+            },
+            onScanSuccess,
+            onScanFailure
+          );
+          statusElem.textContent = "カメラ起動中。QRコードを読み取ってください。";
+        } else {
+          statusElem.textContent = "カメラデバイスが見つかりません。";
+        }
+      } catch (e) {
+        statusElem.textContent = "カメラの起動に失敗しました。";
+        console.error(e);
       }
-    }).catch(err => {
-      showError("カメラの初期化に失敗しました。: " + err);
+    }
+
+    window.addEventListener("load", () => {
+      startScanner();
     });
   </script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
 </body>
 </html>
