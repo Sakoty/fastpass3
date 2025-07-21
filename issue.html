@@ -1,114 +1,95 @@
+<!-- issue.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🎟️ ファストパス発券所</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ファストパス発券</title>
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(to bottom, #d0e7ff, #ffffff);
-      margin: 0;
-      padding: 2em 1em;
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(to right, #83a4d4, #b6fbff);
+      padding: 2em;
       text-align: center;
     }
-    h1 {
-      font-size: 2em;
-      color: #005baa;
-      margin-bottom: 0.5em;
-    }
-    .card {
+    .container {
       background: #fff;
-      padding: 1.5em;
+      padding: 2em;
       border-radius: 15px;
+      box-shadow: 0 0 10px #aaa;
       max-width: 400px;
       margin: auto;
-      box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
     }
     input, button {
-      width: 100%;
-      padding: 0.75em;
-      margin-top: 1em;
+      margin: 10px 0;
+      padding: 0.6em;
       font-size: 1em;
-      border: 1px solid #ccc;
+      width: 100%;
       border-radius: 8px;
+      border: 1px solid #ccc;
     }
-    button {
-      background: #0077cc;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #005faa;
-    }
-    #qrcode {
-      margin-top: 1.5em;
-    }
-    #message {
-      margin-top: 1em;
+    #fastpass-info {
+      margin-top: 20px;
       font-weight: bold;
-      color: #007700;
     }
   </style>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
-  <h1>🎠 ファストパス発券所</h1>
-  <div class="card">
-    <input type="text" id="name" placeholder="お名前（代表者）" />
-    <input type="number" id="people" placeholder="人数" min="1" />
-    <button onclick="issueFastPass()">ファストパスを発券</button>
-    <div id="message"></div>
-    <div id="qrcode"></div>
+  <div class="container">
+    <h1>🎟️ ファストパス発券</h1>
+    <input type="text" id="name" placeholder="名前を入力">
+    <input type="number" id="count" placeholder="人数を入力" min="1" value="1">
+    <button onclick="issueFastpass()">発券する</button>
+    <div id="fastpass-info"></div>
   </div>
 
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system",
+      projectId: "fastpass-system"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    async function issueFastPass() {
-      const name = document.getElementById("name").value;
-      const people = Number(document.getElementById("people").value);
-      if (!name || !people) {
-        alert("名前と人数を入力してください。");
+    async function issueFastpass() {
+      const name = document.getElementById("name").value.trim();
+      const count = parseInt(document.getElementById("count").value);
+
+      if (!name || isNaN(count) || count < 1) {
+        alert("名前と人数を正しく入力してください");
         return;
       }
 
-      const snapshot = await db.collection("fastpasses").orderBy("timestamp", "desc").limit(1).get();
+      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
       let lastNumber = 0;
       if (!snapshot.empty) {
         const lastId = snapshot.docs[0].id;
-        const match = lastId.match(/FP(\d+)/);
-        if (match) lastNumber = parseInt(match[1]);
+        const num = parseInt(lastId.replace("FP", ""));
+        if (!isNaN(num)) lastNumber = num;
       }
 
       const newNumber = lastNumber + 1;
-      const id = `FP${String(newNumber).padStart(3, "0")}`;
-      const timestamp = new Date();
+      const newId = "FP" + String(newNumber).padStart(3, "0");
 
-      await db.collection("fastpasses").doc(id).set({
+      const now = new Date();
+      const estimateTime = new Date(now.getTime() + newNumber * 2 * 60 * 1000); // 2分ごとにずらす
+      const timeStr = `${estimateTime.getHours().toString().padStart(2, '0')}:${estimateTime.getMinutes().toString().padStart(2, '0')}`;
+
+      await db.collection("fastpasses").doc(newId).set({
         name,
-        people,
+        count,
         status: "未使用",
-        timestamp,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        estimateTime: timeStr
       });
 
-      document.getElementById("message").innerText = `🎫 発券しました：${id}`;
-      document.getElementById("qrcode").innerHTML = "";
-
-      QRCode.toCanvas(document.createElement("canvas"), id, { width: 180 }, (err, canvas) => {
-        if (!err) {
-          document.getElementById("qrcode").appendChild(canvas);
-        }
-      });
+      document.getElementById("fastpass-info").innerHTML = `
+        🎫 あなたのファストパス番号：<br><strong>${newId}</strong><br>
+        ⏰ 案内予定時間：${timeStr}
+      `;
     }
   </script>
 </body>
