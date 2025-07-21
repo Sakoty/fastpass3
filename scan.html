@@ -14,10 +14,17 @@
       text-align: center;
       padding: 1em;
     }
+    h1 {
+      font-size: 1.6em;
+      margin-bottom: 0.5em;
+    }
     #reader {
       width: 100%;
       max-width: 400px;
       margin: 0 auto;
+      border: 2px solid #4682B4;
+      border-radius: 12px;
+      overflow: hidden;
     }
     #result {
       margin-top: 1em;
@@ -28,7 +35,7 @@
 <body>
   <h1>📷 ファストパススキャン</h1>
   <div id="reader"></div>
-  <div id="result">QRコードをスキャンしてください</div>
+  <div id="result">QRコードをカメラにかざしてください</div>
 
   <script>
     // Firebase 初期化
@@ -43,11 +50,10 @@
     const resultDiv = document.getElementById('result');
 
     function onScanSuccess(decodedText, decodedResult) {
-      // QRコード内容がFP001などのIDであると仮定
       const passId = decodedText.trim();
-      resultDiv.innerText = `読み取り成功: ${passId}`;
+      resultDiv.innerText = `✅ 読み取り成功: ${passId}`;
 
-      // Firestore のドキュメントを「使用済み」に変更
+      // Firestore でステータス更新
       db.collection("fastpasses").doc(passId).get()
         .then(doc => {
           if (!doc.exists) {
@@ -62,7 +68,7 @@
           return db.collection("fastpasses").doc(passId).update({
             status: "使用済み"
           }).then(() => {
-            resultDiv.innerText = `✅ 使用済みにしました: ${passId}`;
+            resultDiv.innerText = `🎉 使用済みにしました: ${passId}`;
           });
         })
         .catch((error) => {
@@ -72,33 +78,33 @@
     }
 
     function onScanFailure(error) {
-      // 読み取り失敗時の処理（ログに出す程度でOK）
+      // 読み取り失敗ログ
       console.warn(`読み取り失敗: ${error}`);
     }
 
-    // カメラの起動と QRコード読み取り開始
+    // カメラ起動とスキャン開始
     const html5QrCode = new Html5Qrcode("reader");
 
     Html5Qrcode.getCameras().then(cameras => {
-      if (cameras && cameras.length) {
+      if (cameras && cameras.length > 0) {
         const cameraId = cameras[0].id;
-
         html5QrCode.start(
           cameraId,
           {
             fps: 10,
-            qrbox: { width: 250, height: 250 }
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.333 // カメラ映像を自然なサイズで表示
           },
           onScanSuccess,
           onScanFailure
         ).catch(err => {
-          resultDiv.innerText = `カメラ起動失敗: ${err}`;
+          resultDiv.innerText = `❌ カメラ起動エラー: ${err}`;
         });
       } else {
-        resultDiv.innerText = "❌ カメラが見つかりませんでした";
+        resultDiv.innerText = "📵 カメラが見つかりませんでした";
       }
     }).catch(err => {
-      resultDiv.innerText = `カメラ初期化エラー: ${err}`;
+      resultDiv.innerText = `📵 カメラ初期化エラー: ${err}`;
     });
   </script>
 </body>
