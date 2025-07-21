@@ -1,116 +1,62 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ファストパス読み取り</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ファストパスQRスキャン</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      margin: 0;
-      padding: 1em;
-      background: #f5f5f5;
-    }
-    h1 {
-      color: #0a58ca;
-      margin-bottom: 1em;
-    }
-    #reader {
-      width: 100%;
-      max-width: 400px;
-      height: 300px;
-      margin: 0 auto 1em;
-      background: #000;
-    }
-    #message {
-      font-size: 1.2em;
-      color: #333;
-      margin-top: 1em;
-    }
-    .status-ok {
-      color: green;
-    }
-    .status-error {
-      color: red;
-    }
+    body { font-family: Arial, sans-serif; text-align: center; padding: 2em; background: #f0f8ff; }
+    #reader { width: 300px; margin: auto; }
+    #result { margin-top: 1em; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>ファストパス読み取り</h1>
+  <h1>📷 ファストパススキャン</h1>
   <div id="reader"></div>
-  <div id="message"></div>
+  <div id="result"></div>
 
   <script>
-    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain: "fastpass-system.firebaseapp.com",
-  projectId: "fastpass-system",
-  storageBucket: "fastpass-system.firebasestorage.app",
-  messagingSenderId: "858745521872",
-  appId: "1:858745521872:web:29289b673855097e1200d5",
-  measurementId: "G-SLPKMCNY53"
+      authDomain: "fastpass-system.firebaseapp.com",
+      projectId: "fastpass-system"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const html5QrCode = new Html5Qrcode("reader");
+    const resultEl = document.getElementById("result");
 
-    function showMessage(msg, isError = false) {
-      const messageDiv = document.getElementById("message");
-      messageDiv.textContent = msg;
-      messageDiv.className = isError ? "status-error" : "status-ok";
-    }
-
-    function onScanSuccess(qrMessage) {
-      if (!qrMessage.startsWith("FP")) {
-        showMessage("無効なQRコードです", true);
+    function handleScanSuccess(decodedText) {
+      if (!decodedText.startsWith("FP")) {
+        resultEl.innerText = "❌ 無効なQRコード";
         return;
       }
 
-      const passId = qrMessage;
-      const docRef = db.collection("fastpasses").doc(passId);
-
-      docRef.get().then((doc) => {
+      db.collection("fastpasses").doc(decodedText).get().then((doc) => {
         if (!doc.exists) {
-          showMessage("ファストパスが存在しません", true);
-        } else if (doc.data().status === "使用済み") {
-          showMessage("⚠️ すでに使用済みのファストパスです", true);
-        } else {
-          docRef.update({ status: "使用済み" }).then(() => {
-            showMessage(`✅ ファストパス ${passId} を使用済みにしました`);
-          });
+          resultEl.innerText = "❌ 該当データなし";
+          return;
         }
-      }).catch((error) => {
-        showMessage("エラーが発生しました: " + error, true);
+        if (doc.data().status === "使用済み") {
+          resultEl.innerText = `⚠️ すでに使用済み：${decodedText}`;
+          return;
+        }
+
+        db.collection("fastpasses").doc(decodedText).update({ status: "使用済み" }).then(() => {
+          resultEl.innerText = `✅ 使用済みにしました：${decodedText}`;
+        });
       });
     }
 
-    function onScanFailure(error) {
-      // エラーは黙って無視
-    }
-
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices.length > 0) {
-        html5QrCode.start(
-          { facingMode: "environment" },  // iPhone対応：背面カメラ
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 }
-          },
-          onScanSuccess,
-          onScanFailure
-        );
-      } else {
-        showMessage("カメラが見つかりません", true);
-      }
-    }).catch(err => {
-      showMessage("カメラの初期化に失敗しました: " + err, true);
-    });
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      handleScanSuccess
+    );
   </script>
 </body>
 </html>
