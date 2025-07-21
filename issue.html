@@ -9,32 +9,52 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4fcff;
-      padding: 1em;
+      font-family: sans-serif;
       text-align: center;
+      padding: 20px;
+      background-color: #f0f8ff;
     }
-    input, button {
-      font-size: 1em;
-      padding: 8px;
-      margin: 5px;
+    h1 {
+      margin-bottom: 20px;
+      color: #004080;
+    }
+    input {
+      padding: 10px;
+      margin: 10px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      background-color: #0077cc;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #ccc;
     }
     #qrcode {
       margin-top: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    #info {
+      margin-top: 10px;
+      font-size: 1.1em;
     }
   </style>
 </head>
 <body>
-  <h1>🎫 ファストパス発券</h1>
-  <input id="name" type="text" placeholder="名前" required />
-  <input id="count" type="number" placeholder="人数" min="1" required />
-  <button onclick="issueFastPass()">発券する</button>
+  <h1>🎟️ ファストパス発券</h1>
+  <input type="text" id="name" placeholder="名前を入力" /><br />
+  <input type="number" id="count" placeholder="人数" min="1" value="1" /><br />
+  <button id="issueBtn" onclick="issuePass()">発券する</button>
 
-  <div id="result"></div>
-  <canvas id="qrcode"></canvas>
+  <div id="qrcode"></div>
+  <div id="info"></div>
 
   <script>
-    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -46,49 +66,55 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    async function getNextFastPassId() {
-      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
-      if (!snapshot.empty) {
-        const lastId = snapshot.docs[0].id;
-        const lastNum = parseInt(lastId.replace("FP", ""), 10);
-        const nextNum = String(lastNum + 1).padStart(3, "0");
-        return "FP" + nextNum;
-      } else {
-        return "FP001";
-      }
-    }
+    let issuing = false;
 
-    async function issueFastPass() {
+    async function issuePass() {
+      if (issuing) return;
+      issuing = true;
+      document.getElementById("issueBtn").disabled = true;
+
       const name = document.getElementById("name").value.trim();
-      const count = parseInt(document.getElementById("count").value.trim(), 10);
-      if (!name || isNaN(count) || count < 1) {
-        alert("名前と人数を入力してください");
+      const count = parseInt(document.getElementById("count").value);
+      if (!name || count < 1) {
+        alert("名前と人数を正しく入力してください");
+        issuing = false;
+        document.getElementById("issueBtn").disabled = false;
         return;
       }
 
-      const id = await getNextFastPassId();
-      const now = new Date();
-      const estimatedMinutes = 2 * count; // 例：人数 × 2分待ち
-      const estimatedTime = new Date(now.getTime() + estimatedMinutes * 60000);
+      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "asc").get();
+      const number = snapshot.size + 1;
+      const id = `FP${String(number).padStart(3, "0")}`;
+
+      const settingsDoc = await db.collection("settings").doc("timeConfig").get();
+      let timeDisplay = "-";
+      if (settingsDoc.exists) {
+        const data = settingsDoc.data();
+        const base = data.baseTime.toDate();
+        const interval = data.interval || 10;
+        const start = new Date(base.getTime() + (number - 1) * interval * 60000);
+        const end = new Date(start.getTime() + interval * 60000);
+        timeDisplay = `${start.getHours().toString().padStart(2, "0")}:${start.getMinutes().toString().padStart(2, "0")} ～ ${end.getHours().toString().padStart(2, "0")}:${end.getMinutes().toString().padStart(2, "0")}`;
+      }
 
       await db.collection("fastpasses").doc(id).set({
         name,
         count,
-        status: "有効",
-        issuedAt: firebase.firestore.Timestamp.fromDate(now),
-        estimatedTime: firebase.firestore.Timestamp.fromDate(estimatedTime),
+        status: "未使用",
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-      document.getElementById("result").innerHTML =
-        `<p><strong>${id}</strong> を発券しました！</p>
-         <p>案内予定時刻：${estimatedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>`;
-
-      // QRコード生成
-      const canvas = document.getElementById("qrcode");
-      QRCode.toCanvas(canvas, id, { width: 200 }, function (error) {
-        if (error) console.error(error);
+      const qrContainer = document.getElementById("qrcode");
+      qrContainer.innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
+        if (err) console.error(err);
+        else qrContainer.appendChild(canvas);
       });
+
+      document.getElementById("info").textContent = `あなたのファストパスIDは「${id}」です。案内時刻：${timeDisplay}`;
+
+      issuing = false;
+      document.getElementById("issueBtn").disabled = false;
     }
   </script>
 </body>
