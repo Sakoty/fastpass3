@@ -1,296 +1,125 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
   <title>ファストパス発券</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      background: #e8f5e9;
-      margin: 0; padding: 20px;
-      max-width: 480px;
-      margin-left: auto;
-      margin-right: auto;
-      color: #2e7d32;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-    form {
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    label {
-      display: block;
-      margin-top: 15px;
-      font-weight: bold;
-    }
-    input[type="text"], input[type="number"] {
-      width: 100%;
-      padding: 8px;
-      font-size: 1rem;
-      margin-top: 5px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
-    #ticketInfo {
-      margin-top: 30px;
-      background: #a5d6a7;
-      padding: 15px;
-      border-radius: 10px;
-      text-align: center;
-      color: #1b5e20;
-    }
-    #ticketId {
-      font-size: 1.6rem;
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-    #guideTime {
-      font-size: 1.2rem;
-      margin-bottom: 10px;
-    }
-    #qrCode {
-      margin: 0 auto;
-      width: 200px;
-      height: 200px;
-    }
-    button {
-      margin-top: 25px;
-      background-color: #4caf50;
-      color: white;
-      border: none;
-      padding: 12px;
-      width: 100%;
-      font-size: 1.2rem;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-    button:disabled {
-      background-color: #a5d6a7;
-      cursor: not-allowed;
-    }
-    #message {
-      margin-top: 20px;
-      font-weight: bold;
-      text-align: center;
-      color: #d32f2f;
-    }
-    @media (max-width: 480px) {
-      body {
-        padding: 10px;
-      }
-      #qrCode {
-        width: 150px;
-        height: 150px;
-      }
-    }
+    body { font-family: 'Arial'; text-align: center; margin: 20px; }
+    h1 { font-size: 24px; }
+    input, button { padding: 10px; margin: 10px; font-size: 16px; }
+    #qrcode { margin-top: 20px; }
   </style>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <form id="issueForm">
-    <label for="name">名前</label>
-    <input type="text" id="name" required autocomplete="off" />
-    <label for="count">人数</label>
-    <input type="number" id="count" min="1" value="1" required />
-    <button type="submit" id="issueBtn">発券する</button>
-  </form>
+  <input type="text" id="name" placeholder="名前"><br>
+  <input type="number" id="count" placeholder="人数"><br>
+  <button onclick="issueFastPass()">ファストパスを発券</button>
 
-  <div id="ticketInfo" style="display:none;">
-    <div id="ticketId"></div>
-    <div id="guideTime"></div>
-    <div id="qrCode"></div>
-  </div>
+  <div id="result"></div>
+  <div id="time"></div>
+  <div id="qrcode"></div>
 
-  <div id="message"></div>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, collection, addDoc, getDocs, query, orderBy, doc, getDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
-
-    // Firebase設定
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
+      storageBucket: "fastpass-system.firebasestorage.app",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const settingsRef = doc(db, "settings", "config");
-    const ticketsRef = collection(db, "fastpasses");
+    async function issueFastPass() {
+      const name = document.getElementById('name').value.trim();
+      const count = parseInt(document.getElementById('count').value.trim());
 
-    const issueForm = document.getElementById("issueForm");
-    const messageDiv = document.getElementById("message");
-    const ticketInfoDiv = document.getElementById("ticketInfo");
-    const ticketIdDiv = document.getElementById("ticketId");
-    const guideTimeDiv = document.getElementById("guideTime");
-    const qrCodeDiv = document.getElementById("qrCode");
-    const issueBtn = document.getElementById("issueBtn");
+      if (!name || isNaN(count) || count <= 0) {
+        alert("名前と人数を正しく入力してください。");
+        return;
+      }
 
-    let timeRanges = [];
-    let issueEnabled = false;
-
-    // 設定取得
-    async function loadSettings() {
       try {
-        const snap = await getDoc(settingsRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          timeRanges = data.timeRanges || [];
-          issueEnabled = data.issueEnabled || false;
-          if (!issueEnabled) {
-            issueBtn.disabled = true;
-            messageDiv.textContent = "現在発券は停止中です。";
+        const settingDoc = await db.collection("settings").doc("timeConfig").get();
+        const timeRanges = settingDoc.data()?.timeRanges || [];
+
+        if (timeRanges.length === 0) {
+          alert("案内可能な時間帯が設定されていません。");
+          return;
+        }
+
+        const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
+        let lastNumber = 0;
+        if (!snapshot.empty) {
+          const lastId = snapshot.docs[0].data().id;
+          lastNumber = parseInt(lastId.replace("FP", ""));
+        }
+
+        const newId = "FP" + String(lastNumber + 1).padStart(3, '0');
+
+        const now = new Date();
+        const today = now.toISOString().split("T")[0];
+
+        let nextTime = null;
+        for (const range of timeRanges) {
+          const [start, end] = range.split("-");
+          const [sh, sm] = start.split(":").map(Number);
+          const [eh, em] = end.split(":").map(Number);
+
+          const startTime = new Date(`${today}T${start}:00`);
+          const endTime = new Date(`${today}T${end}:00`);
+
+          let currentTime = new Date(startTime);
+          while (currentTime < endTime) {
+            const exists = await db.collection("fastpasses")
+              .where("time", "==", currentTime.toTimeString().slice(0,5))
+              .get();
+            if (exists.size < 10) {
+              nextTime = currentTime.toTimeString().slice(0,5);
+              break;
+            }
+            currentTime.setMinutes(currentTime.getMinutes() + 10);
           }
+
+          if (nextTime) break;
         }
-      } catch (e) {
-        console.error(e);
-        messageDiv.textContent = "設定の取得に失敗しました。";
-      }
-    }
 
-    // 現在時刻が案内可能時間内か判定（複数枠対応）
-    function isWithinGuideTime() {
-      if (timeRanges.length === 0) return false;
-      const now = new Date();
-      const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-      for (const range of timeRanges) {
-        const [startH, startM] = range.start.split(":").map(Number);
-        const [endH, endM] = range.end.split(":").map(Number);
-        const startTotal = startH * 60 + startM;
-        const endTotal = endH * 60 + endM;
-        if (nowMinutes >= startTotal && nowMinutes <= endTotal) {
-          return true;
+        if (!nextTime) {
+          alert("本日の案内可能時間が満席です。");
+          return;
         }
-      }
-      return false;
-    }
 
-    // 案内時間をずらす計算 (10分刻みで、発券数でずらす)
-    async function calculateGuideTime() {
-      // まず現在の発券枚数を取得
-      const q = query(ticketsRef, orderBy("createdAt"));
-      const snapshot = await getDocs(q);
-      const countIssued = snapshot.size;
-
-      // ずらし時間(分)
-      const offsetMinutes = countIssued * 10;
-
-      // 基本案内開始時間は一番最初の設定枠の開始時間
-      if (timeRanges.length === 0) return "設定されていません";
-
-      // 先頭の枠
-      const baseStart = timeRanges[0].start;
-      const baseEnd = timeRanges[0].end;
-
-      let [startH, startM] = baseStart.split(":").map(Number);
-      let [endH, endM] = baseEnd.split(":").map(Number);
-
-      let startDate = new Date();
-      startDate.setHours(startH, startM + offsetMinutes, 0, 0);
-
-      let endDate = new Date();
-      endDate.setHours(endH, endM, 0, 0);
-
-      // ずらし時間でstartがendを超えたら調整
-      if (startDate > endDate) {
-        startDate = new Date(endDate);
-      }
-
-      // 表示用整形
-      const pad = (n) => n.toString().padStart(2, "0");
-      return `${pad(startDate.getHours())}:${pad(startDate.getMinutes())} ～ ${baseEnd}`;
-    }
-
-    issueForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      messageDiv.textContent = "";
-      ticketInfoDiv.style.display = "none";
-      qrCodeDiv.innerHTML = "";
-
-      if (!issueEnabled) {
-        messageDiv.textContent = "現在発券は停止中です。";
-        return;
-      }
-      if (!isWithinGuideTime()) {
-        messageDiv.textContent = "現在の時間帯は案内時間外です。";
-        return;
-      }
-
-      const name = document.getElementById("name").value.trim();
-      const count = Number(document.getElementById("count").value);
-
-      if (!name || !count || count < 1) {
-        messageDiv.textContent = "名前と人数を正しく入力してください。";
-        return;
-      }
-
-      try {
-        // 発券済み枚数取得してID生成
-        const snapshot = await getDocs(ticketsRef);
-        const countIssued = snapshot.size;
-        const newId = "FP" + String(countIssued + 1).padStart(3, "0");
-
-        // 案内時間取得
-        const guideTime = await calculateGuideTime();
-
-        const newTicket = {
+        await db.collection("fastpasses").doc(newId).set({
           id: newId,
-          name,
-          count,
-          status: "valid",
-          createdAt: new Date(),
-          startTime: guideTime,
+          name: name,
+          count: count,
           used: false,
-          special: false
-        };
-
-        // Firestore登録
-        await addDoc(ticketsRef, newTicket);
-
-        // 表示更新
-        ticketInfoDiv.style.display = "block";
-        ticketIdDiv.textContent = `整理番号: ${newId}`;
-        guideTimeDiv.textContent = `案内時間: ${guideTime}`;
-
-        // QRコード生成
-        await QRCode.toCanvas(qrCodeDiv, newId, {
-          width: 200,
-          color: {
-            dark: "#1b5e20",
-            light: "#ffffff"
-          }
+          time: nextTime,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        issueForm.reset();
-        messageDiv.textContent = "発券しました。";
+        document.getElementById("result").innerText = `発券完了: ${newId}`;
+        document.getElementById("time").innerText = `案内時間: ${nextTime}`;
 
-      } catch (error) {
-        console.error(error);
-        messageDiv.textContent = "発券に失敗しました。コンソールをご確認ください。";
+        const qrDiv = document.getElementById("qrcode");
+        qrDiv.innerHTML = "";
+        QRCode.toCanvas(document.createElement("canvas"), newId, function (error, canvas) {
+          if (error) console.error(error);
+          canvas.style.margin = "auto";
+          qrDiv.appendChild(canvas);
+        });
+      } catch (e) {
+        console.error("発券エラー:", e);
+        alert("発券に失敗しました。");
       }
-    });
-
-    // 初期設定ロード
-    loadSettings();
-
+    }
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 </body>
 </html>
