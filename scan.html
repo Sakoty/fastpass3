@@ -1,21 +1,46 @@
-<!-- scan.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ファストパススキャン</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ファストパス読み取り</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; }
-    video { width: 100%; max-width: 400px; }
-    #result { margin-top: 20px; font-size: 1.2em; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 400px;
+      margin: auto;
+      padding: 20px;
+      text-align: center;
+      background: #f0f8ff;
+    }
+    #reader {
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto 1em;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #status {
+      font-size: 1.2em;
+      margin-top: 10px;
+      min-height: 2em;
+      color: #333;
+    }
   </style>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+</head>
+<body>
+  <h1>📷 ファストパス読み取り</h1>
+  <div id="reader">カメラの初期化中...</div>
+  <div id="status">QRコードをカメラにかざしてください。</div>
+
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
-      getFirestore, collection, query, where, getDocs, updateDoc, doc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      getFirestore, doc, getDoc, updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    import { Html5Qrcode } from "https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -23,34 +48,68 @@
       projectId: "fastpass-system",
       storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
+      appId: "1:858745521872:web:29289b673855097e1200d5",
+      measurementId: "G-SLPKMCNY53"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const codeReader = new ZXing.BrowserQRCodeReader();
-    const result = document.getElementById("result");
+    const statusElem = document.getElementById("status");
 
-    codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
-      if (res) {
-        result.textContent = `読み取り成功: ${res.text}`;
-        const q = query(collection(db, "passes"), where("id", "==", res.text));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const passDoc = snapshot.docs[0];
-          await updateDoc(doc(db, "passes", passDoc.id), { used: true });
-          result.textContent += " → 使用済みに更新しました。";
-        } else {
-          result.textContent += " → 該当データが見つかりませんでした。";
+    function onScanSuccess(decodedText) {
+      statusElem.textContent = `読み取り成功：${decodedText}`;
+
+      const docRef = doc(db, "fastpasses", decodedText);
+      getDoc(docRef).then(docSnap => {
+        if (!docSnap.exists()) {
+          statusElem.textContent = `❌ ファストパスが見つかりません: ${decodedText}`;
+          return;
         }
+        const data = docSnap.data();
+        if (data.used) {
+          statusElem.textContent = `⚠️ すでに使用済みのファストパスです (${decodedText})`;
+        } else {
+          updateDoc(docRef, { used: true }).then(() => {
+            statusElem.textContent = `✅ 使用済みに更新しました: ${decodedText}`;
+          }).catch((err) => {
+            statusElem.textContent = `❌ 使用済み更新でエラーが発生しました`;
+            console.error(err);
+          });
+        }
+      }).catch(err => {
+        statusElem.textContent = `❌ データ取得中にエラーが発生しました`;
+        console.error(err);
+      });
+    }
+
+    function onScanFailure(error) {
+      // 読み取り失敗は無視でOK
+      // console.warn(`読み取り失敗: ${error}`);
+    }
+
+    const html5QrCode = new Html5Qrcode("reader");
+
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices.length === 0) {
+        statusElem.textContent = "❌ 利用可能なカメラが見つかりません。";
+        return;
       }
+      const cameraId = devices[0].id;
+
+      html5QrCode.start(
+        cameraId,
+        { fps: 10, qrbox: 250 },
+        onScanSuccess,
+        onScanFailure
+      ).catch(err => {
+        statusElem.textContent = `❌ カメラ起動失敗: ${err}`;
+        console.error(err);
+      });
+    }).catch(err => {
+      statusElem.textContent = `❌ カメラ取得失敗: ${err}`;
+      console.error(err);
     });
   </script>
-</head>
-<body>
-  <h1>ファストパススキャン</h1>
-  <video id="video" autoplay></video>
-  <div id="result">QRコードを読み取ってください</div>
 </body>
 </html>
