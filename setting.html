@@ -1,84 +1,36 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ファストパス設定</title>
   <style>
     body {
-      font-family: 'Arial', sans-serif;
+      font-family: sans-serif;
       margin: 20px;
-      padding: 0;
-      background-color: #f5f5f5;
+      background: #f0f8ff;
     }
-
     h1 {
       color: #333;
       text-align: center;
     }
-
+    label, input, select, button {
+      display: block;
+      margin: 10px auto;
+      width: 80%;
+      max-width: 400px;
+    }
+    input, select, button {
+      padding: 10px;
+      font-size: 1em;
+    }
     .section {
       background: white;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-radius: 10px;
+      padding: 20px;
+      margin: 20px auto;
+      border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 10px;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-      box-sizing: border-box;
-    }
-
-    button {
-      margin-top: 15px;
-      padding: 10px;
-      width: 48%;
-      font-size: 16px;
-      font-weight: bold;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    .btn-start {
-      background-color: #28a745;
-      color: white;
-    }
-
-    .btn-stop {
-      background-color: #dc3545;
-      color: white;
-      float: right;
-    }
-
-    .time-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    @media (max-width: 600px) {
-      .time-row {
-        flex-direction: column;
-      }
-
-      button {
-        width: 100%;
-        margin-top: 10px;
-      }
-
-      .btn-stop {
-        float: none;
-      }
+      max-width: 500px;
     }
   </style>
 </head>
@@ -86,58 +38,36 @@
   <h1>ファストパス設定</h1>
 
   <div class="section">
-    <h3>案内時間設定（最大3つ）</h3>
-    <div id="time-slots">
-      <div class="time-row">
-        <div>
-          <label>開始時間①</label>
-          <input type="time" id="start1">
-        </div>
-        <div>
-          <label>終了時間①</label>
-          <input type="time" id="end1">
-        </div>
-      </div>
-      <div class="time-row">
-        <div>
-          <label>開始時間②</label>
-          <input type="time" id="start2">
-        </div>
-        <div>
-          <label>終了時間②</label>
-          <input type="time" id="end2">
-        </div>
-      </div>
-      <div class="time-row">
-        <div>
-          <label>開始時間③</label>
-          <input type="time" id="start3">
-        </div>
-        <div>
-          <label>終了時間③</label>
-          <input type="time" id="end3">
-        </div>
-      </div>
-    </div>
+    <h2>案内時間帯の設定</h2>
+    <label>時間帯1（例: 09:00～11:00）</label>
+    <input type="text" id="timeRange1" placeholder="09:00-11:00" />
+
+    <label>時間帯2</label>
+    <input type="text" id="timeRange2" placeholder="13:00-15:00" />
+
+    <label>時間帯3</label>
+    <input type="text" id="timeRange3" placeholder="16:00-18:00" />
+
+    <button onclick="saveTimeSettings()">時間帯を保存</button>
   </div>
 
   <div class="section">
-    <h3>特別ファストパス発券</h3>
-    <label>名前</label>
-    <input type="text" id="specialName">
-    <label>人数</label>
-    <input type="number" id="specialPeople">
-    <button onclick="issueSpecialPass()">特別発券する</button>
+    <h2>特別ファストパス発券</h2>
+    <input type="text" id="specialName" placeholder="名前" />
+    <input type="number" id="specialCount" placeholder="人数" />
+    <button onclick="issueSpecial()">特別ファストパスを発券</button>
   </div>
 
   <div class="section">
-    <h3>発券ステータス</h3>
-    <button class="btn-start" onclick="setIssuing(true)">発券開始</button>
-    <button class="btn-stop" onclick="setIssuing(false)">発券終了</button>
+    <h2>発券の制御</h2>
+    <button onclick="setIssuing(true)">発券開始</button>
+    <button onclick="setIssuing(false)">発券終了</button>
   </div>
 
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -148,65 +78,49 @@
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const settingRef = db.collection("settings").doc("global");
+    function saveTimeSettings() {
+      const range1 = document.getElementById("timeRange1").value;
+      const range2 = document.getElementById("timeRange2").value;
+      const range3 = document.getElementById("timeRange3").value;
 
-    async function loadSettings() {
-      const doc = await settingRef.get();
-      if (doc.exists) {
-        const data = doc.data();
-        const times = data.allowedTimes || [];
-        for (let i = 0; i < times.length; i++) {
-          document.getElementById(`start${i+1}`).value = times[i].start;
-          document.getElementById(`end${i+1}`).value = times[i].end;
-        }
-      }
-    }
-
-    async function saveSettings() {
-      const times = [];
-      for (let i = 1; i <= 3; i++) {
-        const start = document.getElementById(`start${i}`).value;
-        const end = document.getElementById(`end${i}`).value;
-        if (start && end) {
-          times.push({ start, end });
-        }
-      }
-      await settingRef.set({ allowedTimes: times }, { merge: true });
-      alert("設定を保存しました");
-    }
-
-    async function issueSpecialPass() {
-      const name = document.getElementById("specialName").value.trim();
-      const people = parseInt(document.getElementById("specialPeople").value);
-      if (!name || !people) return alert("名前と人数を入力してください");
-      const now = new Date();
-      const timestamp = firebase.firestore.Timestamp.fromDate(now);
-      const countDoc = await db.collection("counters").doc("global").get();
-      let number = 1;
-      if (countDoc.exists) number = countDoc.data().lastNumber + 1;
-      await db.collection("counters").doc("global").set({ lastNumber: number });
-      const id = "FP" + String(number).padStart(3, "0");
-      await db.collection("fastpasses").add({
-        id,
-        name,
-        people,
-        timestamp,
-        used: false,
-        isSpecial: true
+      db.collection("settings").doc("timeRanges").set({
+        ranges: [range1, range2, range3]
+      }).then(() => {
+        alert("時間帯を保存しました");
       });
-      alert(`${id} を発券しました`);
     }
 
-    async function setIssuing(state) {
-      await settingRef.set({ isIssuing: state }, { merge: true });
-      alert(state ? "発券を開始しました" : "発券を終了しました");
+    function setIssuing(status) {
+      db.collection("settings").doc("status").set({
+        issuing: status
+      }).then(() => {
+        alert(status ? "発券を開始しました" : "発券を終了しました");
+      });
     }
 
-    loadSettings();
-    window.addEventListener("beforeunload", saveSettings);
+    function issueSpecial() {
+      const name = document.getElementById("specialName").value;
+      const count = parseInt(document.getElementById("specialCount").value, 10);
+      if (!name || isNaN(count) || count <= 0) {
+        alert("正しい名前と人数を入力してください");
+        return;
+      }
+
+      db.collection("fastpasses").add({
+        name,
+        count,
+        status: "special",
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        alert("特別ファストパスを発券しました");
+        document.getElementById("specialName").value = "";
+        document.getElementById("specialCount").value = "";
+      });
+    }
   </script>
 </body>
 </html>
