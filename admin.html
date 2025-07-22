@@ -1,230 +1,69 @@
+<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ファストパス管理ページ</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ファストパス管理</title>
   <style>
-    body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 900px;
-      margin: auto;
-      padding: 20px;
-      background: #f5f5f5;
-      color: #333;
-    }
-    h1 {
-      text-align: center;
-      color: #33691e;
-      margin-bottom: 30px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 8px rgb(0 0 0 / 0.1);
-    }
-    th, td {
-      padding: 12px 15px;
-      border-bottom: 1px solid #ddd;
-      text-align: center;
-    }
-    th {
-      background-color: #8bc34a;
-      color: white;
-      font-weight: bold;
-      font-size: 1rem;
-    }
-    tr:hover {
-      background-color: #f1f8e9;
-    }
-    .status-valid {
-      color: #33691e;
-      font-weight: bold;
-    }
-    .status-used {
-      color: #d32f2f;
-      font-weight: bold;
-      text-decoration: line-through;
-    }
-    button {
-      background-color: #8bc34a;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 5px;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-    button:hover {
-      background-color: #7cb342;
-    }
-    .used-button {
-      background-color: #d32f2f;
-    }
-    .used-button:hover {
-      background-color: #b71c1c;
-    }
-    #message {
-      margin-top: 20px;
-      font-weight: bold;
-      color: green;
-      text-align: center;
-    }
-    #error {
-      margin-top: 20px;
-      font-weight: bold;
-      color: red;
-      text-align: center;
-    }
+    body { font-family: sans-serif; background: #fffbe6; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background-color: #f0c040; }
+    .used { background: #ccc; }
   </style>
-</head>
-<body>
-  <h1>ファストパス管理</h1>
-
-  <table>
-    <thead>
-      <tr>
-        <th>整理番号</th>
-        <th>名前</th>
-        <th>人数</th>
-        <th>案内時間</th>
-        <th>状態</th>
-        <th>操作</th>
-        <th>特別発券</th>
-      </tr>
-    </thead>
-    <tbody id="fastpassTableBody">
-      <!-- データがここに入る -->
-    </tbody>
-  </table>
-
-  <div id="message"></div>
-  <div id="error"></div>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy
+      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
       storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5",
-      measurementId: "G-SLPKMCNY53"
+      appId: "1:858745521872:web:29289b673855097e1200d5"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const fastpassesRef = collection(db, "fastpasses");
+    const tbody = document.getElementById("list");
 
-    const tableBody = document.getElementById("fastpassTableBody");
-    const messageDiv = document.getElementById("message");
-    const errorDiv = document.getElementById("error");
-
-    // メッセージ表示・クリア関数
-    function showMessage(msg) {
-      messageDiv.textContent = msg;
-      errorDiv.textContent = "";
-    }
-    function showError(msg) {
-      errorDiv.textContent = msg;
-      messageDiv.textContent = "";
-    }
-    function clearMessages() {
-      messageDiv.textContent = "";
-      errorDiv.textContent = "";
-    }
-
-    // ボタン押下で使用済み切替
-    async function toggleUsed(docId, currentUsed) {
-      clearMessages();
-      try {
-        const docRef = doc(db, "fastpasses", docId);
-        await updateDoc(docRef, { used: !currentUsed });
-        showMessage(`整理番号 ${docId} の状態を更新しました。`);
-      } catch (e) {
-        showError("状態の更新に失敗しました");
-        console.error(e);
-      }
-    }
-
-    // テーブル更新
-    function renderTable(docs) {
-      tableBody.innerHTML = "";
-      docs.forEach(docSnap => {
-        const data = docSnap.data();
-        const id = data.id || "";
-        const name = data.name || "";
-        const count = data.count || "";
-        const startTime = data.startTime || "";
-        const used = data.used || false;
-        const special = data.special || false;
-        const docId = docSnap.id;
-
-        const tr = document.createElement("tr");
-
-        // 整理番号
-        const tdId = document.createElement("td");
-        tdId.textContent = id;
-        tr.appendChild(tdId);
-
-        // 名前
-        const tdName = document.createElement("td");
-        tdName.textContent = name;
-        tr.appendChild(tdName);
-
-        // 人数
-        const tdCount = document.createElement("td");
-        tdCount.textContent = count;
-        tr.appendChild(tdCount);
-
-        // 案内時間
-        const tdTime = document.createElement("td");
-        tdTime.textContent = startTime;
-        tr.appendChild(tdTime);
-
-        // 状態
-        const tdStatus = document.createElement("td");
-        tdStatus.textContent = used ? "使用済み" : "有効";
-        tdStatus.className = used ? "status-used" : "status-valid";
-        tr.appendChild(tdStatus);
-
-        // 操作ボタン
-        const tdBtn = document.createElement("td");
-        const btn = document.createElement("button");
-        btn.textContent = used ? "未使用に戻す" : "使用済みにする";
-        btn.className = used ? "used-button" : "";
-        btn.addEventListener("click", () => toggleUsed(docId, used));
-        tdBtn.appendChild(btn);
-        tr.appendChild(tdBtn);
-
-        // 特別発券かどうか
-        const tdSpecial = document.createElement("td");
-        tdSpecial.textContent = special ? "〇" : "";
-        tr.appendChild(tdSpecial);
-
-        tableBody.appendChild(tr);
-      });
-    }
-
-    // Firestore リアルタイム監視
-    const q = query(fastpassesRef, orderBy("createdAt"));
+    const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
     onSnapshot(q, (snapshot) => {
-      renderTable(snapshot.docs);
-    }, (error) => {
-      showError("データの取得に失敗しました");
-      console.error(error);
+      tbody.innerHTML = "";
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const tr = document.createElement("tr");
+        if (data.used) tr.classList.add("used");
+
+        tr.innerHTML = `
+          <td>${data.id}</td>
+          <td>${data.name}</td>
+          <td>${data.numPeople}</td>
+          <td>${data.time}</td>
+          <td>${data.used ? "使用済" : "未使用"}</td>
+          <td><button data-id="${docSnap.id}" ${data.used ? "disabled" : ""}>呼び出し</button></td>
+        `;
+        tr.querySelector("button").addEventListener("click", async (e) => {
+          const id = e.target.getAttribute("data-id");
+          await updateDoc(doc(db, "passes", id), { used: true });
+        });
+        tbody.appendChild(tr);
+      });
     });
   </script>
+</head>
+<body>
+  <h1>ファストパス管理画面</h1>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>名前</th><th>人数</th><th>時間</th><th>状態</th><th>操作</th></tr>
+    </thead>
+    <tbody id="list"></tbody>
+  </table>
 </body>
 </html>
