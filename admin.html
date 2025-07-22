@@ -1,20 +1,14 @@
+<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ファストパス管理</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      max-width: 700px;
-      margin: auto;
+      font-family: sans-serif;
       padding: 20px;
-      background: #f9f9f9;
-    }
-    h1 {
-      text-align: center;
-      color: #333;
     }
     table {
       width: 100%;
@@ -22,56 +16,46 @@
       margin-top: 20px;
     }
     th, td {
-      border: 1px solid #ddd;
+      border: 1px solid #ccc;
       padding: 8px;
       text-align: center;
     }
     th {
-      background: #4CAF50;
-      color: white;
+      background-color: #f2f2f2;
     }
-    button {
-      background: #e74c3c;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      cursor: pointer;
-      border-radius: 4px;
+    .used {
+      background-color: #e0ffe0;
     }
-    button:hover {
-      background: #c0392b;
+    .not-used {
+      background-color: #ffe0e0;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス管理ページ</h1>
+  <h2>ファストパス管理ページ</h2>
   <table>
     <thead>
       <tr>
         <th>ID</th>
         <th>名前</th>
         <th>人数</th>
-        <th>案内時間</th>
         <th>状態</th>
+        <th>発行日時</th>
         <th>操作</th>
       </tr>
     </thead>
-    <tbody id="fastpass-list">
-      <tr><td colspan="6">読み込み中...</td></tr>
-    </tbody>
+    <tbody id="passList"></tbody>
   </table>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
-      getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
+      storageBucket: "fastpass-system.firebasestorage.app",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
@@ -80,43 +64,31 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const listElem = document.getElementById("fastpass-list");
-
-    function renderList(docs) {
-      if (docs.length === 0) {
-        listElem.innerHTML = `<tr><td colspan="6">ファストパスがありません</td></tr>`;
-        return;
-      }
-      listElem.innerHTML = "";
-      docs.forEach(docSnap => {
-        const d = docSnap.data();
-        const tr = document.createElement("tr");
-
-        tr.innerHTML = `
-          <td>${d.id}</td>
-          <td>${d.name}</td>
-          <td>${d.count}</td>
-          <td>${d.time}</td>
-          <td>${d.used ? "使用済み" : "未使用"}</td>
-          <td><button data-id="${docSnap.id}">削除</button></td>
-        `;
-
-        listElem.appendChild(tr);
-      });
-    }
+    const passList = document.getElementById('passList');
 
     onSnapshot(collection(db, "fastpasses"), (snapshot) => {
-      renderList(snapshot.docs);
+      passList.innerHTML = "";
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const tr = document.createElement("tr");
+        tr.className = data.status === "使用済み" ? "used" : "not-used";
+        tr.innerHTML = `
+          <td>${data.id}</td>
+          <td>${data.name}</td>
+          <td>${data.count}</td>
+          <td>${data.status}</td>
+          <td>${data.issuedAt?.toDate ? data.issuedAt.toDate().toLocaleString() : ''}</td>
+          <td><button onclick="deletePass('${docSnap.id}')">削除</button></td>
+        `;
+        passList.appendChild(tr);
+      });
     });
 
-    listElem.addEventListener("click", async (e) => {
-      if (e.target.tagName === "BUTTON") {
-        const docId = e.target.dataset.id;
-        if (confirm("本当にこのファストパスを削除しますか？")) {
-          await deleteDoc(doc(db, "fastpasses", docId));
-        }
+    window.deletePass = async function(id) {
+      if (confirm("このファストパスを削除しますか？")) {
+        await deleteDoc(doc(db, "fastpasses", id));
       }
-    });
+    }
   </script>
 </body>
 </html>
