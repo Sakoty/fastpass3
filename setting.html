@@ -1,81 +1,77 @@
+<!-- setting.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ファストパス設定</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body>
-  <h2>案内可能時間帯の設定（最大3つ）</h2>
-  <div id="ranges">
-    <div><input type="time" id="start1"> ～ <input type="time" id="end1"></div>
-    <div><input type="time" id="start2"> ～ <input type="time" id="end2"></div>
-    <div><input type="time" id="start3"> ～ <input type="time" id="end3"></div>
-  </div>
-  <button onclick="saveSettings()">保存</button>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>案内時間と特別ファストパス設定</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
+    input, button { margin: 5px; padding: 5px; }
+    .section { margin-top: 30px; }
+  </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, doc, setDoc, collection, addDoc, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  <h2>特別ファストパス発行</h2>
-  <input type="text" id="specialName" placeholder="名前">
-  <input type="number" id="specialCount" placeholder="人数">
-  <input type="time" id="specialTime">
-  <button onclick="issueSpecial()">特別発券</button>
-
-  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5",
-      measurementId: "G-SLPKMCNY53"
+      appId: "1:858745521872:web:29289b673855097e1200d5"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
 
-    async function saveSettings() {
-      const timeRanges = [];
-      for (let i = 1; i <= 3; i++) {
-        const start = document.getElementById(`start${i}`).value;
-        const end = document.getElementById(`end${i}`).value;
-        if (start && end) timeRanges.push(`${start}-${end}`);
-      }
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-      await db.collection("settings").doc("timeConfig").set({ timeRanges });
-      alert("設定を保存しました。");
-    }
+    document.getElementById("setTimeSlots").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const slots = [
+        document.getElementById("slot1").value,
+        document.getElementById("slot2").value,
+        document.getElementById("slot3").value
+      ].filter(Boolean);
+      await setDoc(doc(db, "settings", "timeSlots"), { slots });
+      alert("案内時間を設定しました。");
+    });
 
-    async function issueSpecial() {
+    document.getElementById("specialForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
       const name = document.getElementById("specialName").value;
-      const count = parseInt(document.getElementById("specialCount").value);
+      const numPeople = parseInt(document.getElementById("specialPeople").value);
       const time = document.getElementById("specialTime").value;
 
-      if (!name || isNaN(count) || !time) {
-        alert("すべての項目を正しく入力してください。");
-        return;
-      }
+      const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
 
-      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
-      let lastNumber = 0;
-      if (!snapshot.empty) {
-        const lastId = snapshot.docs[0].data().id;
-        lastNumber = parseInt(lastId.replace("FP", ""));
-      }
-      const newId = "FP" + String(lastNumber + 1).padStart(3, '0');
-
-      await db.collection("fastpasses").doc(newId).set({
-        id: newId,
-        name: name,
-        count: count,
-        used: false,
-        time: time,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      await addDoc(collection(db, "passes"), {
+        id, number: -1, name, numPeople, time, used: false, createdAt: serverTimestamp()
       });
 
-      alert(`${newId} を特別発券しました。`);
-    }
+      alert("特別ファストパスを発行しました");
+    });
   </script>
+</head>
+<body>
+  <h1>ファストパス設定</h1>
+
+  <form id="setTimeSlots" class="section">
+    <h2>案内可能時間の設定</h2>
+    <input type="text" id="slot1" placeholder="例：10:00〜10:10" required><br>
+    <input type="text" id="slot2" placeholder="例：10:10〜10:20"><br>
+    <input type="text" id="slot3" placeholder="例：10:20〜10:30"><br>
+    <button type="submit">設定を保存</button>
+  </form>
+
+  <form id="specialForm" class="section">
+    <h2>特別ファストパス発行</h2>
+    <input type="text" id="specialName" placeholder="名前" required><br>
+    <input type="number" id="specialPeople" placeholder="人数" required min="1"><br>
+    <input type="text" id="specialTime" placeholder="案内時間" required><br>
+    <button type="submit">特別発行</button>
+  </form>
 </body>
 </html>
