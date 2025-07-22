@@ -2,319 +2,143 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>発券設定ページ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ファストパス設定</title>
   <style>
     body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 600px;
-      margin: auto;
+      font-family: 'Arial', sans-serif;
       padding: 20px;
-      background: #eef6ff;
+      background-color: #f5f7fa;
+    }
+    h1 {
+      text-align: center;
       color: #333;
     }
-    h1, h2 {
-      color: #0078d4;
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
     label {
       display: block;
-      margin: 10px 0 5px;
-      font-weight: bold;
+      margin-top: 15px;
     }
-    input[type="time"] {
-      width: 140px;
-      padding: 6px;
-      margin-right: 10px;
-      font-size: 1em;
-      border-radius: 5px;
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      font-size: 16px;
+      border-radius: 6px;
       border: 1px solid #ccc;
     }
     button {
-      margin-top: 20px;
-      padding: 10px 15px;
-      font-size: 1.1em;
-      cursor: pointer;
-      border-radius: 5px;
+      background-color: #007bff;
+      color: #fff;
       border: none;
-      background-color: #0078d4;
-      color: white;
-      transition: background-color 0.3s ease;
+      margin-top: 15px;
     }
     button:hover {
-      background-color: #005a9e;
+      background-color: #0056b3;
     }
-    .status {
-      margin-top: 15px;
-      font-weight: bold;
+    .time-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 5px;
     }
-    fieldset {
-      margin-top: 30px;
-      padding: 15px;
-      border-radius: 8px;
-      border: 2px solid #ccc;
-      background: #fff;
-    }
-    legend {
-      font-weight: bold;
-      font-size: 1.2em;
-    }
-    #message {
-      margin-top: 15px;
-      color: green;
-      font-weight: bold;
-    }
-    #error {
-      margin-top: 15px;
-      color: red;
-      font-weight: bold;
-    }
-    .range {
-      margin-bottom: 12px;
+    .time-row input {
+      flex: 1;
     }
   </style>
 </head>
 <body>
-  <h1>発券設定</h1>
+  <div class="container">
+    <h1>ファストパス設定</h1>
+    
+    <button onclick="startIssuing()">発券開始</button>
+    <button onclick="stopIssuing()">発券終了</button>
 
-  <div>
-    <h2>案内可能な時間帯（最大3枠）</h2>
-    <div id="ranges">
-      <div class="range">
-        <label>枠1:</label>
-        <input type="time" id="start1" /> 〜 <input type="time" id="end1" />
-      </div>
-      <div class="range">
-        <label>枠2:</label>
-        <input type="time" id="start2" /> 〜 <input type="time" id="end2" />
-      </div>
-      <div class="range">
-        <label>枠3:</label>
-        <input type="time" id="start3" /> 〜 <input type="time" id="end3" />
-      </div>
+    <label>案内可能時間帯（最大3つまで）</label>
+    <div class="time-row">
+      <input type="time" id="time1" />
+      <input type="time" id="time2" />
+      <input type="time" id="time3" />
     </div>
+    <button onclick="saveTimes()">時間を保存</button>
+
+    <hr>
+
+    <label>特別ファストパス発行</label>
+    <input type="text" id="specialName" placeholder="名前"/>
+    <input type="number" id="specialGroup" placeholder="人数"/>
+    <button onclick="issueSpecial()">特別発券</button>
   </div>
 
-  <div>
-    <h2>発券の開始・終了</h2>
-    <button id="startIssueBtn">発券を開始</button>
-    <button id="stopIssueBtn">発券を停止</button>
-    <div class="status" id="currentStatus">状態を取得中...</div>
-  </div>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
-  <button id="saveBtn">設定を保存する</button>
-
-  <div id="message"></div>
-  <div id="error"></div>
-
-  <fieldset>
-    <legend>特別ファストパス発券（名前・人数・案内時間を指定）</legend>
-    <form id="specialIssueForm">
-      <input type="text" id="specialName" placeholder="名前" required />
-      <input type="number" id="specialCount" placeholder="人数" min="1" required />
-      <input type="time" id="specialStartTime" required /> 〜
-      <input type="time" id="specialEndTime" required />
-      <button type="submit">特別発券する</button>
-    </form>
-    <div id="specialIssueMessage"></div>
-  </fieldset>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
-      getFirestore, doc, getDoc, setDoc, onSnapshot, getDocs, collection, addDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
+      storageBucket: "fastpass-system.firebasestorage.app",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    const configRef = doc(db, "settings", "config");
-    const ticketsRef = collection(db, "fastpasses");
-
-    const messageDiv = document.getElementById("message");
-    const errorDiv = document.getElementById("error");
-    const currentStatusDiv = document.getElementById("currentStatus");
-    const startIssueBtn = document.getElementById("startIssueBtn");
-    const stopIssueBtn = document.getElementById("stopIssueBtn");
-    const saveBtn = document.getElementById("saveBtn");
-
-    const specialIssueForm = document.getElementById("specialIssueForm");
-    const specialIssueMessage = document.getElementById("specialIssueMessage");
-
-    // 時間帯読み込み＆表示
-    async function loadConfig() {
-      try {
-        const snap = await getDoc(configRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          const ranges = data.timeRanges || [];
-          for (let i = 0; i < 3; i++) {
-            const startInput = document.getElementById(`start${i + 1}`);
-            const endInput = document.getElementById(`end${i + 1}`);
-            if (ranges[i]) {
-              startInput.value = ranges[i].start || "";
-              endInput.value = ranges[i].end || "";
-            } else {
-              startInput.value = "";
-              endInput.value = "";
-            }
-          }
-          updateStatus(data.issueEnabled);
-        } else {
-          for (let i = 1; i <= 3; i++) {
-            document.getElementById(`start${i}`).value = "";
-            document.getElementById(`end${i}`).value = "";
-          }
-          updateStatus(false);
-        }
-      } catch (e) {
-        showError("設定の読み込みに失敗しました");
-        console.error(e);
-      }
+    function saveTimes() {
+      const times = [time1.value, time2.value, time3.value].filter(t => t);
+      db.collection("settings").doc("times").set({ times });
+      alert("時間帯を保存しました");
     }
 
-    // 発券状態表示更新
-    function updateStatus(enabled) {
-      currentStatusDiv.textContent = `現在の状態：${enabled ? "発券中" : "停止中"}`;
-    }
-
-    // 設定保存
-    async function saveSettings() {
-      clearMessages();
-      try {
-        const timeRanges = [];
-        for (let i = 1; i <= 3; i++) {
-          const start = document.getElementById(`start${i}`).value || "";
-          const end = document.getElementById(`end${i}`).value || "";
-          if (start && end) {
-            timeRanges.push({ start, end });
-          }
-        }
-        const snap = await getDoc(configRef);
-        const currentData = snap.exists() ? snap.data() : {};
-        const issueEnabled = currentData.issueEnabled || false;
-
-        await setDoc(configRef, {
-          timeRanges,
-          issueEnabled
-        }, { merge: true });
-
-        showMessage("設定を保存しました。");
-      } catch (e) {
-        showError("設定の保存に失敗しました");
-        console.error(e);
-      }
-    }
-
-    // 発券開始・停止切替
-    async function setIssueStatus(enabled) {
-      clearMessages();
-      try {
-        await setDoc(configRef, { issueEnabled: enabled }, { merge: true });
-        updateStatus(enabled);
-        showMessage(enabled ? "発券を開始しました。" : "発券を停止しました。");
-      } catch (e) {
-        showError("状態の変更に失敗しました");
-        console.error(e);
-      }
-    }
-
-    // メッセージ表示・クリア
-    function showMessage(msg) {
-      messageDiv.textContent = msg;
-      errorDiv.textContent = "";
-    }
-    function showError(msg) {
-      errorDiv.textContent = msg;
-      messageDiv.textContent = "";
-    }
-    function clearMessages() {
-      messageDiv.textContent = "";
-      errorDiv.textContent = "";
-      specialIssueMessage.textContent = "";
-    }
-
-    // リアルタイム監視でUI更新
-    onSnapshot(configRef, (docSnap) => {
-      if (!docSnap.exists()) return;
-      const data = docSnap.data();
-      const ranges = data.timeRanges || [];
-      for (let i = 0; i < 3; i++) {
-        const startInput = document.getElementById(`start${i + 1}`);
-        const endInput = document.getElementById(`end${i + 1}`);
-        if (ranges[i]) {
-          startInput.value = ranges[i].start || "";
-          endInput.value = ranges[i].end || "";
-        } else {
-          startInput.value = "";
-          endInput.value = "";
-        }
-      }
-      updateStatus(data.issueEnabled);
-    });
-
-    // 特別発券フォーム処理
-    specialIssueForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      specialIssueMessage.textContent = "";
-      clearMessages();
-
-      const name = document.getElementById("specialName").value.trim();
-      const count = Number(document.getElementById("specialCount").value);
-      const startTime = document.getElementById("specialStartTime").value;
-      const endTime = document.getElementById("specialEndTime").value;
-
-      if (!name || !count || !startTime || !endTime) {
-        specialIssueMessage.style.color = "red";
-        specialIssueMessage.textContent = "すべての項目を正しく入力してください。";
+    function issueSpecial() {
+      const name = specialName.value;
+      const group = parseInt(specialGroup.value, 10);
+      if (!name || !group) {
+        alert("名前と人数を入力してください");
         return;
       }
 
-      try {
-        const ticketsSnapshot = await getDocs(ticketsRef);
-        const countIssued = ticketsSnapshot.size;
-        const newId = "FP" + String(countIssued + 1).padStart(3, "0");
-
-        const startTimeStr = `${startTime}〜${endTime}の間にお越しください`;
-
-        const newTicket = {
-          id: newId,
+      db.collection("fastpasses").get().then(snapshot => {
+        const count = snapshot.size + 1;
+        const id = "FP" + String(count).padStart(3, "0");
+        db.collection("fastpasses").doc(id).set({
+          id,
           name,
-          count,
+          group,
+          issuedAt: new Date(),
           used: false,
-          createdAt: new Date(),
-          startTime: startTimeStr,
-          special: true
-        };
+          isSpecial: true
+        });
+        alert(`特別ファストパス ${id} を発行しました`);
+      });
+    }
 
-        await addDoc(ticketsRef, newTicket);
+    function startIssuing() {
+      db.collection("settings").doc("status").set({ issuing: true });
+      alert("発券を開始しました");
+    }
 
-        specialIssueMessage.style.color = "green";
-        specialIssueMessage.textContent = `特別発券：整理番号 ${newId} を発行しました。案内時間 ${startTimeStr}`;
-        specialIssueForm.reset();
-      } catch (error) {
-        specialIssueMessage.style.color = "red";
-        specialIssueMessage.textContent = "発券に失敗しました：" + error.message;
-        console.error(error);
+    function stopIssuing() {
+      db.collection("settings").doc("status").set({ issuing: false });
+      alert("発券を終了しました");
+    }
+
+    // 初期値の読み込み（時間帯）
+    db.collection("settings").doc("times").onSnapshot(doc => {
+      if (doc.exists) {
+        const data = doc.data();
+        [time1.value, time2.value, time3.value] = data.times || ["", "", ""];
       }
     });
-
-    // イベント登録
-    saveBtn.addEventListener("click", saveSettings);
-    startIssueBtn.addEventListener("click", () => setIssueStatus(true));
-    stopIssueBtn.addEventListener("click", () => setIssueStatus(false));
-
-    // 初期ロード
-    loadConfig();
   </script>
 </body>
 </html>
