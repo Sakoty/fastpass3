@@ -1,23 +1,42 @@
-<!-- issue.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ファストパス発券</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f8ff; }
-    h1 { color: #0066cc; }
-    form { margin-bottom: 20px; }
-    label, input, select { display: block; margin: 10px auto; }
-    #qrcode { margin: 20px auto; }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    input, button, select {
+      margin: 5px;
+      padding: 10px;
+      font-size: 16px;
+    }
+    #qrcode {
+      margin-top: 20px;
+    }
   </style>
+</head>
+<body>
+  <h1>ファストパス発券</h1>
+  <div>
+    <input id="name" placeholder="名前">
+    <input id="count" type="number" min="1" placeholder="人数">
+    <button onclick="issueFastPass()">発券する</button>
+  </div>
+  <p id="result"></p>
+  <p id="time"></p>
+  <div id="qrcode"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, doc, getDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      getFirestore, collection, addDoc, getDocs, query, orderBy, doc, updateDoc, getDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -32,68 +51,77 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    async function getNextNumber() {
-      const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) return 1;
-      const last = snapshot.docs[0].data().number;
-      return last + 1;
-    }
-
-    async function getAvailableTime() {
-      const docRef = doc(db, "settings", "timeSlots");
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return null;
-      const slots = docSnap.data().slots || [];
-      const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
-      const snapshot = await getDocs(q);
-      const count = snapshot.size;
-      const index = count % slots.length;
-      return slots[index] || null;
-    }
-
-    document.getElementById("form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const name = document.getElementById("name").value;
-      const numPeople = parseInt(document.getElementById("people").value);
-
-      const number = await getNextNumber();
-      const id = `FP${number.toString().padStart(3, "0")}`;
-      const time = await getAvailableTime();
-
-      if (!time) {
-        alert("案内可能時間が設定されていません");
+    async function issueFastPass() {
+      const name = document.getElementById("name").value.trim();
+      const count = document.getElementById("count").value.trim();
+      if (!name || !count) {
+        alert("名前と人数を入力してください");
         return;
       }
 
-      await addDoc(collection(db, "passes"), {
-        id, number, name, numPeople, time, used: false, createdAt: serverTimestamp()
+      const settingDoc = doc(db, "settings", "config");
+      const settingSnap = await getDoc(settingDoc);
+      const { availableTimes = [], issuing } = settingSnap.exists() ? settingSnap.data() : {};
+
+      if (!issuing) {
+        alert("現在、発券は停止中です。");
+        return;
+      }
+
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const validTimes = availableTimes.filter(t => {
+        const [start, end] = t.split("-").map(s => {
+          const [h, m] = s.split(":").map(Number);
+          return h * 60 + m;
+        });
+        return currentMinutes >= start && currentMinutes <= end;
       });
 
-      document.getElementById("info").innerHTML = `
-        <h2>ファストパス発券完了！</h2>
-        <p>番号：${id}</p>
-        <p>名前：${name}</p>
-        <p>人数：${numPeople}</p>
-        <p>案内時間：${time}</p>
-      `;
+      if (validTimes.length === 0) {
+        alert("現在、案内可能時間外です。");
+        return;
+      }
 
-      const qrContainer = document.getElementById("qrcode");
-      qrContainer.innerHTML = "";
-      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
-        if (!err) qrContainer.appendChild(canvas);
+      const snapshot = await getDocs(query(collection(db, "fastpasses"), orderBy("timestamp", "desc")));
+      const last = snapshot.docs.find(doc => doc.id.startsWith("FP"));
+      let nextId = "FP001";
+      if (last) {
+        const lastNum = parseInt(last.id.replace("FP", ""));
+        nextId = "FP" + String(lastNum + 1).padStart(3, "0");
+      }
+
+      const latestTime = snapshot.docs.length
+        ? snapshot.docs[0].data().time || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const nextTime = getNext10MinTime(latestTime);
+
+      await addDoc(collection(db, "fastpasses"), {
+        id: nextId,
+        name,
+        count: parseInt(count),
+        time: nextTime,
+        used: false,
+        timestamp: new Date()
       });
-    });
+
+      document.getElementById("result").textContent = `発券ID：${nextId}`;
+      document.getElementById("time").textContent = `案内時間：${nextTime}`;
+      document.getElementById("qrcode").innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), nextId, (err, canvas) => {
+        if (!err) document.getElementById("qrcode").appendChild(canvas);
+      });
+    }
+
+    function getNext10MinTime(current) {
+      const [h, m] = current.split(":").map(Number);
+      let total = h * 60 + m;
+      total += 10;
+      const nh = Math.floor(total / 60);
+      const nm = total % 60;
+      return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+    }
   </script>
-</head>
-<body>
-  <h1>ファストパス発券</h1>
-  <form id="form">
-    <label>名前 <input type="text" id="name" required /></label>
-    <label>人数 <input type="number" id="people" required min="1" /></label>
-    <button type="submit">発券する</button>
-  </form>
-  <div id="info"></div>
-  <div id="qrcode"></div>
 </body>
 </html>
