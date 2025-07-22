@@ -1,149 +1,81 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>発券設定ページ</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; background:#f0f8f0; color:#2e7d32;}
-    label { display: block; margin-top: 10px; font-weight: bold; }
-    input[type="time"], input[type="text"], input[type="number"] {
-      width: 150px;
-      margin-right: 10px;
-      padding: 5px;
-      font-size: 1em;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-    }
-    .range { display: flex; align-items: center; margin-bottom: 10px; }
-    button { margin-top: 20px; padding: 10px; font-size: 1.1em; cursor: pointer; background-color:#4caf50; border:none; border-radius:8px; color:#fff;}
-    button:hover { background-color:#388e3c;}
-    .status { margin-top: 10px; font-weight: bold; }
-    #message { margin-top: 10px; font-weight: bold; color: green; }
-    #error { margin-top: 10px; font-weight: bold; color: red; }
-    fieldset { margin-top: 30px; padding: 15px; border: 2px solid #ccc; border-radius: 8px; background:#e8f5e9;}
-    legend { font-weight: bold; font-size: 1.2em; }
-    #specialIssueMessage { margin-top: 10px; font-weight: bold; }
-  </style>
+  <meta charset="UTF-8">
+  <title>ファストパス設定</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
-  <h1>発券設定</h1>
-
-  <div>
-    <h2>案内可能な時間帯（最大3枠）</h2>
-    <div id="ranges">
-      <div class="range">
-        <label>枠1: <input type="time" id="start1" /> ～ <input type="time" id="end1" /></label>
-      </div>
-      <div class="range">
-        <label>枠2: <input type="time" id="start2" /> ～ <input type="time" id="end2" /></label>
-      </div>
-      <div class="range">
-        <label>枠3: <input type="time" id="start3" /> ～ <input type="time" id="end3" /></label>
-      </div>
-    </div>
+  <h2>案内可能時間帯の設定（最大3つ）</h2>
+  <div id="ranges">
+    <div><input type="time" id="start1"> ～ <input type="time" id="end1"></div>
+    <div><input type="time" id="start2"> ～ <input type="time" id="end2"></div>
+    <div><input type="time" id="start3"> ～ <input type="time" id="end3"></div>
   </div>
+  <button onclick="saveSettings()">保存</button>
 
-  <div>
-    <h2>発券をコントロール</h2>
-    <button id="startIssueBtn">発券を開始</button>
-    <button id="stopIssueBtn">発券を停止</button>
-    <div class="status" id="currentStatus">状態を取得中...</div>
-  </div>
+  <h2>特別ファストパス発行</h2>
+  <input type="text" id="specialName" placeholder="名前">
+  <input type="number" id="specialCount" placeholder="人数">
+  <input type="time" id="specialTime">
+  <button onclick="issueSpecial()">特別発券</button>
 
-  <button id="saveBtn">設定を保存する</button>
-
-  <div id="message"></div>
-  <div id="error"></div>
-
-  <fieldset>
-    <legend>特別発券（名前・人数・案内時間を指定して発券）</legend>
-    <form id="specialIssueForm">
-      <input type="text" id="specialName" placeholder="名前" required />
-      <input type="number" id="specialCount" placeholder="人数" min="1" required />
-      <input type="time" id="specialStartTime" placeholder="案内開始時間" required />
-      <input type="time" id="specialEndTime" placeholder="案内終了時間" required />
-      <button type="submit">特別発券する</button>
-    </form>
-    <div id="specialIssueMessage"></div>
-  </fieldset>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, collection, doc, getDoc, setDoc, addDoc, getDocs
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // Firebase設定
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
+      storageBucket: "fastpass-system.firebasestorage.app",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    const configRef = doc(db, "settings", "config");
-    const fastpassesRef = collection(db, "fastpasses");
-
-    const messageDiv = document.getElementById("message");
-    const errorDiv = document.getElementById("error");
-    const currentStatusDiv = document.getElementById("currentStatus");
-    const startIssueBtn = document.getElementById("startIssueBtn");
-    const stopIssueBtn = document.getElementById("stopIssueBtn");
-    const saveBtn = document.getElementById("saveBtn");
-
-    // 特別発券フォーム要素
-    const specialIssueForm = document.getElementById("specialIssueForm");
-    const specialIssueMessage = document.getElementById("specialIssueMessage");
-
-    // 設定の読み込みとUI反映
-    async function loadConfig() {
-      try {
-        const snap = await getDoc(configRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          const ranges = data.timeRanges || [];
-          for (let i = 0; i < 3; i++) {
-            const startInput = document.getElementById(`start${i + 1}`);
-            const endInput = document.getElementById(`end${i + 1}`);
-            if (ranges[i]) {
-              startInput.value = ranges[i].start || "";
-              endInput.value = ranges[i].end || "";
-            } else {
-              startInput.value = "";
-              endInput.value = "";
-            }
-          }
-          updateStatus(data.issueEnabled);
-        } else {
-          // 初期状態セット
-          for (let i = 1; i <= 3; i++) {
-            document.getElementById(`start${i}`).value = "";
-            document.getElementById(`end${i}`).value = "";
-          }
-          updateStatus(false);
-        }
-      } catch (e) {
-        showError("設定の読み込みに失敗しました");
-        console.error(e);
-      }
-    }
-
-    // 発券状態表示更新
-    function updateStatus(issueEnabled) {
-      currentStatusDiv.textContent = `現在の状態：${issueEnabled ? "発券中" : "停止中"}`;
-    }
-
-    // 設定保存
     async function saveSettings() {
-      clearMessages();
-      try {
-        const timeRanges = [];
-        for (let i = 1; i <= 3; i++) {
-          const start = document.getElementById
+      const timeRanges = [];
+      for (let i = 1; i <= 3; i++) {
+        const start = document.getElementById(`start${i}`).value;
+        const end = document.getElementById(`end${i}`).value;
+        if (start && end) timeRanges.push(`${start}-${end}`);
+      }
+
+      await db.collection("settings").doc("timeConfig").set({ timeRanges });
+      alert("設定を保存しました。");
+    }
+
+    async function issueSpecial() {
+      const name = document.getElementById("specialName").value;
+      const count = parseInt(document.getElementById("specialCount").value);
+      const time = document.getElementById("specialTime").value;
+
+      if (!name || isNaN(count) || !time) {
+        alert("すべての項目を正しく入力してください。");
+        return;
+      }
+
+      const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
+      let lastNumber = 0;
+      if (!snapshot.empty) {
+        const lastId = snapshot.docs[0].data().id;
+        lastNumber = parseInt(lastId.replace("FP", ""));
+      }
+      const newId = "FP" + String(lastNumber + 1).padStart(3, '0');
+
+      await db.collection("fastpasses").doc(newId).set({
+        id: newId,
+        name: name,
+        count: count,
+        used: false,
+        time: time,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      alert(`${newId} を特別発券しました。`);
+    }
+  </script>
+</body>
+</html>
