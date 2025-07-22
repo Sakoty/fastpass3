@@ -2,41 +2,78 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパス発券</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ファストパス発券ページ</title>
   <style>
     body {
-      font-family: sans-serif;
-      text-align: center;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 400px;
+      margin: auto;
+      background: #e3f2fd;
       padding: 20px;
+      color: #0d47a1;
+      text-align: center;
     }
-    input, button, select {
-      margin: 5px;
+    h1 {
+      margin-bottom: 20px;
+      font-weight: 900;
+      font-size: 2rem;
+      color: #0d47a1;
+      text-shadow: 1px 1px 2px #90caf9;
+    }
+    input, button {
+      font-size: 1.1rem;
       padding: 10px;
-      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #90caf9;
+      margin: 10px 0;
+      width: 100%;
+      box-sizing: border-box;
     }
-    #qrcode {
+    button {
+      background-color: #0d47a1;
+      color: white;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #08306b;
+    }
+    #qrCode {
       margin-top: 20px;
+    }
+    #info {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #045a8d;
+    }
+    #error {
+      margin-top: 15px;
+      color: red;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div>
-    <input id="name" placeholder="名前">
-    <input id="count" type="number" min="1" placeholder="人数">
-    <button onclick="issueFastPass()">発券する</button>
-  </div>
-  <p id="result"></p>
-  <p id="time"></p>
-  <div id="qrcode"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <input type="text" id="nameInput" placeholder="お名前を入力" />
+  <input type="number" id="countInput" placeholder="人数" min="1" />
+  <button id="issueBtn">発券する</button>
+
+  <div id="info"></div>
+  <div id="error"></div>
+  <div id="qrCode"></div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, getDocs, query, orderBy, doc, updateDoc, getDoc
+      getFirestore, collection, doc, getDoc, setDoc, addDoc, getDocs, onSnapshot, query, orderBy, limit
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -51,77 +88,140 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    async function issueFastPass() {
-      const name = document.getElementById("name").value.trim();
-      const count = document.getElementById("count").value.trim();
-      if (!name || !count) {
-        alert("名前と人数を入力してください");
-        return;
-      }
+    const configRef = doc(db, "settings", "config");
+    const ticketsRef = collection(db, "fastpasses");
 
-      const settingDoc = doc(db, "settings", "config");
-      const settingSnap = await getDoc(settingDoc);
-      const { availableTimes = [], issuing } = settingSnap.exists() ? settingSnap.data() : {};
+    const nameInput = document.getElementById("nameInput");
+    const countInput = document.getElementById("countInput");
+    const issueBtn = document.getElementById("issueBtn");
+    const infoDiv = document.getElementById("info");
+    const errorDiv = document.getElementById("error");
+    const qrCodeDiv = document.getElementById("qrCode");
 
-      if (!issuing) {
-        alert("現在、発券は停止中です。");
-        return;
-      }
+    let configData = null;
 
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const validTimes = availableTimes.filter(t => {
-        const [start, end] = t.split("-").map(s => {
-          const [h, m] = s.split(":").map(Number);
-          return h * 60 + m;
-        });
-        return currentMinutes >= start && currentMinutes <= end;
-      });
+    // 案内可能時間帯を配列で持つ
+    let timeRanges = [];
 
-      if (validTimes.length === 0) {
-        alert("現在、案内可能時間外です。");
-        return;
-      }
-
-      const snapshot = await getDocs(query(collection(db, "fastpasses"), orderBy("timestamp", "desc")));
-      const last = snapshot.docs.find(doc => doc.id.startsWith("FP"));
-      let nextId = "FP001";
-      if (last) {
-        const lastNum = parseInt(last.id.replace("FP", ""));
-        nextId = "FP" + String(lastNum + 1).padStart(3, "0");
-      }
-
-      const latestTime = snapshot.docs.length
-        ? snapshot.docs[0].data().time || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      const nextTime = getNext10MinTime(latestTime);
-
-      await addDoc(collection(db, "fastpasses"), {
-        id: nextId,
-        name,
-        count: parseInt(count),
-        time: nextTime,
-        used: false,
-        timestamp: new Date()
-      });
-
-      document.getElementById("result").textContent = `発券ID：${nextId}`;
-      document.getElementById("time").textContent = `案内時間：${nextTime}`;
-      document.getElementById("qrcode").innerHTML = "";
-      QRCode.toCanvas(document.createElement("canvas"), nextId, (err, canvas) => {
-        if (!err) document.getElementById("qrcode").appendChild(canvas);
-      });
+    // 案内時間を10分間隔でずらす関数
+    function addMinutesToTime(timeStr, minutesToAdd) {
+      const [hour, min] = timeStr.split(":").map(Number);
+      const date = new Date();
+      date.setHours(hour);
+      date.setMinutes(min + minutesToAdd);
+      const h = String(date.getHours()).padStart(2, "0");
+      const m = String(date.getMinutes()).padStart(2, "0");
+      return `${h}:${m}`;
     }
 
-    function getNext10MinTime(current) {
-      const [h, m] = current.split(":").map(Number);
-      let total = h * 60 + m;
-      total += 10;
-      const nh = Math.floor(total / 60);
-      const nm = total % 60;
-      return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+    // 案内時間を計算して文字列で返す（ずらし処理あり）
+    function calculateGuideTime(issuedCount) {
+      // timeRangesのうち有効な範囲を使う
+      for (const range of timeRanges) {
+        if (range.start && range.end) {
+          // start時刻を基準に10分刻みでずらす
+          const base = range.start;
+          const offsetMinutes = issuedCount * 10;
+          const guideStart = addMinutesToTime(base, offsetMinutes);
+
+          // end時刻はそのまま
+          return `${guideStart}〜${range.end} の間にお越しください`;
+        }
+      }
+      return "案内可能時間が設定されていません";
     }
+
+    // 設定を読み込む
+    async function loadConfig() {
+      try {
+        const snap = await getDoc(configRef);
+        if (snap.exists()) {
+          configData = snap.data();
+          timeRanges = configData.timeRanges || [];
+        } else {
+          timeRanges = [];
+        }
+      } catch (e) {
+        console.error("設定読み込み失敗", e);
+        timeRanges = [];
+      }
+    }
+
+    // 発券ボタン処理
+    issueBtn.addEventListener("click", async () => {
+      infoDiv.textContent = "";
+      errorDiv.textContent = "";
+      qrCodeDiv.innerHTML = "";
+
+      const name = nameInput.value.trim();
+      const count = Number(countInput.value);
+
+      if (!name) {
+        errorDiv.textContent = "名前を入力してください。";
+        return;
+      }
+      if (!count || count < 1) {
+        errorDiv.textContent = "人数は1以上を入力してください。";
+        return;
+      }
+
+      try {
+        // 発券状態が有効かチェック
+        if (!configData || !configData.issueEnabled) {
+          errorDiv.textContent = "現在、発券は停止中です。";
+          return;
+        }
+
+        // 現在発券済み枚数カウント
+        const ticketsSnapshot = await getDocs(ticketsRef);
+        const issuedCount = ticketsSnapshot.size;
+
+        // 新ID生成 FP＋3桁数字
+        const newId = "FP" + String(issuedCount + 1).padStart(3, "0");
+
+        // 案内時間算出
+        const guideTimeStr = calculateGuideTime(issuedCount);
+
+        // 発券データ作成
+        const newTicket = {
+          id: newId,
+          name,
+          count,
+          used: false,
+          createdAt: new Date(),
+          guideTime: guideTimeStr,
+          special: false
+        };
+
+        await addDoc(ticketsRef, newTicket);
+
+        infoDiv.textContent = `整理番号 ${newId} を発行しました。案内時間: ${guideTimeStr}`;
+
+        // QRコード表示
+        qrCodeDiv.innerHTML = "";
+        await QRCode.toCanvas(qrCodeDiv, JSON.stringify({ id: newId }), { width: 200 });
+
+        // フォームクリア
+        nameInput.value = "";
+        countInput.value = "";
+
+      } catch (error) {
+        console.error(error);
+        errorDiv.textContent = "発券に失敗しました。コンソールを確認してください。";
+      }
+    });
+
+    // 初期ロード
+    await loadConfig();
+
+    // Firestoreの設定リアルタイム監視（発券開始停止の同期用）
+    onSnapshot(configRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+      configData = docSnap.data();
+      timeRanges = configData.timeRanges || [];
+    });
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 </body>
 </html>
