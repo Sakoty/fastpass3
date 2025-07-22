@@ -1,22 +1,71 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ファストパス管理</title>
   <style>
-    body { font-family: sans-serif; background: #fffbe6; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    th { background-color: #f0c040; }
-    .used { background: #ccc; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: auto;
+      padding: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #4CAF50;
+      color: white;
+    }
+    button {
+      background: #e74c3c;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #c0392b;
+    }
   </style>
+</head>
+<body>
+  <h1>ファストパス管理ページ</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>名前</th>
+        <th>人数</th>
+        <th>案内時間</th>
+        <th>状態</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="fastpass-list">
+      <tr><td colspan="6">読み込み中...</td></tr>
+    </tbody>
+  </table>
+
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -24,46 +73,50 @@
       projectId: "fastpass-system",
       storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
+      appId: "1:858745521872:web:29289b673855097e1200d5",
+      measurementId: "G-SLPKMCNY53"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const tbody = document.getElementById("list");
+    const listElem = document.getElementById("fastpass-list");
 
-    const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
-    onSnapshot(q, (snapshot) => {
-      tbody.innerHTML = "";
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
+    function renderList(docs) {
+      if (docs.length === 0) {
+        listElem.innerHTML = `<tr><td colspan="6">ファストパスがありません</td></tr>`;
+        return;
+      }
+      listElem.innerHTML = "";
+      docs.forEach(docSnap => {
+        const d = docSnap.data();
         const tr = document.createElement("tr");
-        if (data.used) tr.classList.add("used");
 
         tr.innerHTML = `
-          <td>${data.id}</td>
-          <td>${data.name}</td>
-          <td>${data.numPeople}</td>
-          <td>${data.time}</td>
-          <td>${data.used ? "使用済" : "未使用"}</td>
-          <td><button data-id="${docSnap.id}" ${data.used ? "disabled" : ""}>呼び出し</button></td>
+          <td>${d.id}</td>
+          <td>${d.name}</td>
+          <td>${d.count}</td>
+          <td>${d.time}</td>
+          <td>${d.used ? "使用済み" : "未使用"}</td>
+          <td><button data-id="${docSnap.id}">削除</button></td>
         `;
-        tr.querySelector("button").addEventListener("click", async (e) => {
-          const id = e.target.getAttribute("data-id");
-          await updateDoc(doc(db, "passes", id), { used: true });
-        });
-        tbody.appendChild(tr);
+
+        listElem.appendChild(tr);
       });
+    }
+
+    onSnapshot(collection(db, "fastpasses"), (snapshot) => {
+      renderList(snapshot.docs);
+    });
+
+    listElem.addEventListener("click", async (e) => {
+      if (e.target.tagName === "BUTTON") {
+        const docId = e.target.dataset.id;
+        if (confirm("本当にこのファストパスを削除しますか？")) {
+          await deleteDoc(doc(db, "fastpasses", docId));
+        }
+      }
     });
   </script>
-</head>
-<body>
-  <h1>ファストパス管理画面</h1>
-  <table>
-    <thead>
-      <tr><th>ID</th><th>名前</th><th>人数</th><th>時間</th><th>状態</th><th>操作</th></tr>
-    </thead>
-    <tbody id="list"></tbody>
-  </table>
 </body>
 </html>
