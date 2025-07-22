@@ -1,125 +1,99 @@
+<!-- issue.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ファストパス発券</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: 'Arial'; text-align: center; margin: 20px; }
-    h1 { font-size: 24px; }
-    input, button { padding: 10px; margin: 10px; font-size: 16px; }
-    #qrcode { margin-top: 20px; }
+    body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f8ff; }
+    h1 { color: #0066cc; }
+    form { margin-bottom: 20px; }
+    label, input, select { display: block; margin: 10px auto; }
+    #qrcode { margin: 20px auto; }
   </style>
-</head>
-<body>
-  <h1>ファストパス発券</h1>
-  <input type="text" id="name" placeholder="名前"><br>
-  <input type="number" id="count" placeholder="人数"><br>
-  <button onclick="issueFastPass()">ファストパスを発券</button>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, doc, getDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  <div id="result"></div>
-  <div id="time"></div>
-  <div id="qrcode"></div>
-
-  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
 
-    async function issueFastPass() {
-      const name = document.getElementById('name').value.trim();
-      const count = parseInt(document.getElementById('count').value.trim());
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-      if (!name || isNaN(count) || count <= 0) {
-        alert("名前と人数を正しく入力してください。");
+    async function getNextNumber() {
+      const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return 1;
+      const last = snapshot.docs[0].data().number;
+      return last + 1;
+    }
+
+    async function getAvailableTime() {
+      const docRef = doc(db, "settings", "timeSlots");
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) return null;
+      const slots = docSnap.data().slots || [];
+      const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
+      const snapshot = await getDocs(q);
+      const count = snapshot.size;
+      const index = count % slots.length;
+      return slots[index] || null;
+    }
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value;
+      const numPeople = parseInt(document.getElementById("people").value);
+
+      const number = await getNextNumber();
+      const id = `FP${number.toString().padStart(3, "0")}`;
+      const time = await getAvailableTime();
+
+      if (!time) {
+        alert("案内可能時間が設定されていません");
         return;
       }
 
-      try {
-        const settingDoc = await db.collection("settings").doc("timeConfig").get();
-        const timeRanges = settingDoc.data()?.timeRanges || [];
+      await addDoc(collection(db, "passes"), {
+        id, number, name, numPeople, time, used: false, createdAt: serverTimestamp()
+      });
 
-        if (timeRanges.length === 0) {
-          alert("案内可能な時間帯が設定されていません。");
-          return;
-        }
+      document.getElementById("info").innerHTML = `
+        <h2>ファストパス発券完了！</h2>
+        <p>番号：${id}</p>
+        <p>名前：${name}</p>
+        <p>人数：${numPeople}</p>
+        <p>案内時間：${time}</p>
+      `;
 
-        const snapshot = await db.collection("fastpasses").orderBy("createdAt", "desc").limit(1).get();
-        let lastNumber = 0;
-        if (!snapshot.empty) {
-          const lastId = snapshot.docs[0].data().id;
-          lastNumber = parseInt(lastId.replace("FP", ""));
-        }
-
-        const newId = "FP" + String(lastNumber + 1).padStart(3, '0');
-
-        const now = new Date();
-        const today = now.toISOString().split("T")[0];
-
-        let nextTime = null;
-        for (const range of timeRanges) {
-          const [start, end] = range.split("-");
-          const [sh, sm] = start.split(":").map(Number);
-          const [eh, em] = end.split(":").map(Number);
-
-          const startTime = new Date(`${today}T${start}:00`);
-          const endTime = new Date(`${today}T${end}:00`);
-
-          let currentTime = new Date(startTime);
-          while (currentTime < endTime) {
-            const exists = await db.collection("fastpasses")
-              .where("time", "==", currentTime.toTimeString().slice(0,5))
-              .get();
-            if (exists.size < 10) {
-              nextTime = currentTime.toTimeString().slice(0,5);
-              break;
-            }
-            currentTime.setMinutes(currentTime.getMinutes() + 10);
-          }
-
-          if (nextTime) break;
-        }
-
-        if (!nextTime) {
-          alert("本日の案内可能時間が満席です。");
-          return;
-        }
-
-        await db.collection("fastpasses").doc(newId).set({
-          id: newId,
-          name: name,
-          count: count,
-          used: false,
-          time: nextTime,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        document.getElementById("result").innerText = `発券完了: ${newId}`;
-        document.getElementById("time").innerText = `案内時間: ${nextTime}`;
-
-        const qrDiv = document.getElementById("qrcode");
-        qrDiv.innerHTML = "";
-        QRCode.toCanvas(document.createElement("canvas"), newId, function (error, canvas) {
-          if (error) console.error(error);
-          canvas.style.margin = "auto";
-          qrDiv.appendChild(canvas);
-        });
-      } catch (e) {
-        console.error("発券エラー:", e);
-        alert("発券に失敗しました。");
-      }
-    }
+      const qrContainer = document.getElementById("qrcode");
+      qrContainer.innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
+        if (!err) qrContainer.appendChild(canvas);
+      });
+    });
   </script>
+</head>
+<body>
+  <h1>ファストパス発券</h1>
+  <form id="form">
+    <label>名前 <input type="text" id="name" required /></label>
+    <label>人数 <input type="number" id="people" required min="1" /></label>
+    <button type="submit">発券する</button>
+  </form>
+  <div id="info"></div>
+  <div id="qrcode"></div>
 </body>
 </html>
