@@ -2,79 +2,57 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ファストパス発券ページ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ファストパス発券</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
   <style>
     body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 400px;
-      margin: auto;
-      background: #e3f2fd;
-      padding: 20px;
-      color: #0d47a1;
+      font-family: 'Arial', sans-serif;
+      padding: 1rem;
+      background: #f4f8ff;
       text-align: center;
     }
-    h1 {
-      margin-bottom: 20px;
-      font-weight: 900;
-      font-size: 2rem;
-      color: #0d47a1;
-      text-shadow: 1px 1px 2px #90caf9;
+    .card {
+      background: white;
+      padding: 1.5rem;
+      margin: 1rem auto;
+      border-radius: 1rem;
+      max-width: 400px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
     input, button {
-      font-size: 1.1rem;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #90caf9;
-      margin: 10px 0;
-      width: 100%;
-      box-sizing: border-box;
+      font-size: 1rem;
+      margin: 0.5rem 0;
+      padding: 0.5rem;
+      width: 90%;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
     }
     button {
-      background-color: #0d47a1;
+      background-color: #2e90fa;
       color: white;
-      font-weight: 700;
       border: none;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
     }
-    button:hover {
-      background-color: #08306b;
-    }
-    #qrCode {
-      margin-top: 20px;
-    }
-    #info {
-      margin-top: 15px;
-      font-weight: bold;
-      color: #045a8d;
-    }
-    #error {
-      margin-top: 15px;
-      color: red;
-      font-weight: bold;
+    .qr-container {
+      margin-top: 1rem;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス発券</h1>
+  <div class="card">
+    <h1>ファストパス発券</h1>
+    <input type="text" id="name" placeholder="名前" required />
+    <input type="number" id="count" placeholder="人数" min="1" max="10" required />
+    <button onclick="issuePass()">発券する</button>
+    <div id="result"></div>
+    <div class="qr-container">
+      <canvas id="qrcode"></canvas>
+    </div>
+  </div>
 
-  <input type="text" id="nameInput" placeholder="お名前を入力" />
-  <input type="number" id="countInput" placeholder="人数" min="1" />
-  <button id="issueBtn">発券する</button>
-
-  <div id="info"></div>
-  <div id="error"></div>
-  <div id="qrCode"></div>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
-      getFirestore, collection, doc, getDoc, setDoc, addDoc, getDocs, onSnapshot, query, orderBy, limit
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
-
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -84,144 +62,78 @@
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    const configRef = doc(db, "settings", "config");
-    const ticketsRef = collection(db, "fastpasses");
-
-    const nameInput = document.getElementById("nameInput");
-    const countInput = document.getElementById("countInput");
-    const issueBtn = document.getElementById("issueBtn");
-    const infoDiv = document.getElementById("info");
-    const errorDiv = document.getElementById("error");
-    const qrCodeDiv = document.getElementById("qrCode");
-
-    let configData = null;
-
-    // 案内可能時間帯を配列で持つ
-    let timeRanges = [];
-
-    // 案内時間を10分間隔でずらす関数
-    function addMinutesToTime(timeStr, minutesToAdd) {
-      const [hour, min] = timeStr.split(":").map(Number);
-      const date = new Date();
-      date.setHours(hour);
-      date.setMinutes(min + minutesToAdd);
-      const h = String(date.getHours()).padStart(2, "0");
-      const m = String(date.getMinutes()).padStart(2, "0");
-      return `${h}:${m}`;
+    async function getNextId() {
+      const snapshot = await db.collection("passes").orderBy("id", "desc").limit(1).get();
+      if (snapshot.empty) return "FP001";
+      const lastId = snapshot.docs[0].data().id;
+      const number = parseInt(lastId.replace("FP", ""), 10) + 1;
+      return "FP" + number.toString().padStart(3, "0");
     }
 
-    // 案内時間を計算して文字列で返す（ずらし処理あり）
-    function calculateGuideTime(issuedCount) {
-      // timeRangesのうち有効な範囲を使う
-      for (const range of timeRanges) {
-        if (range.start && range.end) {
-          // start時刻を基準に10分刻みでずらす
-          const base = range.start;
-          const offsetMinutes = issuedCount * 10;
-          const guideStart = addMinutesToTime(base, offsetMinutes);
+    function roundToNext10Minutes(date) {
+      const newDate = new Date(date);
+      newDate.setMinutes(Math.ceil(newDate.getMinutes() / 10) * 10, 0, 0);
+      return newDate;
+    }
 
-          // end時刻はそのまま
-          return `${guideStart}〜${range.end} の間にお越しください`;
-        }
+    async function issuePass() {
+      const name = document.getElementById("name").value.trim();
+      const count = parseInt(document.getElementById("count").value, 10);
+      if (!name || !count) return alert("名前と人数を入力してください");
+
+      const settingDoc = await db.collection("settings").doc("config").get();
+      const setting = settingDoc.data();
+
+      if (!setting || !setting.started) {
+        alert("現在、発券は停止しています");
+        return;
       }
-      return "案内可能時間が設定されていません";
-    }
 
-    // 設定を読み込む
-    async function loadConfig() {
+      const now = new Date();
+      const availableSlots = setting.timeSlots || [];
+
+      const rounded = roundToNext10Minutes(now);
+      const currentTimeStr = rounded.toTimeString().substring(0,5); // "HH:MM"
+
+      // 時間帯の中に含まれているかチェック
+      const available = availableSlots.some(slot => {
+        return currentTimeStr >= slot.start && currentTimeStr < slot.end;
+      });
+
+      if (!available) {
+        alert("現在は案内できる時間帯ではありません");
+        return;
+      }
+
+      const id = await getNextId();
+      const docData = {
+        id,
+        name,
+        count,
+        issuedAt: firebase.firestore.Timestamp.fromDate(now),
+        status: "未使用",
+        guideTime: currentTimeStr
+      };
+
       try {
-        const snap = await getDoc(configRef);
-        if (snap.exists()) {
-          configData = snap.data();
-          timeRanges = configData.timeRanges || [];
-        } else {
-          timeRanges = [];
-        }
+        await db.collection("passes").doc(id).set(docData);
+        document.getElementById("result").innerHTML = `
+          <p>発券完了：<strong>${id}</strong></p>
+          <p>案内時間：<strong>${currentTimeStr}</strong></p>
+        `;
+        const qr = new QRious({
+          element: document.getElementById("qrcode"),
+          value: id,
+          size: 200
+        });
       } catch (e) {
-        console.error("設定読み込み失敗", e);
-        timeRanges = [];
+        console.error(e);
+        alert("発券に失敗しました。もう一度お試しください。");
       }
     }
-
-    // 発券ボタン処理
-    issueBtn.addEventListener("click", async () => {
-      infoDiv.textContent = "";
-      errorDiv.textContent = "";
-      qrCodeDiv.innerHTML = "";
-
-      const name = nameInput.value.trim();
-      const count = Number(countInput.value);
-
-      if (!name) {
-        errorDiv.textContent = "名前を入力してください。";
-        return;
-      }
-      if (!count || count < 1) {
-        errorDiv.textContent = "人数は1以上を入力してください。";
-        return;
-      }
-
-      try {
-        // 発券状態が有効かチェック
-        if (!configData || !configData.issueEnabled) {
-          errorDiv.textContent = "現在、発券は停止中です。";
-          return;
-        }
-
-        // 現在発券済み枚数カウント
-        const ticketsSnapshot = await getDocs(ticketsRef);
-        const issuedCount = ticketsSnapshot.size;
-
-        // 新ID生成 FP＋3桁数字
-        const newId = "FP" + String(issuedCount + 1).padStart(3, "0");
-
-        // 案内時間算出
-        const guideTimeStr = calculateGuideTime(issuedCount);
-
-        // 発券データ作成
-        const newTicket = {
-          id: newId,
-          name,
-          count,
-          used: false,
-          createdAt: new Date(),
-          guideTime: guideTimeStr,
-          special: false
-        };
-
-        await addDoc(ticketsRef, newTicket);
-
-        infoDiv.textContent = `整理番号 ${newId} を発行しました。案内時間: ${guideTimeStr}`;
-
-        // QRコード表示
-        qrCodeDiv.innerHTML = "";
-        await QRCode.toCanvas(qrCodeDiv, JSON.stringify({ id: newId }), { width: 200 });
-
-        // フォームクリア
-        nameInput.value = "";
-        countInput.value = "";
-
-      } catch (error) {
-        console.error(error);
-        errorDiv.textContent = "発券に失敗しました。コンソールを確認してください。";
-      }
-    });
-
-    // 初期ロード
-    await loadConfig();
-
-    // Firestoreの設定リアルタイム監視（発券開始停止の同期用）
-    onSnapshot(configRef, (docSnap) => {
-      if (!docSnap.exists()) return;
-      configData = docSnap.data();
-      timeRanges = configData.timeRanges || [];
-    });
   </script>
-
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 </body>
 </html>
