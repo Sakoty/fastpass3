@@ -6,105 +6,49 @@
   <title>ファストパス発券</title>
   <style>
     body {
-      font-family: "Helvetica Neue", Arial, sans-serif;
-      background: linear-gradient(135deg, #1e5799 0%,#2989d8 50%,#207cca 75%,#7db9e8 100%);
-      color: white;
-      padding: 20px;
+      font-family: 'Arial', sans-serif;
       max-width: 480px;
       margin: auto;
-      border-radius: 10px;
-      box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      padding: 20px;
+      background: #f7f7f7;
     }
     h1 {
       text-align: center;
-      margin-bottom: 20px;
-      font-weight: 700;
-      text-shadow: 0 2px 5px rgba(0,0,0,0.4);
+      color: #007bff;
     }
-    form {
-      background: rgba(255, 255, 255, 0.15);
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: inset 0 0 10px rgba(255,255,255,0.2);
-    }
-    label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: 600;
-    }
-    input[type="text"],
-    input[type="number"] {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 15px;
-      border: none;
-      border-radius: 6px;
-      font-size: 1em;
-      box-sizing: border-box;
-    }
-    button {
-      width: 100%;
-      background: #4caf50;
-      border: none;
-      color: white;
-      padding: 12px;
-      font-size: 1.1em;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-    button:hover {
-      background: #45a049;
-    }
-    #message {
-      margin-top: 15px;
-      font-weight: bold;
-      text-align: center;
-    }
-    #qrCode {
+    #issueResult {
       margin-top: 20px;
       text-align: center;
-    }
-    #qrCode canvas {
-      width: 200px !important;
-      height: 200px !important;
-      margin: auto;
-      display: block;
-      border-radius: 10px;
-      box-shadow: 0 0 8px rgba(0,0,0,0.3);
-      background: white;
-    }
-    #guideTime {
-      margin-top: 15px;
-      font-weight: bold;
-      text-align: center;
-      background: rgba(255,255,255,0.3);
+      background: #fff;
+      padding: 15px;
       border-radius: 8px;
-      padding: 8px;
-      color: #000;
+      box-shadow: 0 0 5px #ccc;
+    }
+    #qrCode {
+      margin: 10px auto;
     }
   </style>
 </head>
 <body>
-  <h1>ファストパス発券</h1>
-  <form id="issueForm">
-    <label for="name">名前</label>
-    <input type="text" id="name" required />
-    <label for="count">人数</label>
-    <input type="number" id="count" min="1" value="1" required />
-    <button type="submit">発券する</button>
-  </form>
 
-  <div id="message"></div>
-  <div id="guideTime"></div>
-  <div id="qrCode"></div>
+  <h1>ファストパス発券ページ</h1>
+
+  <button id="issueBtn">ファストパス発券</button>
+
+  <div id="issueResult" style="display:none;">
+    <p><strong>発券ID:</strong> <span id="issuedId"></span></p>
+    <div id="qrCode"></div>
+    <p><strong>案内時間:</strong> <span id="guideTime"></span></p>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, doc, getDoc, setDoc, onSnapshot, addDoc, query, orderBy, limit, getDocs
+      getFirestore, collection, doc, getDoc, setDoc, onSnapshot, getDocs, addDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+
+    // QRコード生成ライブラリを動的に読み込み
+    import QRCode from "https://cdn.skypack.dev/qrcode";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -118,22 +62,119 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-    const configRef = doc(db, "settings", "config");
     const ticketsRef = collection(db, "tickets");
+    const configRef = doc(db, "settings", "config");
 
-    const issueForm = document.getElementById("issueForm");
-    const messageDiv = document.getElementById("message");
-    const guideTimeDiv = document.getElementById("guideTime");
+    // UI要素
+    const issueBtn = document.getElementById("issueBtn");
+    const issueResult = document.getElementById("issueResult");
+    const issuedIdSpan = document.getElementById("issuedId");
     const qrCodeDiv = document.getElementById("qrCode");
+    const guideTimeSpan = document.getElementById("guideTime");
 
-    let isActive = false;
+    // 設定情報保持用
     let timeRanges = [];
+    let issueEnabled = false;
 
-    // メッセージ表示関数
-    function showMessage(msg, error = false) {
-      messageDiv.textContent = msg;
-      messageDiv.style.color = error ? "red" : "green";
+    // 設定を取得して保持
+    onSnapshot(configRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+      const data = docSnap.data();
+      timeRanges = data.timeRanges || [];
+      issueEnabled = data.issueEnabled || false;
+      issueBtn.disabled = !issueEnabled;
+    });
+
+    function pad3(num) {
+      return String(num).padStart(3, "0");
     }
 
-    // 案内時間
+    // 案内時間計算（発券枚数に応じて10分ずつずらす）
+    async function calculateGuideTime(issueCount) {
+      if (timeRanges.length === 0) return "案内時間設定なし";
+
+      // 発券枚数に応じて案内時間を決定（例：0枚目は最初の時間帯の開始時間）
+      // 1枠目の時間帯を取得して例示
+      const range = timeRanges[0];
+      if (!range) return "案内時間設定なし";
+
+      const start = range.start; // "HH:mm"
+      const end = range.end;     // "HH:mm"
+
+      // 開始時刻をDateオブジェクト化
+      const [sh, sm] = start.split(":").map(Number);
+      let startDate = new Date();
+      startDate.setHours(sh, sm, 0, 0);
+
+      // 10分×発券枚数分を足す
+      startDate = new Date(startDate.getTime() + issueCount * 10 * 60000);
+
+      // 終了時刻は開始時刻＋10分
+      const endDate = new Date(startDate.getTime() + 10 * 60000);
+
+      // 時刻フォーマット（HH:mm）
+      function fmt(d) {
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      }
+
+      // 範囲を超えていれば終了時刻表示なしに
+      if (fmt(endDate) > end) {
+        return `${fmt(startDate)} 〜 ${end}まで`;
+      }
+
+      return `${fmt(startDate)} 〜 ${fmt(endDate)}`;
+    }
+
+    issueBtn.addEventListener("click", async () => {
+      if (!issueEnabled) {
+        alert("現在は発券停止中です。");
+        return;
+      }
+      issueBtn.disabled = true;
+      issuedIdSpan.textContent = "";
+      qrCodeDiv.innerHTML = "";
+      guideTimeSpan.textContent = "";
+
+      try {
+        // 発券済み枚数カウント
+        const snapshot = await getDocs(ticketsRef);
+        const issueCount = snapshot.size;
+        const newId = "FP" + pad3(issueCount + 1);
+
+        // 案内時間計算
+        const guideTime = await calculateGuideTime(issueCount);
+
+        // 新規発券情報
+        const newTicket = {
+          id: newId,
+          status: "valid",
+          createdAt: new Date(),
+          startTime: guideTime,
+          special: false
+        };
+
+        await addDoc(ticketsRef, newTicket);
+
+        issuedIdSpan.textContent = newId;
+        guideTimeSpan.textContent = guideTime;
+
+        // QRコード生成
+        QRCode.toCanvas(qrCodeDiv, newId, { width: 200 }, (error) => {
+          if (error) {
+            console.error(error);
+            qrCodeDiv.textContent = "QRコード生成に失敗しました";
+          }
+        });
+
+        issueResult.style.display = "block";
+      } catch (error) {
+        alert("発券に失敗しました。コンソールをご確認ください。");
+        console.error(error);
+      } finally {
+        issueBtn.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>
