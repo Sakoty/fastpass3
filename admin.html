@@ -1,94 +1,140 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ファストパス管理</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ファストパス 管理画面</title>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
       padding: 20px;
+      background-color: #f4f4f4;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
+
+    h1 {
       text-align: center;
+      margin-bottom: 20px;
     }
-    th {
-      background-color: #f2f2f2;
+
+    .container {
+      max-width: 800px;
+      margin: auto;
     }
-    .used {
-      background-color: #e0ffe0;
+
+    .pass-card {
+      background: #fff;
+      border-left: 8px solid #4caf50;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      transition: background 0.3s ease;
     }
-    .not-used {
-      background-color: #ffe0e0;
+
+    .pass-card.used {
+      border-left-color: #f44336;
+      background-color: #fcebea;
+    }
+
+    .pass-card.deleted {
+      border-left-color: #9e9e9e;
+      background-color: #e0e0e0;
+    }
+
+    .pass-header {
+      font-weight: bold;
+      font-size: 1.2em;
+      margin-bottom: 5px;
+    }
+
+    .pass-info {
+      margin: 5px 0;
+    }
+
+    .buttons {
+      margin-top: 10px;
+    }
+
+    .buttons button {
+      margin-right: 8px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+
+    .delete-btn {
+      background-color: #f44336;
+      color: white;
+    }
+
+    .restore-btn {
+      background-color: #4caf50;
+      color: white;
+    }
+
+    @media (max-width: 600px) {
+      .pass-card {
+        font-size: 0.95em;
+      }
     }
   </style>
 </head>
 <body>
-  <h2>ファストパス管理ページ</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>名前</th>
-        <th>人数</th>
-        <th>状態</th>
-        <th>発行日時</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody id="passList"></tbody>
-  </table>
+  <h1>ファストパス 管理画面</h1>
+  <div class="container" id="passList">読み込み中...</div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const passList = document.getElementById("passList");
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    function renderPass(doc) {
+      const data = doc.data();
+      const div = document.createElement("div");
+      div.className = "pass-card" +
+        (data.used ? " used" : "") +
+        (data.deleted ? " deleted" : "");
 
-    const passList = document.getElementById('passList');
-
-    onSnapshot(collection(db, "fastpasses"), (snapshot) => {
-      passList.innerHTML = "";
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const tr = document.createElement("tr");
-        tr.className = data.status === "使用済み" ? "used" : "not-used";
-        tr.innerHTML = `
-          <td>${data.id}</td>
-          <td>${data.name}</td>
-          <td>${data.count}</td>
-          <td>${data.status}</td>
-          <td>${data.issuedAt?.toDate ? data.issuedAt.toDate().toLocaleString() : ''}</td>
-          <td><button onclick="deletePass('${docSnap.id}')">削除</button></td>
-        `;
-        passList.appendChild(tr);
-      });
-    });
-
-    window.deletePass = async function(id) {
-      if (confirm("このファストパスを削除しますか？")) {
-        await deleteDoc(doc(db, "fastpasses", id));
-      }
+      div.innerHTML = `
+        <div class="pass-header">ID: ${data.id}</div>
+        <div class="pass-info">名前: ${data.name || "不明"}</div>
+        <div class="pass-info">人数: ${data.number || "不明"}名</div>
+        <div class="pass-info">案内時間: ${data.time || "未設定"}</div>
+        <div class="pass-info">状態: ${data.used ? "使用済み" : (data.deleted ? "削除済み" : "有効")}</div>
+        <div class="buttons">
+          <button class="${data.deleted ? 'restore-btn' : 'delete-btn'}"
+                  onclick="toggleDelete('${doc.id}', ${data.deleted})">
+            ${data.deleted ? "復元" : "削除"}
+          </button>
+        </div>
+      `;
+      passList.appendChild(div);
     }
+
+    function toggleDelete(docId, isDeleted) {
+      db.collection("fastpasses").doc(docId).update({ deleted: !isDeleted });
+    }
+
+    db.collection("fastpasses").orderBy("timestamp", "desc").onSnapshot(snapshot => {
+      passList.innerHTML = "";
+      snapshot.forEach(doc => renderPass(doc));
+    });
   </script>
 </body>
 </html>
