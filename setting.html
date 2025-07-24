@@ -2,113 +2,202 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ファストパス設定</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>発券設定ページ</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 10px; }
+    input[type="time"] {
+      width: 150px;
+      margin-right: 10px;
+      padding: 5px;
+      font-size: 1em;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px;
+      font-size: 1.1em;
+      cursor: pointer;
+    }
+    .status {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    #message {
+      margin-top: 10px;
+      font-weight: bold;
+      color: green;
+    }
+    #error {
+      margin-top: 10px;
+      font-weight: bold;
+      color: red;
+    }
+  </style>
 </head>
-<body class="bg-gradient-to-r from-blue-100 to-blue-300 min-h-screen flex flex-col items-center p-6">
-  <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6">
-    <h1 class="text-2xl font-bold text-center text-blue-700 mb-6">案内時間帯とファストパス設定</h1>
+<body>
+  <h1>発券設定</h1>
 
-    <div class="space-y-4">
-      <div>
-        <label class="block font-semibold text-blue-800">案内可能時間帯1：</label>
-        <input type="time" id="time1Start" class="border p-2 rounded w-40" /> ～
-        <input type="time" id="time1End" class="border p-2 rounded w-40" />
-      </div>
-      <div>
-        <label class="block font-semibold text-blue-800">案内可能時間帯2：</label>
-        <input type="time" id="time2Start" class="border p-2 rounded w-40" /> ～
-        <input type="time" id="time2End" class="border p-2 rounded w-40" />
-      </div>
-      <div>
-        <label class="block font-semibold text-blue-800">案内可能時間帯3：</label>
-        <input type="time" id="time3Start" class="border p-2 rounded w-40" /> ～
-        <input type="time" id="time3End" class="border p-2 rounded w-40" />
-      </div>
-
-      <div class="mt-4">
-        <label class="block font-semibold text-blue-800">特別ファストパス発行：</label>
-        <input type="text" id="specialName" placeholder="名前" class="border p-2 rounded w-full mt-1" />
-        <input type="number" id="specialCount" placeholder="人数" class="border p-2 rounded w-full mt-2" />
-        <button onclick="issueSpecial()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mt-2 w-full">特別発行</button>
-      </div>
-
-      <div class="flex justify-between mt-6">
-        <button onclick="startIssuing()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded w-1/2 mr-2">発券開始</button>
-        <button onclick="stopIssuing()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded w-1/2 ml-2">発券終了</button>
-      </div>
-    </div>
+  <h2>案内可能な時間帯（最大3枠）</h2>
+  <div>
+    <label>枠1: <input type="time" id="start1" /> ～ <input type="time" id="end1" /></label>
+    <label>枠2: <input type="time" id="start2" /> ～ <input type="time" id="end2" /></label>
+    <label>枠3: <input type="time" id="start3" /> ～ <input type="time" id="end3" /></label>
   </div>
 
-  <script>
+  <div>
+    <h2>発券をコントロール</h2>
+    <button id="startIssueBtn">発券を開始</button>
+    <button id="stopIssueBtn">発券を停止</button>
+    <div class="status" id="currentStatus">状態を取得中...</div>
+  </div>
+
+  <button id="saveBtn">設定を保存する</button>
+
+  <div id="message"></div>
+  <div id="error"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, onSnapshot
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
+      storageBucket: "fastpass-system.firebasestorage.app",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-    function saveTimes() {
-      const data = {
-        time1: { start: time1Start.value, end: time1End.value },
-        time2: { start: time2Start.value, end: time2End.value },
-        time3: { start: time3Start.value, end: time3End.value },
-      };
-      db.collection("settings").doc("timeSlots").set(data);
+    const configRef = doc(db, "settings", "config");
+
+    const messageDiv = document.getElementById("message");
+    const errorDiv = document.getElementById("error");
+    const currentStatusDiv = document.getElementById("currentStatus");
+    const startIssueBtn = document.getElementById("startIssueBtn");
+    const stopIssueBtn = document.getElementById("stopIssueBtn");
+    const saveBtn = document.getElementById("saveBtn");
+
+    function showMessage(msg) {
+      messageDiv.textContent = msg;
+      errorDiv.textContent = "";
+    }
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      messageDiv.textContent = "";
+    }
+    function clearMessages() {
+      messageDiv.textContent = "";
+      errorDiv.textContent = "";
     }
 
-    ["time1Start", "time1End", "time2Start", "time2End", "time3Start", "time3End"].forEach(id => {
-      document.getElementById(id).addEventListener("change", saveTimes);
-    });
-
-    function issueSpecial() {
-      const name = document.getElementById("specialName").value;
-      const count = parseInt(document.getElementById("specialCount").value);
-      if (!name || isNaN(count)) return alert("名前と人数を正しく入力してください。");
-
-      db.collection("fastpasses").add({
-        name,
-        count,
-        issuedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        status: "特別",
-        used: false,
-      });
-      alert("特別ファストパスを発行しました。");
+    // 状態表示更新
+    function updateStatus(isActive) {
+      currentStatusDiv.textContent = `現在の状態：${isActive ? "発券中" : "停止中"}`;
     }
 
-    function startIssuing() {
-      db.collection("settings").doc("issueStatus").set({ active: true });
-      alert("発券を開始しました。");
-    }
-
-    function stopIssuing() {
-      db.collection("settings").doc("issueStatus").set({ active: false });
-      alert("発券を終了しました。");
-    }
-
-    async function loadTimes() {
-      const doc = await db.collection("settings").doc("timeSlots").get();
-      if (doc.exists) {
-        const d = doc.data();
-        time1Start.value = d.time1.start;
-        time1End.value = d.time1.end;
-        time2Start.value = d.time2.start;
-        time2End.value = d.time2.end;
-        time3Start.value = d.time3.start;
-        time3End.value = d.time3.end;
+    async function loadConfig() {
+      try {
+        const snap = await getDoc(configRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          const ranges = data.timeRanges || [];
+          for (let i = 0; i < 3; i++) {
+            const startInput = document.getElementById(`start${i + 1}`);
+            const endInput = document.getElementById(`end${i + 1}`);
+            if (ranges[i]) {
+              startInput.value = ranges[i].start || "";
+              endInput.value = ranges[i].end || "";
+            } else {
+              startInput.value = "";
+              endInput.value = "";
+            }
+          }
+          updateStatus(data.isActive);
+        } else {
+          for (let i = 1; i <= 3; i++) {
+            document.getElementById(`start${i}`).value = "";
+            document.getElementById(`end${i}`).value = "";
+          }
+          updateStatus(false);
+        }
+      } catch (e) {
+        showError("設定の読み込みに失敗しました");
+        console.error(e);
       }
     }
 
-    loadTimes();
+    async function saveSettings() {
+      clearMessages();
+      try {
+        const timeRanges = [];
+        for (let i = 1; i <= 3; i++) {
+          const start = document.getElementById(`start${i}`).value || "";
+          const end = document.getElementById(`end${i}`).value || "";
+          if (start && end) {
+            timeRanges.push({ start, end });
+          }
+        }
+        const snap = await getDoc(configRef);
+        const currentData = snap.exists() ? snap.data() : {};
+        const isActive = currentData.isActive || false;
+
+        await setDoc(configRef, {
+          timeRanges,
+          isActive
+        }, { merge: true });
+
+        showMessage("設定を保存しました。");
+      } catch (e) {
+        showError("設定の保存に失敗しました");
+        console.error(e);
+      }
+    }
+
+    async function setIssueStatus(enabled) {
+      clearMessages();
+      try {
+        await setDoc(configRef, { isActive: enabled }, { merge: true });
+        updateStatus(enabled);
+        showMessage(enabled ? "発券を開始しました。" : "発券を停止しました。");
+      } catch (e) {
+        showError("状態の変更に失敗しました");
+        console.error(e);
+      }
+    }
+
+    startIssueBtn.addEventListener("click", () => setIssueStatus(true));
+    stopIssueBtn.addEventListener("click", () => setIssueStatus(false));
+    saveBtn.addEventListener("click", saveSettings);
+
+    loadConfig();
+
+    // Firestoreリアルタイム更新反映
+    onSnapshot(configRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+      const data = docSnap.data();
+      const ranges = data.timeRanges || [];
+      for (let i = 0; i < 3; i++) {
+        const startInput = document.getElementById(`start${i + 1}`);
+        const endInput = document.getElementById(`end${i + 1}`);
+        if (ranges[i]) {
+          startInput.value = ranges[i].start || "";
+          endInput.value = ranges[i].end || "";
+        } else {
+          startInput.value = "";
+          endInput.value = "";
+        }
+      }
+      updateStatus(data.isActive);
+    });
   </script>
 </body>
 </html>
