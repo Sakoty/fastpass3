@@ -2,143 +2,113 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ファストパス設定</title>
-  <style>
-    body {
-      font-family: 'Arial', sans-serif;
-      padding: 20px;
-      background-color: #f5f7fa;
-    }
-    h1 {
-      text-align: center;
-      color: #333;
-    }
-    .container {
-      max-width: 600px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    label {
-      display: block;
-      margin-top: 15px;
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      font-size: 16px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
-    button {
-      background-color: #007bff;
-      color: #fff;
-      border: none;
-      margin-top: 15px;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-    .time-row {
-      display: flex;
-      gap: 10px;
-      margin-top: 5px;
-    }
-    .time-row input {
-      flex: 1;
-    }
-  </style>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 </head>
-<body>
-  <div class="container">
-    <h1>ファストパス設定</h1>
-    
-    <button onclick="startIssuing()">発券開始</button>
-    <button onclick="stopIssuing()">発券終了</button>
+<body class="bg-gradient-to-r from-blue-100 to-blue-300 min-h-screen flex flex-col items-center p-6">
+  <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6">
+    <h1 class="text-2xl font-bold text-center text-blue-700 mb-6">案内時間帯とファストパス設定</h1>
 
-    <label>案内可能時間帯（最大3つまで）</label>
-    <div class="time-row">
-      <input type="time" id="time1" />
-      <input type="time" id="time2" />
-      <input type="time" id="time3" />
+    <div class="space-y-4">
+      <div>
+        <label class="block font-semibold text-blue-800">案内可能時間帯1：</label>
+        <input type="time" id="time1Start" class="border p-2 rounded w-40" /> ～
+        <input type="time" id="time1End" class="border p-2 rounded w-40" />
+      </div>
+      <div>
+        <label class="block font-semibold text-blue-800">案内可能時間帯2：</label>
+        <input type="time" id="time2Start" class="border p-2 rounded w-40" /> ～
+        <input type="time" id="time2End" class="border p-2 rounded w-40" />
+      </div>
+      <div>
+        <label class="block font-semibold text-blue-800">案内可能時間帯3：</label>
+        <input type="time" id="time3Start" class="border p-2 rounded w-40" /> ～
+        <input type="time" id="time3End" class="border p-2 rounded w-40" />
+      </div>
+
+      <div class="mt-4">
+        <label class="block font-semibold text-blue-800">特別ファストパス発行：</label>
+        <input type="text" id="specialName" placeholder="名前" class="border p-2 rounded w-full mt-1" />
+        <input type="number" id="specialCount" placeholder="人数" class="border p-2 rounded w-full mt-2" />
+        <button onclick="issueSpecial()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mt-2 w-full">特別発行</button>
+      </div>
+
+      <div class="flex justify-between mt-6">
+        <button onclick="startIssuing()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded w-1/2 mr-2">発券開始</button>
+        <button onclick="stopIssuing()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded w-1/2 ml-2">発券終了</button>
+      </div>
     </div>
-    <button onclick="saveTimes()">時間を保存</button>
-
-    <hr>
-
-    <label>特別ファストパス発行</label>
-    <input type="text" id="specialName" placeholder="名前"/>
-    <input type="number" id="specialGroup" placeholder="人数"/>
-    <button onclick="issueSpecial()">特別発券</button>
   </div>
-
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
       projectId: "fastpass-system",
-      storageBucket: "fastpass-system.firebasestorage.app",
+      storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5",
       measurementId: "G-SLPKMCNY53"
     };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
     function saveTimes() {
-      const times = [time1.value, time2.value, time3.value].filter(t => t);
-      db.collection("settings").doc("times").set({ times });
-      alert("時間帯を保存しました");
+      const data = {
+        time1: { start: time1Start.value, end: time1End.value },
+        time2: { start: time2Start.value, end: time2End.value },
+        time3: { start: time3Start.value, end: time3End.value },
+      };
+      db.collection("settings").doc("timeSlots").set(data);
     }
 
-    function issueSpecial() {
-      const name = specialName.value;
-      const group = parseInt(specialGroup.value, 10);
-      if (!name || !group) {
-        alert("名前と人数を入力してください");
-        return;
-      }
+    ["time1Start", "time1End", "time2Start", "time2End", "time3Start", "time3End"].forEach(id => {
+      document.getElementById(id).addEventListener("change", saveTimes);
+    });
 
-      db.collection("fastpasses").get().then(snapshot => {
-        const count = snapshot.size + 1;
-        const id = "FP" + String(count).padStart(3, "0");
-        db.collection("fastpasses").doc(id).set({
-          id,
-          name,
-          group,
-          issuedAt: new Date(),
-          used: false,
-          isSpecial: true
-        });
-        alert(`特別ファストパス ${id} を発行しました`);
+    function issueSpecial() {
+      const name = document.getElementById("specialName").value;
+      const count = parseInt(document.getElementById("specialCount").value);
+      if (!name || isNaN(count)) return alert("名前と人数を正しく入力してください。");
+
+      db.collection("fastpasses").add({
+        name,
+        count,
+        issuedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: "特別",
+        used: false,
       });
+      alert("特別ファストパスを発行しました。");
     }
 
     function startIssuing() {
-      db.collection("settings").doc("status").set({ issuing: true });
-      alert("発券を開始しました");
+      db.collection("settings").doc("issueStatus").set({ active: true });
+      alert("発券を開始しました。");
     }
 
     function stopIssuing() {
-      db.collection("settings").doc("status").set({ issuing: false });
-      alert("発券を終了しました");
+      db.collection("settings").doc("issueStatus").set({ active: false });
+      alert("発券を終了しました。");
     }
 
-    // 初期値の読み込み（時間帯）
-    db.collection("settings").doc("times").onSnapshot(doc => {
+    async function loadTimes() {
+      const doc = await db.collection("settings").doc("timeSlots").get();
       if (doc.exists) {
-        const data = doc.data();
-        [time1.value, time2.value, time3.value] = data.times || ["", "", ""];
+        const d = doc.data();
+        time1Start.value = d.time1.start;
+        time1End.value = d.time1.end;
+        time2Start.value = d.time2.start;
+        time2End.value = d.time2.end;
+        time3Start.value = d.time3.start;
+        time3End.value = d.time3.end;
       }
-    });
+    }
+
+    loadTimes();
   </script>
 </body>
 </html>
