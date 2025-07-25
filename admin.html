@@ -1,9 +1,8 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ファストパス管理</title>
   <style>
     body { font-family: sans-serif; background: #fffbe6; padding: 20px; }
@@ -11,11 +10,13 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
     th { background-color: #f0c040; }
     .used { background: #ccc; }
+    button { margin: 2px; }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc
+      getFirestore, collection, onSnapshot, query, orderBy,
+      doc, updateDoc, deleteDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -37,21 +38,41 @@
       tbody.innerHTML = "";
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
+        const id = docSnap.id;
+
         const tr = document.createElement("tr");
         if (data.used) tr.classList.add("used");
+
+        const usedText = data.used ? "使用済" : "未使用";
+        const toggleText = data.used ? "未使用に戻す" : "使用済にする";
 
         tr.innerHTML = `
           <td>${data.id}</td>
           <td>${data.name}</td>
           <td>${data.numPeople}</td>
           <td>${data.time}</td>
-          <td>${data.used ? "使用済" : "未使用"}</td>
-          <td><button data-id="${docSnap.id}" ${data.used ? "disabled" : ""}>呼び出し</button></td>
+          <td>${usedText}</td>
+          <td>
+            <button class="toggle" data-id="${id}" data-used="${data.used}">${toggleText}</button>
+            <button class="delete" data-id="${id}">削除</button>
+          </td>
         `;
-        tr.querySelector("button").addEventListener("click", async (e) => {
-          const id = e.target.getAttribute("data-id");
-          await updateDoc(doc(db, "passes", id), { used: true });
+
+        // 使用済み/未使用 切り替えボタン
+        tr.querySelector(".toggle").addEventListener("click", async (e) => {
+          const docId = e.target.getAttribute("data-id");
+          const current = e.target.getAttribute("data-used") === "true";
+          await updateDoc(doc(db, "passes", docId), { used: !current });
         });
+
+        // 削除ボタン
+        tr.querySelector(".delete").addEventListener("click", async (e) => {
+          const docId = e.target.getAttribute("data-id");
+          if (confirm("本当に削除しますか？")) {
+            await deleteDoc(doc(db, "passes", docId));
+          }
+        });
+
         tbody.appendChild(tr);
       });
     });
@@ -61,7 +82,9 @@
   <h1>ファストパス管理画面</h1>
   <table>
     <thead>
-      <tr><th>ID</th><th>名前</th><th>人数</th><th>時間</th><th>状態</th><th>操作</th></tr>
+      <tr>
+        <th>ID</th><th>名前</th><th>人数</th><th>時間</th><th>状態</th><th>操作</th>
+      </tr>
     </thead>
     <tbody id="list"></tbody>
   </table>
