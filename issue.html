@@ -33,10 +33,10 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 発券状態管理用変数
     let isIssuing = false;
+    let timeSlots = [];
 
-    // Firestoreの発券状態を監視
+    // 発券開始・停止状態をFirestoreで監視
     const issueStatusRef = doc(db, "settings", "issueStatus");
     onSnapshot(issueStatusRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -47,7 +47,17 @@
       updateUI();
     });
 
-    // UIを発券状態に応じて切替
+    // 案内時間スロットの存在チェック用に取得（中身は使わない）
+    const timeSlotsDocRef = doc(db, "settings", "timeSlots");
+    onSnapshot(timeSlotsDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        timeSlots = docSnap.data().slots || [];
+      } else {
+        timeSlots = [];
+      }
+      showCurrentTime();
+    });
+
     function updateUI() {
       const currentTimeEl = document.getElementById("currentTime");
       const submitBtn = document.querySelector("form#form button[type=submit]");
@@ -60,7 +70,7 @@
       }
     }
 
-    // 次の番号取得
+    // 次の番号を取得
     async function getNextNumber() {
       const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
       const snapshot = await getDocs(q);
@@ -78,15 +88,23 @@
       return snapshot.size;
     }
 
-    // 10分スロットを時間で返す（start〜endの文字列）
-    function getSlotTime(baseDate, slotIndex) {
+    // 現在時刻を10分刻みに繰り上げる
+    function roundUpToNext10Minutes(date) {
+      const d = new Date(date.getTime());
+      d.setSeconds(0);
+      d.setMilliseconds(0);
+      const minutes = d.getMinutes();
+      const mod = minutes % 10;
+      if (mod !== 0) {
+        d.setMinutes(minutes + (10 - mod));
+      }
+      return d;
+    }
+
+    // 10分刻みの案内時間を「HH:mm〜HH:mm」形式で返す
+    function formatSlotTime(baseDate, slotIndex) {
       const slotStart = new Date(baseDate.getTime());
-      slotStart.setMinutes(Math.ceil(slotStart.getMinutes() / 10) * 10);
-      slotStart.setSeconds(0);
-      slotStart.setMilliseconds(0);
-
       slotStart.setMinutes(slotStart.getMinutes() + slotIndex * 10);
-
       const slotEnd = new Date(slotStart.getTime());
       slotEnd.setMinutes(slotEnd.getMinutes() + 10);
 
@@ -96,23 +114,31 @@
       return `${startStr}〜${endStr}`;
     }
 
-    // 発券時の案内時間を取得（発券済み枚数に応じてずらす）
+    // 発券時の案内時間を取得（10分刻みでずらす）
     async function getAvailableTime() {
+      if (timeSlots.length === 0) return null;
       const count = await getIssuedCount();
       const now = new Date();
-      return getSlotTime(now, count);
+      const baseTime = roundUpToNext10Minutes(now);
+      return formatSlotTime(baseTime, count);
     }
 
-    // 現在の案内時間（発券済み枚数に応じてずらす）を表示
+    // 現在の案内時間を表示
     async function showCurrentTime() {
-      if (!isIssuing) return;
       const el = document.getElementById("currentTime");
+      if (!isIssuing) {
+        el.textContent = "現在、発券は停止中です。";
+        return;
+      }
+      if (timeSlots.length === 0) {
+        el.textContent = "案内時間が未設定です。管理画面で設定してください。";
+        return;
+      }
       const time = await getAvailableTime();
       el.textContent = `現在発券中の案内時間：${time}`;
     }
 
     window.addEventListener("load", () => {
-      // 最初はボタン無効にしておく
       document.querySelector("form#form button[type=submit]").disabled = true;
 
       document.getElementById("form").addEventListener("submit", async (e) => {
@@ -120,6 +146,10 @@
 
         if (!isIssuing) {
           alert("現在、発券は停止中です。");
+          return;
+        }
+        if (timeSlots.length === 0) {
+          alert("案内時間が未設定です。管理画面で設定してください。");
           return;
         }
 
