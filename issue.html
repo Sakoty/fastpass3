@@ -16,7 +16,8 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp
+      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp,
+      doc, onSnapshot
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -31,6 +32,33 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
+    // 発券状態管理用変数
+    let isIssuing = false;
+
+    // Firestoreの発券状態を監視
+    const issueStatusRef = doc(db, "settings", "issueStatus");
+    onSnapshot(issueStatusRef, (docSnap) => {
+      if (docSnap.exists()) {
+        isIssuing = docSnap.data().isIssuing;
+      } else {
+        isIssuing = false;
+      }
+      updateUI();
+    });
+
+    // UIを発券状態に応じて切替
+    function updateUI() {
+      const currentTimeEl = document.getElementById("currentTime");
+      const submitBtn = document.querySelector("form#form button[type=submit]");
+      if (isIssuing) {
+        submitBtn.disabled = false;
+        showCurrentTime();
+      } else {
+        submitBtn.disabled = true;
+        currentTimeEl.textContent = "現在、発券は停止中です。";
+      }
+    }
 
     // 次の番号取得
     async function getNextNumber() {
@@ -52,23 +80,16 @@
 
     // 10分スロットを時間で返す（start〜endの文字列）
     function getSlotTime(baseDate, slotIndex) {
-      // baseDate: Date（基準時刻）
-      // slotIndex: 0以上の整数（何個目の10分枠か）
-
-      // 10分刻みのオフセット計算
       const slotStart = new Date(baseDate.getTime());
       slotStart.setMinutes(Math.ceil(slotStart.getMinutes() / 10) * 10);
       slotStart.setSeconds(0);
       slotStart.setMilliseconds(0);
 
-      // slotIndex分だけ10分足す
       slotStart.setMinutes(slotStart.getMinutes() + slotIndex * 10);
 
-      // slotEnd は10分後
       const slotEnd = new Date(slotStart.getTime());
       slotEnd.setMinutes(slotEnd.getMinutes() + 10);
 
-      // 表示用フォーマット
       const pad = n => n.toString().padStart(2, "0");
       const startStr = `${pad(slotStart.getHours())}:${pad(slotStart.getMinutes())}`;
       const endStr = `${pad(slotEnd.getHours())}:${pad(slotEnd.getMinutes())}`;
@@ -84,19 +105,23 @@
 
     // 現在の案内時間（発券済み枚数に応じてずらす）を表示
     async function showCurrentTime() {
+      if (!isIssuing) return;
       const el = document.getElementById("currentTime");
       const time = await getAvailableTime();
       el.textContent = `現在発券中の案内時間：${time}`;
     }
 
     window.addEventListener("load", () => {
-      showCurrentTime();
-
-      // 1分ごとに更新（案内時間が変わるのを反映）
-      setInterval(showCurrentTime, 60000);
+      // 最初はボタン無効にしておく
+      document.querySelector("form#form button[type=submit]").disabled = true;
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
+
+        if (!isIssuing) {
+          alert("現在、発券は停止中です。");
+          return;
+        }
 
         const name = document.getElementById("name").value.trim();
         const numPeople = parseInt(document.getElementById("people").value);
