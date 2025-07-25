@@ -8,14 +8,15 @@
     body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f8ff; }
     h1 { color: #0066cc; }
     form { margin-bottom: 20px; }
-    label, input, select { display: block; margin: 10px auto; }
+    label, input { display: block; margin: 10px auto; }
     #qrcode { margin: 20px auto; }
+    #currentTime { font-weight: bold; margin-bottom: 15px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, doc, getDoc
+      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -31,73 +32,120 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 次の番号取得
     async function getNextNumber() {
       const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
       const snapshot = await getDocs(q);
       if (snapshot.empty) return 1;
-
       const lastDoc = snapshot.docs[0].data();
       const lastNumber = parseInt(lastDoc.number);
       if (isNaN(lastNumber)) return 1;
-
       return lastNumber + 1;
     }
 
-    async function getAvailableTime() {
-      const docRef = doc(db, "settings", "timeSlots");
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return null;
-      const slots = docSnap.data().slots || [];
-
-      const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
+    // 発券済み枚数を取得
+    async function getIssuedCount() {
+      const q = query(collection(db, "passes"));
       const snapshot = await getDocs(q);
-      const count = snapshot.size;
-      const index = count % slots.length;
-      return slots[index] || null;
+      return snapshot.size;
     }
 
-    document.getElementById("form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const name = document.getElementById("name").value;
-      const numPeople = parseInt(document.getElementById("people").value);
+    // 10分スロットを時間で返す（start〜endの文字列）
+    function getSlotTime(baseDate, slotIndex) {
+      // baseDate: Date（基準時刻）
+      // slotIndex: 0以上の整数（何個目の10分枠か）
 
-      const number = await getNextNumber();
-      const id = `FP${number.toString().padStart(3, "0")}`;
+      // 10分刻みのオフセット計算
+      const slotStart = new Date(baseDate.getTime());
+      slotStart.setMinutes(Math.ceil(slotStart.getMinutes() / 10) * 10);
+      slotStart.setSeconds(0);
+      slotStart.setMilliseconds(0);
+
+      // slotIndex分だけ10分足す
+      slotStart.setMinutes(slotStart.getMinutes() + slotIndex * 10);
+
+      // slotEnd は10分後
+      const slotEnd = new Date(slotStart.getTime());
+      slotEnd.setMinutes(slotEnd.getMinutes() + 10);
+
+      // 表示用フォーマット
+      const pad = n => n.toString().padStart(2, "0");
+      const startStr = `${pad(slotStart.getHours())}:${pad(slotStart.getMinutes())}`;
+      const endStr = `${pad(slotEnd.getHours())}:${pad(slotEnd.getMinutes())}`;
+      return `${startStr}〜${endStr}`;
+    }
+
+    // 発券時の案内時間を取得（発券済み枚数に応じてずらす）
+    async function getAvailableTime() {
+      const count = await getIssuedCount();
+      const now = new Date();
+      return getSlotTime(now, count);
+    }
+
+    // 現在の案内時間（発券済み枚数に応じてずらす）を表示
+    async function showCurrentTime() {
+      const el = document.getElementById("currentTime");
       const time = await getAvailableTime();
+      el.textContent = `現在発券中の案内時間：${time}`;
+    }
 
-      if (!time) {
-        alert("案内可能時間が設定されていません");
-        return;
-      }
+    window.addEventListener("load", () => {
+      showCurrentTime();
 
-      await addDoc(collection(db, "passes"), {
-        id,
-        number,
-        name,
-        numPeople,
-        time,
-        used: false,
-        createdAt: serverTimestamp()
-      });
+      // 1分ごとに更新（案内時間が変わるのを反映）
+      setInterval(showCurrentTime, 60000);
 
-      document.getElementById("info").innerHTML = `
-        <h2>ファストパス発券完了！</h2>
-        <p>番号：${id}</p>
-        <p>名前：${name}</p>
-        <p>人数：${numPeople}</p>
-        <p>案内時間：${time}</p>
-      `;
+      document.getElementById("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
 
-      const qrContainer = document.getElementById("qrcode");
-      qrContainer.innerHTML = "";
-      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
-        if (!err) qrContainer.appendChild(canvas);
+        const name = document.getElementById("name").value.trim();
+        const numPeople = parseInt(document.getElementById("people").value);
+
+        if (!name) {
+          alert("名前を入力してください");
+          return;
+        }
+        if (isNaN(numPeople) || numPeople < 1) {
+          alert("人数は1以上の数字で入力してください");
+          return;
+        }
+
+        const number = await getNextNumber();
+        const id = `FP${number.toString().padStart(3, "0")}`;
+        const time = await getAvailableTime();
+
+        await addDoc(collection(db, "passes"), {
+          id,
+          number,
+          name,
+          numPeople,
+          time,
+          used: false,
+          createdAt: serverTimestamp()
+        });
+
+        document.getElementById("info").innerHTML = `
+          <h2>ファストパス発券完了！</h2>
+          <p>番号：${id}</p>
+          <p>名前：${name}</p>
+          <p>人数：${numPeople}</p>
+          <p>案内時間：${time}</p>
+        `;
+
+        const qrContainer = document.getElementById("qrcode");
+        qrContainer.innerHTML = "";
+        QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
+          if (!err) qrContainer.appendChild(canvas);
+        });
+
+        showCurrentTime();
       });
     });
   </script>
 </head>
 <body>
   <h1>ファストパス発券</h1>
+  <div id="currentTime">現在発券中の案内時間：--:--〜--:--</div>
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
     <label>人数 <input type="number" id="people" required min="1" /></label>
