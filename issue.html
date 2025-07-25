@@ -47,7 +47,7 @@
       updateUI();
     });
 
-    // 案内時間スロットの存在チェック用に取得（中身は使わない）
+    // 管理画面設定の案内時間スロット監視
     const timeSlotsDocRef = doc(db, "settings", "timeSlots");
     onSnapshot(timeSlotsDocRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -55,22 +55,10 @@
       } else {
         timeSlots = [];
       }
-      showCurrentTime();
+      showNextAvailableTime(); // 時間表示更新
     });
 
-    function updateUI() {
-      const currentTimeEl = document.getElementById("currentTime");
-      const submitBtn = document.querySelector("form#form button[type=submit]");
-      if (isIssuing) {
-        submitBtn.disabled = false;
-        showCurrentTime();
-      } else {
-        submitBtn.disabled = true;
-        currentTimeEl.textContent = "現在、発券は停止中です。";
-      }
-    }
-
-    // 次の番号を取得
+    // 次の番号取得
     async function getNextNumber() {
       const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
       const snapshot = await getDocs(q);
@@ -81,61 +69,50 @@
       return lastNumber + 1;
     }
 
-    // 発券済み枚数を取得
+    // 発券済み枚数取得
     async function getIssuedCount() {
       const q = query(collection(db, "passes"));
       const snapshot = await getDocs(q);
       return snapshot.size;
     }
 
-    // 現在時刻を10分刻みに繰り上げる
-    function roundUpToNext10Minutes(date) {
-      const d = new Date(date.getTime());
-      d.setSeconds(0);
-      d.setMilliseconds(0);
-      const minutes = d.getMinutes();
-      const mod = minutes % 10;
-      if (mod !== 0) {
-        d.setMinutes(minutes + (10 - mod));
-      }
-      return d;
-    }
-
-    // 10分刻みの案内時間を「HH:mm〜HH:mm」形式で返す
-    function formatSlotTime(baseDate, slotIndex) {
-      const slotStart = new Date(baseDate.getTime());
-      slotStart.setMinutes(slotStart.getMinutes() + slotIndex * 10);
-      const slotEnd = new Date(slotStart.getTime());
-      slotEnd.setMinutes(slotEnd.getMinutes() + 10);
-
-      const pad = n => n.toString().padStart(2, "0");
-      const startStr = `${pad(slotStart.getHours())}:${pad(slotStart.getMinutes())}`;
-      const endStr = `${pad(slotEnd.getHours())}:${pad(slotEnd.getMinutes())}`;
-      return `${startStr}〜${endStr}`;
-    }
-
-    // 発券時の案内時間を取得（10分刻みでずらす）
+    // 現在の案内時間を決定（発券済み枚数に応じて）
     async function getAvailableTime() {
-      if (timeSlots.length === 0) return null;
+      if (timeSlots.length === 0) {
+        return "案内時間未設定";
+      }
       const count = await getIssuedCount();
-      const now = new Date();
-      const baseTime = roundUpToNext10Minutes(now);
-      return formatSlotTime(baseTime, count);
+      const index = count % timeSlots.length;
+      return timeSlots[index];
     }
 
-    // 現在の案内時間を表示
-    async function showCurrentTime() {
+    // 発券前に表示する「今発券すると案内される時間」
+    async function showNextAvailableTime() {
       const el = document.getElementById("currentTime");
       if (!isIssuing) {
         el.textContent = "現在、発券は停止中です。";
         return;
       }
+      const count = await getIssuedCount();
       if (timeSlots.length === 0) {
-        el.textContent = "案内時間が未設定です。管理画面で設定してください。";
+        el.textContent = "案内時間が設定されていません。";
         return;
       }
-      const time = await getAvailableTime();
-      el.textContent = `現在発券中の案内時間：${time}`;
+      // count 番目の次の案内時間を取得
+      const nextIndex = count % timeSlots.length;
+      el.textContent = `今発券すると案内される時間：${timeSlots[nextIndex]}`;
+    }
+
+    function updateUI() {
+      const currentTimeEl = document.getElementById("currentTime");
+      const submitBtn = document.querySelector("form#form button[type=submit]");
+      if (isIssuing) {
+        submitBtn.disabled = false;
+        showNextAvailableTime();
+      } else {
+        submitBtn.disabled = true;
+        currentTimeEl.textContent = "現在、発券は停止中です。";
+      }
     }
 
     window.addEventListener("load", () => {
@@ -146,10 +123,6 @@
 
         if (!isIssuing) {
           alert("現在、発券は停止中です。");
-          return;
-        }
-        if (timeSlots.length === 0) {
-          alert("案内時間が未設定です。管理画面で設定してください。");
           return;
         }
 
@@ -193,14 +166,14 @@
           if (!err) qrContainer.appendChild(canvas);
         });
 
-        showCurrentTime();
+        showNextAvailableTime();
       });
     });
   </script>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div id="currentTime">現在発券中の案内時間：--:--〜--:--</div>
+  <div id="currentTime">今発券すると案内される時間：--:--〜--:--</div>
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
     <label>人数 <input type="number" id="people" required min="1" /></label>
