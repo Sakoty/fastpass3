@@ -10,11 +10,12 @@
     .section { margin-top: 30px; }
     label { display: inline-block; width: 120px; text-align: right; margin-right: 8px; }
     .time-pair { margin-bottom: 10px; }
+    #issueStatusMsg { margin-top: 10px; font-weight: bold; color: #006600; }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, doc, setDoc, collection, addDoc, serverTimestamp
+      getFirestore, doc, setDoc, getDoc, collection, addDoc, serverTimestamp, onSnapshot, updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -29,6 +30,50 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 発券状態管理
+    const issueDocRef = doc(db, "settings", "issueStatus");
+
+    async function updateIssueStatusUI(isIssuing) {
+      const statusMsg = document.getElementById("issueStatusMsg");
+      const startBtn = document.getElementById("startIssueBtn");
+      const stopBtn = document.getElementById("stopIssueBtn");
+
+      if (isIssuing) {
+        statusMsg.textContent = "発券中です";
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+      } else {
+        statusMsg.textContent = "発券は停止中です";
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    }
+
+    // ページ読み込み時、Firestoreの発券状態をリアルタイム監視してUI更新
+    onSnapshot(issueDocRef, (docSnap) => {
+      if (!docSnap.exists()) {
+        // 初期値を設定（停止中）
+        setDoc(issueDocRef, { isIssuing: false });
+        updateIssueStatusUI(false);
+      } else {
+        const data = docSnap.data();
+        updateIssueStatusUI(data.isIssuing);
+      }
+    });
+
+    // 発券開始ボタン
+    document.getElementById("startIssueBtn").addEventListener("click", async () => {
+      await updateDoc(issueDocRef, { isIssuing: true });
+      alert("発券を開始しました");
+    });
+
+    // 発券中止ボタン
+    document.getElementById("stopIssueBtn").addEventListener("click", async () => {
+      await updateDoc(issueDocRef, { isIssuing: false });
+      alert("発券を停止しました");
+    });
+
+    // 案内時間設定フォーム
     document.getElementById("setTimeSlots").addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -54,6 +99,7 @@
       alert("案内時間を設定しました。");
     });
 
+    // 特別ファストパス発行フォーム
     document.getElementById("specialForm").addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -90,13 +136,18 @@
       });
 
       alert("特別ファストパスを発行しました");
-      // フォームリセット
       document.getElementById("specialForm").reset();
     });
   </script>
 </head>
 <body>
   <h1>ファストパス設定</h1>
+
+  <div>
+    <button id="startIssueBtn">発券開始</button>
+    <button id="stopIssueBtn" disabled>発券中止</button>
+    <div id="issueStatusMsg">発券状態読み込み中...</div>
+  </div>
 
   <form id="setTimeSlots" class="section">
     <h2>案内可能時間の設定</h2>
