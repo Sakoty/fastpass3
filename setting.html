@@ -1,14 +1,15 @@
-<!-- setting.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>案内時間と特別ファストパス設定</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
-    input, button { margin: 5px; padding: 5px; }
+    input, button { margin: 5px; padding: 5px; font-size: 1em; }
     .section { margin-top: 30px; }
+    label { display: inline-block; width: 120px; text-align: right; margin-right: 8px; }
+    .time-pair { margin-bottom: 10px; }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -30,28 +31,67 @@
 
     document.getElementById("setTimeSlots").addEventListener("submit", async (e) => {
       e.preventDefault();
+
+      function getSlotValue(startId, endId) {
+        const start = document.getElementById(startId).value;
+        const end = document.getElementById(endId).value;
+        if (!start || !end) return null;
+        return `${start}〜${end}`;
+      }
+
       const slots = [
-        document.getElementById("slot1").value,
-        document.getElementById("slot2").value,
-        document.getElementById("slot3").value
+        getSlotValue("slot1Start", "slot1End"),
+        getSlotValue("slot2Start", "slot2End"),
+        getSlotValue("slot3Start", "slot3End")
       ].filter(Boolean);
+
+      if(slots.length === 0) {
+        alert("最低1つは案内時間を設定してください");
+        return;
+      }
+
       await setDoc(doc(db, "settings", "timeSlots"), { slots });
       alert("案内時間を設定しました。");
     });
 
     document.getElementById("specialForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("specialName").value;
-      const numPeople = parseInt(document.getElementById("specialPeople").value);
-      const time = document.getElementById("specialTime").value;
 
+      const name = document.getElementById("specialName").value.trim();
+      const numPeople = parseInt(document.getElementById("specialPeople").value);
+      const specialStart = document.getElementById("specialTimeStart").value;
+      const specialEnd = document.getElementById("specialTimeEnd").value;
+
+      if (!name) {
+        alert("名前を入力してください");
+        return;
+      }
+      if (isNaN(numPeople) || numPeople < 1) {
+        alert("人数は1以上で入力してください");
+        return;
+      }
+      if (!specialStart || !specialEnd) {
+        alert("案内時間を正しく入力してください");
+        return;
+      }
+
+      const time = `${specialStart}〜${specialEnd}`;
       const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
 
       await addDoc(collection(db, "passes"), {
-        id, number: -1, name, numPeople, time, used: false, createdAt: serverTimestamp()
+        id,
+        number: -1,
+        name,
+        numPeople,
+        time,
+        used: false,
+        special: true,
+        createdAt: serverTimestamp()
       });
 
       alert("特別ファストパスを発行しました");
+      // フォームリセット
+      document.getElementById("specialForm").reset();
     });
   </script>
 </head>
@@ -60,17 +100,41 @@
 
   <form id="setTimeSlots" class="section">
     <h2>案内可能時間の設定</h2>
-    <input type="text" id="slot1" placeholder="例：10:00〜10:10" required><br>
-    <input type="text" id="slot2" placeholder="例：10:10〜10:20"><br>
-    <input type="text" id="slot3" placeholder="例：10:20〜10:30"><br>
+
+    <div class="time-pair">
+      <label for="slot1Start">開始時間1</label>
+      <input type="time" id="slot1Start" required />
+      <label for="slot1End">終了時間1</label>
+      <input type="time" id="slot1End" required />
+    </div>
+
+    <div class="time-pair">
+      <label for="slot2Start">開始時間2</label>
+      <input type="time" id="slot2Start" />
+      <label for="slot2End">終了時間2</label>
+      <input type="time" id="slot2End" />
+    </div>
+
+    <div class="time-pair">
+      <label for="slot3Start">開始時間3</label>
+      <input type="time" id="slot3Start" />
+      <label for="slot3End">終了時間3</label>
+      <input type="time" id="slot3End" />
+    </div>
+
     <button type="submit">設定を保存</button>
   </form>
 
   <form id="specialForm" class="section">
     <h2>特別ファストパス発行</h2>
-    <input type="text" id="specialName" placeholder="名前" required><br>
-    <input type="number" id="specialPeople" placeholder="人数" required min="1"><br>
-    <input type="text" id="specialTime" placeholder="案内時間" required><br>
+    <input type="text" id="specialName" placeholder="名前" required /><br />
+    <input type="number" id="specialPeople" placeholder="人数" required min="1" /><br />
+
+    <label for="specialTimeStart">案内開始時間</label>
+    <input type="time" id="specialTimeStart" required />
+    <label for="specialTimeEnd">案内終了時間</label>
+    <input type="time" id="specialTimeEnd" required /><br />
+
     <button type="submit">特別発行</button>
   </form>
 </body>
