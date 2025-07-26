@@ -38,15 +38,18 @@
     const sound = document.getElementById("sound");
 
     const codeReader = new ZXing.BrowserQRCodeReader();
+    let isReading = false;
 
     function showResult(message, isError = false) {
       resultEl.textContent = message;
       resultEl.className = isError ? "error" : "";
     }
 
-    // スキャン開始
+    // 読み取り制御付きスキャン開始
     codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
-      if (!res) return;
+      if (!res || isReading) return;
+      isReading = true;
+
       const code = res.text;
       try {
         const q = query(collection(db, "passes"), where("id", "==", code));
@@ -54,24 +57,28 @@
 
         if (snapshot.empty) {
           showResult(`該当するファストパスが見つかりません`, true);
-          return;
-        }
-
-        const passDoc = snapshot.docs[0];
-        const data = passDoc.data();
-
-        if (data.used) {
-          showResult(`ファストパス ${code} はすでに使用済みです`, true);
         } else {
-          await updateDoc(doc(db, "passes", passDoc.id), { used: true });
-          showResult(`ファストパス ${code} を使用済みにしました`, false);
-          sound.currentTime = 0;
-          sound.play().catch(err => console.error("音声再生エラー:", err));
+          const passDoc = snapshot.docs[0];
+          const data = passDoc.data();
+
+          if (data.used) {
+            showResult(`ファストパス ${code} はすでに使用済みです`, true);
+          } else {
+            await updateDoc(doc(db, "passes", passDoc.id), { used: true });
+            showResult(`ファストパス ${code} を使用済みにしました`);
+            sound.currentTime = 0;
+            sound.play().catch(err => console.warn("音声再生エラー:", err));
+          }
         }
       } catch (e) {
         console.error(e);
         showResult("エラーが発生しました", true);
       }
+
+      // 5秒後に再びスキャン再開
+      setTimeout(() => {
+        isReading = false;
+      }, 5000);
     });
   </script>
 </head>
