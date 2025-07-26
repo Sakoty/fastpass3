@@ -59,7 +59,6 @@
 
     async function unlockAudio() {
       try {
-        // 1回だけ再生してすぐ止めることで、以後の自動再生を許可させる
         await sound.play();
         sound.pause();
         sound.currentTime = 0;
@@ -67,13 +66,12 @@
         enableBtn.style.display = "none";
         showResult("音声を有効化しました（読み取り時に音が鳴ります）");
       } catch (e) {
-        console.warn("音声の解錠に失敗しました:", e);
-        showResult("音声の自動再生がブロックされています。もう一度「音を有効化」を押してください。", true);
+        console.warn("音声の解錠に失敗:", e);
+        showResult("音声の自動再生がブロックされています。もう一度『音を有効化』を押してください。", true);
       }
     }
 
     enableBtn.addEventListener("click", unlockAudio);
-    // iOS対策として、どこかタップされたら解錠トライ（1回だけ）
     document.addEventListener("touchstart", () => {
       if (!audioUnlocked) unlockAudio();
     }, { once: true });
@@ -99,6 +97,11 @@
           } else {
             await updateDoc(doc(db, "passes", passDoc.id), { used: true });
             showResult(`ファストパス ${code} を使用済みにしました`);
+
+            // バイブレーション（200ms）
+            if (navigator.vibrate) navigator.vibrate(200);
+
+            // 音を鳴らす
             if (audioUnlocked) {
               sound.currentTime = 0;
               sound.play().catch(err => {
@@ -117,7 +120,6 @@
         showResult("エラーが発生しました", true);
       }
 
-      // 5秒後に再度読み取り可
       setTimeout(() => { isReading = false; }, 5000);
     });
   </script>
@@ -130,7 +132,7 @@
   <video id="video" autoplay muted playsinline></video>
   <div id="result">QRコードを読み取ってください</div>
 
-  <!-- 音源は同じディレクトリに置いてください -->
+  <!-- 音源は同一ディレクトリに置いてください -->
   <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
 </body>
 </html>
