@@ -3,25 +3,91 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>チャット</title>
+  <title>業務チャット</title>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; }
-    #app { display: flex; flex-direction: column; height: 100vh; }
-    header { background: #4CAF50; color: white; padding: 10px; text-align: center; }
-    #roomList, #chatArea { padding: 10px; overflow-y: auto; }
-    #roomList { height: 30vh; background: white; }
-    #chatArea { flex: 1; background: #e9e9e9; }
-    .message { margin: 5px 0; padding: 5px; background: white; border-radius: 5px; }
-    .message.mention { background: #ffffcc; }
-    footer { display: flex; flex-direction: column; padding: 10px; background: white; }
-    input, button { padding: 10px; margin: 5px 0; font-size: 1em; }
-    #messages { max-height: 60vh; overflow-y: auto; }
-    img.chat-image { max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 5px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: sans-serif; background-color: #f0f0f0; }
+    #app { display: flex; height: 100vh; }
+    aside#roomList {
+      width: 240px;
+      background: #fff;
+      border-right: 1px solid #ccc;
+      padding: 10px;
+      overflow-y: auto;
+    }
+    aside#roomList h2 { margin-top: 0; }
+    aside#roomList div {
+      padding: 8px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    aside#roomList div:hover { background: #eee; }
+    #chatSection {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #4CAF50;
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { margin: 0; font-size: 1.2rem; }
+    main#chatArea {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      background: #e9e9e9;
+    }
+    .message {
+      margin-bottom: 10px;
+      padding: 8px;
+      background: white;
+      border-radius: 6px;
+      position: relative;
+    }
+    .message.mention {
+      background: #ffffcc;
+    }
+    .message img.chat-image {
+      max-width: 100%;
+      max-height: 200px;
+      margin-top: 5px;
+      border-radius: 8px;
+    }
+    .reactions {
+      margin-top: 5px;
+    }
+    .reaction-button {
+      font-size: 1.2rem;
+      margin-right: 5px;
+      cursor: pointer;
+    }
+    footer {
+      background: #fff;
+      padding: 10px;
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+    footer input[type=text], footer input[type=file] {
+      flex: 1;
+      padding: 8px;
+      font-size: 1rem;
+    }
+    footer button {
+      padding: 10px;
+      font-size: 1rem;
+    }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, setDoc, getDoc, getDocs
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, setDoc, getDocs, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -44,22 +110,31 @@
     window.onload = () => {
       if (!userName) {
         userName = prompt("あなたの名前を入力してください");
-        localStorage.setItem("chatUserName", userName);
+        if (userName) localStorage.setItem("chatUserName", userName);
       }
       listRooms();
     };
 
     async function listRooms() {
       const roomList = document.getElementById("roomList");
-      roomList.innerHTML = "<h3>ルーム一覧</h3>";
+      roomList.innerHTML = "<h2>ルーム</h2>";
       const roomsRef = collection(db, "rooms");
       const q = query(roomsRef, orderBy("lastMessageAt", "desc"));
       const snap = await getDocs(q);
       snap.forEach(docSnap => {
         const div = document.createElement("div");
         div.textContent = docSnap.id;
-        div.style.cursor = "pointer";
-        div.onclick = () => joinRoom(docSnap.id);
+        div.onclick = async () => {
+          const roomData = (await getDoc(docSnap.ref)).data();
+          if (roomData.password) {
+            const input = prompt("このルームはパスワードで保護されています。パスワードを入力してください。");
+            if (input !== roomData.password) {
+              alert("パスワードが違います");
+              return;
+            }
+          }
+          joinRoom(docSnap.id);
+        };
         roomList.appendChild(div);
       });
     }
@@ -67,33 +142,57 @@
     async function createRoom() {
       const name = prompt("ルーム名を入力してください");
       if (!name) return;
-      await setDoc(doc(db, "rooms", name), { lastMessageAt: serverTimestamp() });
+      const password = prompt("このルームにパスワードを設定しますか？（空欄でスキップ）");
+      await setDoc(doc(db, "rooms", name), {
+        lastMessageAt: serverTimestamp(),
+        password: password || ""
+      });
       joinRoom(name);
     }
 
     async function joinRoom(roomName) {
       currentRoom = roomName;
-      document.getElementById("chatArea").innerHTML = `<h3>${roomName} のチャット</h3><div id="messages"></div>`;
+      const chatArea = document.getElementById("chatArea");
+      chatArea.innerHTML = "";
+
       const messagesRef = collection(db, "rooms", roomName, "messages");
       const q = query(messagesRef, orderBy("createdAt"));
 
       onSnapshot(q, snapshot => {
-        const messagesDiv = document.getElementById("messages");
-        messagesDiv.innerHTML = "";
+        chatArea.innerHTML = "";
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
           const div = document.createElement("div");
-          div.className = "message" + (data.text.includes("@" + userName) ? " mention" : "");
-          div.innerHTML = `<b>${data.name}</b>: ${data.text}`;
+          div.className = "message" + (data.text?.includes("@" + userName) ? " mention" : "");
+          div.innerHTML = `<b>${data.name}</b>: ${data.text || ""}`;
           if (data.imageURL) {
             div.innerHTML += `<br><img src="${data.imageURL}" class="chat-image" />`;
           }
           if (!data.readUsers?.includes(userName)) {
             updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
           }
-          messagesDiv.appendChild(div);
+          const reactionDiv = document.createElement("div");
+          reactionDiv.className = "reactions";
+          ["👍", "❤️", "😂", "🎉"].forEach(emoji => {
+            const btn = document.createElement("span");
+            btn.textContent = emoji;
+            btn.className = "reaction-button";
+            btn.onclick = async () => {
+              const reactions = data.reactions || {};
+              reactions[emoji] = (reactions[emoji] || 0) + 1;
+              await updateDoc(docSnap.ref, { reactions });
+            };
+            reactionDiv.appendChild(btn);
+            if (data.reactions?.[emoji]) {
+              const count = document.createElement("span");
+              count.textContent = ` ${data.reactions[emoji]}`;
+              reactionDiv.appendChild(count);
+            }
+          });
+          div.appendChild(reactionDiv);
+          chatArea.appendChild(div);
         });
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        chatArea.scrollTop = chatArea.scrollHeight;
       });
     }
 
@@ -115,7 +214,8 @@
         text,
         imageURL,
         createdAt: serverTimestamp(),
-        readUsers: [userName]
+        readUsers: [userName],
+        reactions: {}
       });
 
       await updateDoc(doc(db, "rooms", currentRoom), {
@@ -129,17 +229,21 @@
 </head>
 <body>
   <div id="app">
-    <header>
-      <h1>業務チャット</h1>
+    <aside id="roomList">
       <button onclick="createRoom()">＋ルーム作成</button>
-    </header>
-    <div id="roomList"></div>
-    <div id="chatArea"></div>
-    <footer>
-      <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
-      <input type="file" id="imageInput" accept="image/*" />
-      <button onclick="sendMessage()">送信</button>
-    </footer>
+    </aside>
+    <div id="chatSection">
+      <header>
+        <h1>業務チャット</h1>
+        <span id="currentRoom"></span>
+      </header>
+      <main id="chatArea"></main>
+      <footer>
+        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
+        <input type="file" id="imageInput" accept="image/*" />
+        <button onclick="sendMessage()">送信</button>
+      </footer>
+    </div>
   </div>
 </body>
 </html>
