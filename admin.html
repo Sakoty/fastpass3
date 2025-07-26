@@ -3,20 +3,79 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ファストパス管理（特別パス対応）</title>
+  <title>ファストパス管理</title>
   <style>
-    body { font-family: sans-serif; background: #fffbe6; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    th { background-color: #f0c040; }
-    .used { background: #ccc; }
-    button { margin: 2px; }
+    body {
+      font-family: sans-serif;
+      background: #fffbe6;
+      padding: 20px;
+      margin: 0;
+    }
+
+    h1 {
+      text-align: center;
+      color: #cc9900;
+      font-size: 1.5em;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      margin-top: 20px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 700px;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+      font-size: 0.95em;
+    }
+
+    th {
+      background-color: #f0c040;
+    }
+
+    .used {
+      background-color: #ddd;
+    }
+
+    button {
+      padding: 6px 10px;
+      font-size: 0.9em;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 600px) {
+      th, td {
+        font-size: 0.85em;
+        padding: 6px;
+      }
+
+      button {
+        font-size: 0.85em;
+        padding: 5px 8px;
+      }
+    }
   </style>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, query, orderBy,
-      doc, updateDoc, deleteDoc
+      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -38,51 +97,35 @@
       tbody.innerHTML = "";
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
-        const id = docSnap.id;
-
         const tr = document.createElement("tr");
         if (data.used) tr.classList.add("used");
-
-        const usedText = data.used ? "使用済" : "未使用";
-        const toggleUsedText = data.used ? "未使用に戻す" : "使用済にする";
-
-        const specialFlag = data.special === true; // trueなら特別パス
-        const specialText = specialFlag ? "★特別" : "－";
-        const toggleSpecialText = specialFlag ? "特別解除" : "特別にする";
 
         tr.innerHTML = `
           <td>${data.id}</td>
           <td>${data.name}</td>
           <td>${data.numPeople}</td>
           <td>${data.time}</td>
-          <td>${usedText}</td>
-          <td>${specialText}</td>
+          <td>${data.used ? "使用済" : "未使用"}</td>
+          <td>${data.special ? "特別" : "通常"}</td>
           <td>
-            <button class="toggle-used" data-id="${id}" data-used="${data.used}">${toggleUsedText}</button>
-            <button class="toggle-special" data-id="${id}" data-special="${specialFlag}">${toggleSpecialText}</button>
-            <button class="delete" data-id="${id}">削除</button>
+            <button data-id="${docSnap.id}" class="toggle">
+              ${data.used ? "未使用に戻す" : "呼び出し"}
+            </button>
+          </td>
+          <td>
+            <button data-id="${docSnap.id}" class="delete" style="background-color: red;">削除</button>
           </td>
         `;
 
-        // 使用済み状態切替
-        tr.querySelector(".toggle-used").addEventListener("click", async (e) => {
-          const docId = e.target.getAttribute("data-id");
-          const currentUsed = e.target.getAttribute("data-used") === "true";
-          await updateDoc(doc(db, "passes", docId), { used: !currentUsed });
+        tr.querySelector(".toggle").addEventListener("click", async (e) => {
+          const id = e.target.getAttribute("data-id");
+          await updateDoc(doc(db, "passes", id), { used: !data.used });
         });
 
-        // 特別フラグ切替
-        tr.querySelector(".toggle-special").addEventListener("click", async (e) => {
-          const docId = e.target.getAttribute("data-id");
-          const currentSpecial = e.target.getAttribute("data-special") === "true";
-          await updateDoc(doc(db, "passes", docId), { special: !currentSpecial });
-        });
-
-        // 削除ボタン
         tr.querySelector(".delete").addEventListener("click", async (e) => {
-          const docId = e.target.getAttribute("data-id");
+          const id = e.target.getAttribute("data-id");
           if (confirm("本当に削除しますか？")) {
-            await deleteDoc(doc(db, "passes", docId));
+            await deleteDoc(doc(db, "passes", id));
           }
         });
 
@@ -92,20 +135,23 @@
   </script>
 </head>
 <body>
-  <h1>ファストパス管理画面（特別パス対応）</h1>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>名前</th>
-        <th>人数</th>
-        <th>時間</th>
-        <th>状態</th>
-        <th>特別</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody id="list"></tbody>
-  </table>
+  <h1>ファストパス管理画面</h1>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>名前</th>
+          <th>人数</th>
+          <th>時間</th>
+          <th>状態</th>
+          <th>種別</th>
+          <th>操作</th>
+          <th>削除</th>
+        </tr>
+      </thead>
+      <tbody id="list"></tbody>
+    </table>
+  </div>
 </body>
 </html>
