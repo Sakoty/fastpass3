@@ -34,24 +34,23 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 発券可能か確認
-    async function isIssuingEnabled() {
-      const ref = doc(db, "settings", "issueStatus");
+    let slots = [];
+
+    async function fetchSlots() {
+      const ref = doc(db, "settings", "timeSlots");
       const snap = await getDoc(ref);
-      return snap.exists() && snap.data().enabled === true;
+      if (!snap.exists()) return [];
+      return snap.data().slots || [];
     }
 
-    // 案内スロット取得
-    async function getAvailableTime() {
-      const settingRef = doc(db, "settings", "timeSlots");
-      const settingSnap = await getDoc(settingRef);
-      if (!settingSnap.exists()) return null;
-
-      const slots = settingSnap.data().slots || [];
+    async function getIssuedCount() {
       const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
       const snapshot = await getDocs(q);
-      const count = snapshot.size;
+      return snapshot.size;
+    }
 
+    async function getAvailableTime() {
+      const count = await getIssuedCount();
       return slots[count] || null;
     }
 
@@ -63,26 +62,47 @@
       return (typeof last === "number" && last >= 1) ? last + 1 : 1;
     }
 
+    async function isIssuingEnabled() {
+      const ref = doc(db, "settings", "issueStatus");
+      const snap = await getDoc(ref);
+      return snap.exists() && snap.data().enabled === true;
+    }
+
     async function updateCurrentTimeDisplay() {
       const el = document.getElementById("currentTime");
       const time = await getAvailableTime();
-      el.textContent = time ? `現在発券中の案内時間：${time}` : `案内可能時間が設定されていません`;
+      el.textContent = time ? `現在発券中の案内時間：${time}` : `案内可能時間が終了しました`;
     }
 
     async function initializePage() {
       const messageEl = document.getElementById("message");
       const formEl = document.getElementById("form");
 
-      const issuing = await isIssuingEnabled();
-      if (!issuing) {
+      const [enabled, loadedSlots, issuedCount] = await Promise.all([
+        isIssuingEnabled(),
+        fetchSlots(),
+        getIssuedCount()
+      ]);
+
+      slots = loadedSlots;
+
+      if (!enabled) {
         messageEl.textContent = "現在、発券は停止中です。";
         formEl.style.display = "none";
-      } else {
-        messageEl.textContent = "";
-        formEl.style.display = "block";
-        updateCurrentTimeDisplay();
-        setInterval(updateCurrentTimeDisplay, 60000); // 1分ごとに更新
+        return;
       }
+
+      if (issuedCount >= slots.length) {
+        messageEl.textContent = "すべての案内時間の発券が完了しました。";
+        formEl.style.display = "none";
+        return;
+      }
+
+      messageEl.textContent = "";
+      formEl.style.display = "block";
+
+      updateCurrentTimeDisplay();
+      setInterval(updateCurrentTimeDisplay, 60000); // 1分ごとに更新
     }
 
     window.addEventListener("load", () => {
@@ -108,7 +128,7 @@
         const time = await getAvailableTime();
 
         if (!time) {
-          alert("案内可能時間が設定されていません");
+          alert("すべての時間帯の発券が終了しました。");
           return;
         }
 
@@ -136,7 +156,7 @@
           if (!err) qrContainer.appendChild(canvas);
         });
 
-        updateCurrentTimeDisplay();
+        initializePage(); // 再チェック（発券終了したかどうか）
       });
     });
   </script>
