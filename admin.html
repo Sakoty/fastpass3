@@ -2,80 +2,75 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ファストパス管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ファストパス管理画面</title>
   <style>
     body {
-      font-family: sans-serif;
-      background: #fffbe6;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       padding: 20px;
-      margin: 0;
+      background: #fefbd8;
+      max-width: 900px;
+      margin: auto;
     }
-
     h1 {
       text-align: center;
-      color: #cc9900;
-      font-size: 1.5em;
+      color: #444;
     }
-
-    .table-wrapper {
-      overflow-x: auto;
-      margin-top: 20px;
-    }
-
     table {
       width: 100%;
-      min-width: 700px;
       border-collapse: collapse;
+      margin-top: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      background: white;
     }
-
     th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
+      border: 1px solid #ddd;
+      padding: 10px;
       text-align: center;
-      font-size: 0.95em;
+      vertical-align: middle;
     }
-
     th {
-      background-color: #f0c040;
+      background-color: #f0e68c;
+      color: #333;
     }
-
-    .used {
-      background-color: #ddd;
+    tr:nth-child(even) {
+      background-color: #fafafa;
     }
-
     button {
       padding: 6px 10px;
-      font-size: 0.9em;
-      border: none;
-      background-color: #007bff;
-      color: white;
-      border-radius: 4px;
+      font-size: 0.9rem;
       cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
     }
-
-    button:disabled {
-      background-color: #aaa;
-      cursor: not-allowed;
+    .btn-delete {
+      background-color: #e74c3c;
+      color: white;
     }
-
-    @media (max-width: 600px) {
-      th, td {
-        font-size: 0.85em;
-        padding: 6px;
-      }
-
-      button {
-        font-size: 0.85em;
-        padding: 5px 8px;
-      }
+    .btn-delete:hover {
+      background-color: #c0392b;
+    }
+    .btn-toggle-used {
+      background-color: #3498db;
+      color: white;
+    }
+    .btn-toggle-used:hover {
+      background-color: #2980b9;
+    }
+    .status-used {
+      color: green;
+      font-weight: bold;
+    }
+    .status-unused {
+      color: red;
+      font-weight: bold;
     }
   </style>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc
+      getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -90,68 +85,86 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const tbody = document.getElementById("list");
+    const passesRef = collection(db, "passes");
+    const q = query(passesRef, orderBy("createdAt", "desc"));
 
-    const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
-    onSnapshot(q, (snapshot) => {
+    function renderPasses(docs) {
+      const tbody = document.getElementById("passesTableBody");
       tbody.innerHTML = "";
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const tr = document.createElement("tr");
-        if (data.used) tr.classList.add("used");
 
+      docs.forEach(docSnap => {
+        const data = docSnap.data();
+        const id = docSnap.id;
+
+        const typeLabel = data.type === "special" ? "特別ファストパス" :
+                          data.number === -1 ? "特別ファストパス" : 
+                          "通常ファストパス";
+
+        const usedStatusText = data.used ? "使用済み" : "未使用";
+        const usedStatusClass = data.used ? "status-used" : "status-unused";
+
+        const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${data.id}</td>
-          <td>${data.name}</td>
-          <td>${data.numPeople}</td>
-          <td>${data.time}</td>
-          <td>${data.used ? "使用済" : "未使用"}</td>
-          <td>${data.special ? "特別" : "通常"}</td>
+          <td>${data.id || "-"}</td>
+          <td>${data.name || "-"}</td>
+          <td>${data.numPeople || "-"}</td>
+          <td>${data.time || "-"}</td>
+          <td>${typeLabel}</td>
+          <td class="${usedStatusClass}">${usedStatusText}</td>
           <td>
-            <button data-id="${docSnap.id}" class="toggle">
-              ${data.used ? "未使用に戻す" : "呼び出し"}
-            </button>
-          </td>
-          <td>
-            <button data-id="${docSnap.id}" class="delete" style="background-color: red;">削除</button>
+            <button class="btn-toggle-used">${data.used ? "未使用に戻す" : "使用済みにする"}</button>
+            <button class="btn-delete">削除</button>
           </td>
         `;
 
-        tr.querySelector(".toggle").addEventListener("click", async (e) => {
-          const id = e.target.getAttribute("data-id");
-          await updateDoc(doc(db, "passes", id), { used: !data.used });
+        // 使用済み・未使用切り替えボタン
+        tr.querySelector(".btn-toggle-used").addEventListener("click", async () => {
+          try {
+            await updateDoc(doc(db, "passes", id), { used: !data.used });
+            // 状態はonSnapshotで自動更新されるのでここで何もしなくてOK
+          } catch (error) {
+            alert("状態の切り替えに失敗しました: " + error.message);
+          }
         });
 
-        tr.querySelector(".delete").addEventListener("click", async (e) => {
-          const id = e.target.getAttribute("data-id");
-          if (confirm("本当に削除しますか？")) {
-            await deleteDoc(doc(db, "passes", id));
+        // 削除ボタン
+        tr.querySelector(".btn-delete").addEventListener("click", async () => {
+          if (confirm(`ファストパス「${data.id}」を削除しますか？`)) {
+            try {
+              await deleteDoc(doc(db, "passes", id));
+              alert("削除しました。");
+            } catch (error) {
+              alert("削除に失敗しました: " + error.message);
+            }
           }
         });
 
         tbody.appendChild(tr);
       });
+    }
+
+    onSnapshot(q, (snapshot) => {
+      renderPasses(snapshot.docs);
     });
   </script>
 </head>
 <body>
   <h1>ファストパス管理画面</h1>
-  <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>名前</th>
-          <th>人数</th>
-          <th>時間</th>
-          <th>状態</th>
-          <th>種別</th>
-          <th>操作</th>
-          <th>削除</th>
-        </tr>
-      </thead>
-      <tbody id="list"></tbody>
-    </table>
-  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>発券ID</th>
+        <th>名前</th>
+        <th>人数</th>
+        <th>案内時間</th>
+        <th>種別</th>
+        <th>状態</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="passesTableBody">
+      <!-- ここにデータ行が入ります -->
+    </tbody>
+  </table>
 </body>
 </html>
