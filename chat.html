@@ -16,17 +16,18 @@
       overflow-y: auto;
     }
     aside#roomList h2 { margin-top: 0; }
-    aside#roomList div {
+    .room-item {
       padding: 8px;
       margin-bottom: 4px;
       cursor: pointer;
       border-radius: 4px;
     }
-    aside#roomList div:hover { background: #eee; }
+    .room-item:hover { background: #eee; }
     #chatSection {
       flex: 1;
       display: flex;
       flex-direction: column;
+      min-width: 0;
     }
     header {
       background: #4CAF50;
@@ -35,8 +36,11 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    header h1 { margin: 0; font-size: 1.2rem; }
+    header h1 { margin: 0; font-size: 1.1rem; }
+    #currentRoomName { font-weight: 600; }
     main#chatArea {
       flex: 1;
       padding: 10px;
@@ -49,6 +53,7 @@
       background: white;
       border-radius: 6px;
       position: relative;
+      word-break: break-word;
     }
     .message.mention {
       background: #ffffcc;
@@ -61,11 +66,16 @@
     }
     .reactions {
       margin-top: 5px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
     }
     .reaction-button {
-      font-size: 1.2rem;
-      margin-right: 5px;
+      font-size: 1.1rem;
+      margin-right: 2px;
       cursor: pointer;
+      user-select: none;
     }
     footer {
       background: #fff;
@@ -78,19 +88,57 @@
       flex: 1;
       padding: 8px;
       font-size: 1rem;
+      min-width: 120px;
     }
     footer button {
       padding: 10px;
       font-size: 1rem;
     }
+    @media (max-width: 768px) {
+      #app { flex-direction: column; }
+      aside#roomList { width: 100%; height: 160px; border-right: none; border-bottom: 1px solid #ccc; }
+      #chatSection { height: calc(100vh - 160px); }
+    }
   </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="roomList">
+      <h2>ルーム</h2>
+      <div style="margin-bottom:8px; display:flex; gap:6px;">
+        <button id="createRoomBtn">＋ルーム作成</button>
+      </div>
+      <div id="roomItems"></div>
+    </aside>
+
+    <div id="chatSection">
+      <header>
+        <h1>業務チャット</h1>
+        <span id="currentRoomName">（未入室）</span>
+      </header>
+      <main id="chatArea"></main>
+      <footer>
+        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
+        <input type="file" id="imageInput" accept="image/*" />
+        <button id="sendBtn">送信</button>
+      </footer>
+    </div>
+  </div>
+
   <script type="module">
+    // ----------------------
+    // Imports
+    // ----------------------
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, setDoc, getDocs, getDoc
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp,
+      doc, updateDoc, setDoc, getDocs, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+    // ----------------------
+    // Firebase Config
+    // ----------------------
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -104,79 +152,133 @@
     const db = getFirestore(app);
     const storage = getStorage(app);
 
+    // ----------------------
+    // State
+    // ----------------------
     let currentRoom = null;
     let userName = localStorage.getItem("chatUserName") || "";
+    let messagesUnsub = null;
 
-    window.onload = () => {
+    // ----------------------
+    // DOM refs
+    // ----------------------
+    const roomItemsEl = document.getElementById('roomItems');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const currentRoomNameEl = document.getElementById('currentRoomName');
+    const chatArea = document.getElementById('chatArea');
+    const sendBtn = document.getElementById('sendBtn');
+    const messageInput = document.getElementById('messageInput');
+    const imageInput = document.getElementById('imageInput');
+
+    // ----------------------
+    // Init
+    // ----------------------
+    window.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+      // 名前保持
       if (!userName) {
-        userName = prompt("あなたの名前を入力してください");
-        if (userName) localStorage.setItem("chatUserName", userName);
+        userName = prompt('あなたの名前を入力してください');
+        if (userName) localStorage.setItem('chatUserName', userName);
       }
-      listRooms();
-    };
 
+      // イベント登録（ここが createRoom が未定義になるのを防ぐポイント）
+      createRoomBtn.addEventListener('click', createRoom);
+      sendBtn.addEventListener('click', sendMessage);
+
+      // ルーム一覧購読
+      await listRooms();
+
+      // --- 簡易テスト（最低限の存在確認） ---
+      try {
+        console.assert(typeof createRoom === 'function', 'createRoom が定義されていません');
+        console.assert(typeof sendMessage === 'function', 'sendMessage が定義されていません');
+        console.assert(createRoomBtn instanceof HTMLElement, 'createRoomBtn が取得できていません');
+      } catch (e) {
+        console.warn('簡易テスト失敗: ', e);
+      }
+    }
+
+    // ----------------------
+    // Rooms
+    // ----------------------
     async function listRooms() {
-      const roomList = document.getElementById("roomList");
-      roomList.innerHTML = "<h2>ルーム</h2>";
-      const roomsRef = collection(db, "rooms");
-      const q = query(roomsRef, orderBy("lastMessageAt", "desc"));
+      roomItemsEl.innerHTML = '';
+      const roomsRef = collection(db, 'rooms');
+      const q = query(roomsRef, orderBy('lastMessageAt', 'desc'));
       const snap = await getDocs(q);
       snap.forEach(docSnap => {
-        const div = document.createElement("div");
+        const div = document.createElement('div');
+        div.className = 'room-item';
         div.textContent = docSnap.id;
-        div.onclick = async () => {
+        div.addEventListener('click', async () => {
           const roomData = (await getDoc(docSnap.ref)).data();
-          if (roomData.password) {
-            const input = prompt("このルームはパスワードで保護されています。パスワードを入力してください。");
+          if (roomData && roomData.password) {
+            const input = prompt('このルームはパスワードで保護されています。パスワードを入力してください。');
             if (input !== roomData.password) {
-              alert("パスワードが違います");
+              alert('パスワードが違います');
               return;
             }
           }
           joinRoom(docSnap.id);
-        };
-        roomList.appendChild(div);
+        });
+        roomItemsEl.appendChild(div);
       });
     }
 
     async function createRoom() {
-      const name = prompt("ルーム名を入力してください");
+      const name = prompt('ルーム名を入力してください');
       if (!name) return;
-      const password = prompt("このルームにパスワードを設定しますか？（空欄でスキップ）");
-      await setDoc(doc(db, "rooms", name), {
+      const password = prompt('このルームにパスワードを設定しますか？（空欄でスキップ）');
+      await setDoc(doc(db, 'rooms', name), {
         lastMessageAt: serverTimestamp(),
-        password: password || ""
+        password: password || ''
       });
       joinRoom(name);
     }
 
+    // ----------------------
+    // Chat / Messages
+    // ----------------------
     async function joinRoom(roomName) {
       currentRoom = roomName;
-      const chatArea = document.getElementById("chatArea");
-      chatArea.innerHTML = "";
+      currentRoomNameEl.textContent = `ルーム: ${roomName}`;
 
-      const messagesRef = collection(db, "rooms", roomName, "messages");
-      const q = query(messagesRef, orderBy("createdAt"));
+      // 既存購読を解除
+      if (messagesUnsub) messagesUnsub();
+      chatArea.innerHTML = '';
 
-      onSnapshot(q, snapshot => {
-        chatArea.innerHTML = "";
+      const messagesRef = collection(db, 'rooms', roomName, 'messages');
+      const q = query(messagesRef, orderBy('createdAt'));
+
+      messagesUnsub = onSnapshot(q, snapshot => {
+        chatArea.innerHTML = '';
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
-          const div = document.createElement("div");
-          div.className = "message" + (data.text?.includes("@" + userName) ? " mention" : "");
-          div.innerHTML = `<b>${data.name}</b>: ${data.text || ""}`;
+          const div = document.createElement('div');
+          div.className = 'message' + (data.text?.includes('@' + userName) ? ' mention' : '');
+          div.innerHTML = `<b>${escapeHTML(data.name || '')}</b>: ${escapeHTML(data.text || '')}`;
+
           if (data.imageURL) {
-            div.innerHTML += `<br><img src="${data.imageURL}" class="chat-image" />`;
+            const img = document.createElement('img');
+            img.src = data.imageURL;
+            img.className = 'chat-image';
+            div.appendChild(document.createElement('br'));
+            div.appendChild(img);
           }
+
+          // 既読
           if (!data.readUsers?.includes(userName)) {
             updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
           }
-          const reactionDiv = document.createElement("div");
-          reactionDiv.className = "reactions";
-          ["👍", "❤️", "😂", "🎉"].forEach(emoji => {
-            const btn = document.createElement("span");
+
+          // リアクション
+          const reactionDiv = document.createElement('div');
+          reactionDiv.className = 'reactions';
+          ['👍', '❤️', '😂', '🎉'].forEach(emoji => {
+          const btn = document.createElement('span');
             btn.textContent = emoji;
-            btn.className = "reaction-button";
+            btn.className = 'reaction-button';
             btn.onclick = async () => {
               const reactions = data.reactions || {};
               reactions[emoji] = (reactions[emoji] || 0) + 1;
@@ -184,12 +286,13 @@
             };
             reactionDiv.appendChild(btn);
             if (data.reactions?.[emoji]) {
-              const count = document.createElement("span");
+              const count = document.createElement('span');
               count.textContent = ` ${data.reactions[emoji]}`;
               reactionDiv.appendChild(count);
             }
           });
           div.appendChild(reactionDiv);
+
           chatArea.appendChild(div);
         });
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -197,19 +300,22 @@
     }
 
     async function sendMessage() {
-      const text = document.getElementById("messageInput").value.trim();
-      const imageInput = document.getElementById("imageInput");
-      if (!text && !imageInput.files[0]) return;
+      if (!currentRoom) {
+        alert('ルームに入室してください');
+        return;
+      }
+      const text = messageInput.value.trim();
+      const file = imageInput.files[0];
+      if (!text && !file) return;
 
       let imageURL = null;
-      if (imageInput.files[0]) {
-        const file = imageInput.files[0];
+      if (file) {
         const fileRef = ref(storage, `uploads/${currentRoom}/${Date.now()}_${file.name}`);
         await uploadBytes(fileRef, file);
         imageURL = await getDownloadURL(fileRef);
       }
 
-      await addDoc(collection(db, "rooms", currentRoom, "messages"), {
+      await addDoc(collection(db, 'rooms', currentRoom, 'messages'), {
         name: userName,
         text,
         imageURL,
@@ -218,32 +324,25 @@
         reactions: {}
       });
 
-      await updateDoc(doc(db, "rooms", currentRoom), {
+      await updateDoc(doc(db, 'rooms', currentRoom), {
         lastMessageAt: serverTimestamp()
       });
 
-      document.getElementById("messageInput").value = "";
-      imageInput.value = "";
+      messageInput.value = '';
+      imageInput.value = '';
+    }
+
+    // ----------------------
+    // utils
+    // ----------------------
+    function escapeHTML(str = '') {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
   </script>
-</head>
-<body>
-  <div id="app">
-    <aside id="roomList">
-      <button onclick="createRoom()">＋ルーム作成</button>
-    </aside>
-    <div id="chatSection">
-      <header>
-        <h1>業務チャット</h1>
-        <span id="currentRoom"></span>
-      </header>
-      <main id="chatArea"></main>
-      <footer>
-        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
-        <input type="file" id="imageInput" accept="image/*" />
-        <button onclick="sendMessage()">送信</button>
-      </footer>
-    </div>
-  </div>
 </body>
 </html>
