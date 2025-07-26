@@ -46,39 +46,59 @@
       resultEl.style.color = color;
     }
 
+    // QRコードの読み取りと処理
     const html5QrCode = new Html5Qrcode("preview");
     const qrConfig = { fps: 10, qrbox: 250 };
 
-    html5QrCode.start(
-      { facingMode: "environment" },
-      qrConfig,
-      async (decodedText) => {
-        if (!decodedText.startsWith("FP")) return;
+    Html5Qrcode.getCameras()
+      .then(cameras => {
+        if (cameras && cameras.length) {
+          html5QrCode.start(
+            { facingMode: "environment" },
+            qrConfig,
+            async (decodedText) => {
+              if (!decodedText.startsWith("FP")) return;
 
-        try {
-          const q = query(collection(db, "passes"), where("id", "==", decodedText));
-          const snap = await getDocs(q);
-          if (snap.empty) {
-            showResult("該当するファストパスが見つかりません", "red");
-            return;
-          }
+              try {
+                const q = query(collection(db, "passes"), where("id", "==", decodedText));
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                  showResult("該当するファストパスが見つかりません", "red");
+                  return;
+                }
 
-          const passDoc = snap.docs[0];
-          const ref = doc(db, "passes", passDoc.id);
-          await updateDoc(ref, { used: true });
+                const passDoc = snap.docs[0];
+                const passData = passDoc.data();
 
-          showResult(`ファストパス ${decodedText} を使用済みにしました`);
-          sound.currentTime = 0;
-          sound.play();  // ✅ 音声を再生
-        } catch (error) {
-          console.error(error);
-          showResult("エラーが発生しました", "red");
+                if (passData.used) {
+                  showResult(`ファストパス ${decodedText} はすでに使用済みです`, "red");
+                  return;
+                }
+
+                const ref = doc(db, "passes", passDoc.id);
+                await updateDoc(ref, { used: true });
+
+                showResult(`ファストパス ${decodedText} を使用済みにしました`, "green");
+                sound.currentTime = 0;
+                sound.play();
+
+              } catch (error) {
+                console.error(error);
+                showResult("エラーが発生しました", "red");
+              }
+            },
+            (errMsg) => {
+              // 読み取りエラーは無視してOK
+            }
+          );
+        } else {
+          showResult("カメラが見つかりません", "red");
         }
-      },
-      (errorMsg) => {
-        // 読み取り失敗時の処理は特にしない
-      }
-    );
+      })
+      .catch(err => {
+        console.error("カメラ初期化失敗:", err);
+        showResult("カメラが使用できません。設定をご確認ください。", "red");
+      });
   </script>
 </body>
 </html>
