@@ -8,7 +8,6 @@
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
     input, button { margin: 5px; padding: 5px; font-size: 1rem; }
     .section { margin-top: 30px; }
-    .slot-group { margin-bottom: 15px; }
     label { display: inline-block; width: 120px; text-align: right; margin-right: 10px; }
   </style>
   <script type="module">
@@ -29,35 +28,62 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    function generateSlots(start, end) {
+      const slots = [];
+      const [startHour, startMin] = start.split(":").map(Number);
+      const [endHour, endMin] = end.split(":").map(Number);
+
+      let current = new Date();
+      current.setHours(startHour, startMin, 0, 0);
+
+      const endTime = new Date();
+      endTime.setHours(endHour, endMin, 0, 0);
+
+      while (current < endTime) {
+        const next = new Date(current.getTime() + 10 * 60 * 1000);
+        if (next > endTime) break;
+
+        const pad = n => n.toString().padStart(2, "0");
+        const s = `${pad(current.getHours())}:${pad(current.getMinutes())}`;
+        const e = `${pad(next.getHours())}:${pad(next.getMinutes())}`;
+        slots.push(`${s}〜${e}`);
+        current = next;
+      }
+      return slots;
+    }
+
     document.getElementById("setTimeSlots").addEventListener("submit", async (e) => {
       e.preventDefault();
 
       const slots = [];
+
       for (let i = 1; i <= 3; i++) {
-        const start = document.getElementById(`slot${i}_start`).value;
-        const end = document.getElementById(`slot${i}_end`).value;
-        if (start && end) {
-          // 時間形式チェック
-          if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
-            alert(`スロット${i}の時間はHH:mm形式で入力してください。`);
-            return;
-          }
-          // 終了時刻は開始時刻より後か
-          if (start >= end) {
-            alert(`スロット${i}の終了時刻は開始時刻より後にしてください。`);
-            return;
-          }
-          slots.push({ start, end });
+        const start = document.getElementById(`start${i}`).value;
+        const end = document.getElementById(`end${i}`).value;
+
+        if (start && end && start < end) {
+          const newSlots = generateSlots(start, end);
+          slots.push(...newSlots);
         }
       }
 
       if (slots.length === 0) {
-        alert("少なくとも1つの時間帯を設定してください。");
+        alert("有効な案内時間がありません。");
         return;
       }
 
       await setDoc(doc(db, "settings", "timeSlots"), { slots });
-      alert("案内時間を設定しました。");
+      alert(`案内時間を ${slots.length} 件設定しました。`);
+    });
+
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      await setDoc(doc(db, "settings", "issueStatus"), { enabled: true });
+      alert("発券を開始しました。");
+    });
+
+    document.getElementById("stopBtn").addEventListener("click", async () => {
+      await setDoc(doc(db, "settings", "issueStatus"), { enabled: false });
+      alert("発券を中止しました。");
     });
 
     document.getElementById("specialForm").addEventListener("submit", async (e) => {
@@ -66,16 +92,8 @@
       const numPeople = parseInt(document.getElementById("specialPeople").value);
       const time = document.getElementById("specialTime").value;
 
-      if (!name) {
-        alert("名前を入力してください");
-        return;
-      }
-      if (isNaN(numPeople) || numPeople < 1) {
-        alert("人数は1以上の数字で入力してください");
-        return;
-      }
-      if (!/^\d{2}:\d{2}〜\d{2}:\d{2}$/.test(time)) {
-        alert("案内時間は「HH:mm〜HH:mm」の形式で入力してください（例：10:00〜10:10）");
+      if (!name || isNaN(numPeople) || numPeople < 1 || !/^\d{2}:\d{2}〜\d{2}:\d{2}$/.test(time)) {
+        alert("入力内容を確認してください。");
         return;
       }
 
@@ -99,27 +117,23 @@
   <h1>ファストパス設定</h1>
 
   <form id="setTimeSlots" class="section">
-    <h2>案内可能時間の設定（開始時刻と終了時刻）</h2>
-    <div class="slot-group">
-      <label for="slot1_start">スロット1 開始:</label>
-      <input type="time" id="slot1_start" required>
-      <label for="slot1_end">終了:</label>
-      <input type="time" id="slot1_end" required>
+    <h2>案内可能時間の範囲設定（最大3枠・10分刻み）</h2>
+    <div>
+      <label>開始1：</label><input type="time" id="start1" />　
+      <label>終了1：</label><input type="time" id="end1" /><br>
+      <label>開始2：</label><input type="time" id="start2" />　
+      <label>終了2：</label><input type="time" id="end2" /><br>
+      <label>開始3：</label><input type="time" id="start3" />　
+      <label>終了3：</label><input type="time" id="end3" /><br>
     </div>
-    <div class="slot-group">
-      <label for="slot2_start">スロット2 開始:</label>
-      <input type="time" id="slot2_start">
-      <label for="slot2_end">終了:</label>
-      <input type="time" id="slot2_end">
-    </div>
-    <div class="slot-group">
-      <label for="slot3_start">スロット3 開始:</label>
-      <input type="time" id="slot3_start">
-      <label for="slot3_end">終了:</label>
-      <input type="time" id="slot3_end">
-    </div>
-    <button type="submit">設定を保存</button>
+    <button type="submit">時間帯を保存</button>
   </form>
+
+  <div class="section">
+    <h2>発券状態</h2>
+    <button id="startBtn">発券開始</button>
+    <button id="stopBtn">発券中止</button>
+  </div>
 
   <form id="specialForm" class="section">
     <h2>特別ファストパス発行</h2>
