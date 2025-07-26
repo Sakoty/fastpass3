@@ -3,23 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパスQRスキャン</title>
+  <title>ファストパススキャン</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #e0fff4; }
-    video { width: 100%; max-width: 400px; margin: 0 auto; }
-    #result { margin-top: 20px; font-size: 1.2em; font-weight: bold; color: green; }
+    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f8ff; }
+    video { width: 100%; max-width: 400px; border: 1px solid #ccc; }
+    #result {
+      margin-top: 20px;
+      font-size: 1.2em;
+      font-weight: bold;
+      color: green;
+    }
+    .error { color: red; }
   </style>
-</head>
-<body>
-  <h1>ファストパスQRスキャン</h1>
-  <video id="preview"></video>
-  <div id="result">QRコードを読み取ってください</div>
-
-  <!-- 音声ファイル -->
-  <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
-
-  <!-- QRスキャンライブラリ -->
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode"></script>
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -41,64 +37,48 @@
     const resultEl = document.getElementById("result");
     const sound = document.getElementById("sound");
 
-    function showResult(message, color = "green") {
+    const codeReader = new ZXing.BrowserQRCodeReader();
+
+    function showResult(message, isError = false) {
       resultEl.textContent = message;
-      resultEl.style.color = color;
+      resultEl.className = isError ? "error" : "";
     }
 
-    // QRコードの読み取りと処理
-    const html5QrCode = new Html5Qrcode("preview");
-    const qrConfig = { fps: 10, qrbox: 250 };
+    // スキャン開始
+    codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
+      if (!res) return;
+      const code = res.text;
+      try {
+        const q = query(collection(db, "passes"), where("id", "==", code));
+        const snapshot = await getDocs(q);
 
-    Html5Qrcode.getCameras()
-      .then(cameras => {
-        if (cameras && cameras.length) {
-          html5QrCode.start(
-            { facingMode: "environment" },
-            qrConfig,
-            async (decodedText) => {
-              if (!decodedText.startsWith("FP")) return;
-
-              try {
-                const q = query(collection(db, "passes"), where("id", "==", decodedText));
-                const snap = await getDocs(q);
-                if (snap.empty) {
-                  showResult("該当するファストパスが見つかりません", "red");
-                  return;
-                }
-
-                const passDoc = snap.docs[0];
-                const passData = passDoc.data();
-
-                if (passData.used) {
-                  showResult(`ファストパス ${decodedText} はすでに使用済みです`, "red");
-                  return;
-                }
-
-                const ref = doc(db, "passes", passDoc.id);
-                await updateDoc(ref, { used: true });
-
-                showResult(`ファストパス ${decodedText} を使用済みにしました`, "green");
-                sound.currentTime = 0;
-                sound.play();
-
-              } catch (error) {
-                console.error(error);
-                showResult("エラーが発生しました", "red");
-              }
-            },
-            (errMsg) => {
-              // 読み取りエラーは無視してOK
-            }
-          );
-        } else {
-          showResult("カメラが見つかりません", "red");
+        if (snapshot.empty) {
+          showResult(`該当するファストパスが見つかりません`, true);
+          return;
         }
-      })
-      .catch(err => {
-        console.error("カメラ初期化失敗:", err);
-        showResult("カメラが使用できません。設定をご確認ください。", "red");
-      });
+
+        const passDoc = snapshot.docs[0];
+        const data = passDoc.data();
+
+        if (data.used) {
+          showResult(`ファストパス ${code} はすでに使用済みです`, true);
+        } else {
+          await updateDoc(doc(db, "passes", passDoc.id), { used: true });
+          showResult(`ファストパス ${code} を使用済みにしました`, false);
+          sound.currentTime = 0;
+          sound.play().catch(err => console.error("音声再生エラー:", err));
+        }
+      } catch (e) {
+        console.error(e);
+        showResult("エラーが発生しました", true);
+      }
+    });
   </script>
+</head>
+<body>
+  <h1>ファストパススキャン</h1>
+  <video id="video" autoplay muted></video>
+  <div id="result">QRコードを読み取ってください</div>
+  <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
 </body>
 </html>
