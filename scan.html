@@ -1,16 +1,25 @@
-<!-- scan.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ファストパススキャン</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ファストパスQRスキャン</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; }
-    video { width: 100%; max-width: 400px; }
-    #result { margin-top: 20px; font-size: 1.2em; }
+    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #e0fff4; }
+    video { width: 100%; max-width: 400px; margin: 0 auto; }
+    #result { margin-top: 20px; font-size: 1.2em; font-weight: bold; color: green; }
   </style>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+</head>
+<body>
+  <h1>ファストパスQRスキャン</h1>
+  <video id="preview"></video>
+  <div id="result">QRコードを読み取ってください</div>
+
+  <!-- 音声ファイル -->
+  <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
+
+  <!-- QRスキャンライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -29,28 +38,47 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const codeReader = new ZXing.BrowserQRCodeReader();
-    const result = document.getElementById("result");
+    const resultEl = document.getElementById("result");
+    const sound = document.getElementById("sound");
 
-    codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
-      if (res) {
-        result.textContent = `読み取り成功: ${res.text}`;
-        const q = query(collection(db, "passes"), where("id", "==", res.text));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const passDoc = snapshot.docs[0];
-          await updateDoc(doc(db, "passes", passDoc.id), { used: true });
-          result.textContent += " → 使用済みに更新しました。";
-        } else {
-          result.textContent += " → 該当データが見つかりませんでした。";
+    function showResult(message, color = "green") {
+      resultEl.textContent = message;
+      resultEl.style.color = color;
+    }
+
+    const html5QrCode = new Html5Qrcode("preview");
+    const qrConfig = { fps: 10, qrbox: 250 };
+
+    html5QrCode.start(
+      { facingMode: "environment" },
+      qrConfig,
+      async (decodedText) => {
+        if (!decodedText.startsWith("FP")) return;
+
+        try {
+          const q = query(collection(db, "passes"), where("id", "==", decodedText));
+          const snap = await getDocs(q);
+          if (snap.empty) {
+            showResult("該当するファストパスが見つかりません", "red");
+            return;
+          }
+
+          const passDoc = snap.docs[0];
+          const ref = doc(db, "passes", passDoc.id);
+          await updateDoc(ref, { used: true });
+
+          showResult(`ファストパス ${decodedText} を使用済みにしました`);
+          sound.currentTime = 0;
+          sound.play();  // ✅ 音声を再生
+        } catch (error) {
+          console.error(error);
+          showResult("エラーが発生しました", "red");
         }
+      },
+      (errorMsg) => {
+        // 読み取り失敗時の処理は特にしない
       }
-    });
+    );
   </script>
-</head>
-<body>
-  <h1>ファストパススキャン</h1>
-  <video id="video" autoplay></video>
-  <div id="result">QRコードを読み取ってください</div>
 </body>
 </html>
