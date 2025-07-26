@@ -8,6 +8,8 @@
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
     input, button { margin: 5px; padding: 5px; font-size: 1rem; }
     .section { margin-top: 30px; }
+    .slot-group { margin-bottom: 15px; }
+    label { display: inline-block; width: 120px; text-align: right; margin-right: 10px; }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -29,18 +31,31 @@
 
     document.getElementById("setTimeSlots").addEventListener("submit", async (e) => {
       e.preventDefault();
-      // HH:mm だけの配列を送る
-      const slots = [
-        document.getElementById("slot1").value,
-        document.getElementById("slot2").value,
-        document.getElementById("slot3").value
-      ].filter(Boolean);
-      // 簡単なバリデーション（HH:mm形式かどうか）
-      const isValid = slots.every(s => /^\d{2}:\d{2}$/.test(s));
-      if (!isValid) {
-        alert("時間はHH:mm形式で入力してください（例：10:00）");
+
+      const slots = [];
+      for (let i = 1; i <= 3; i++) {
+        const start = document.getElementById(`slot${i}_start`).value;
+        const end = document.getElementById(`slot${i}_end`).value;
+        if (start && end) {
+          // 時間形式チェック
+          if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
+            alert(`スロット${i}の時間はHH:mm形式で入力してください。`);
+            return;
+          }
+          // 終了時刻は開始時刻より後か
+          if (start >= end) {
+            alert(`スロット${i}の終了時刻は開始時刻より後にしてください。`);
+            return;
+          }
+          slots.push({ start, end });
+        }
+      }
+
+      if (slots.length === 0) {
+        alert("少なくとも1つの時間帯を設定してください。");
         return;
       }
+
       await setDoc(doc(db, "settings", "timeSlots"), { slots });
       alert("案内時間を設定しました。");
     });
@@ -59,8 +74,8 @@
         alert("人数は1以上の数字で入力してください");
         return;
       }
-      if (!/^\d{2}:\d{2}$/.test(time)) {
-        alert("案内時間はHH:mm形式で入力してください（例：10:00）");
+      if (!/^\d{2}:\d{2}〜\d{2}:\d{2}$/.test(time)) {
+        alert("案内時間は「HH:mm〜HH:mm」の形式で入力してください（例：10:00〜10:10）");
         return;
       }
 
@@ -71,37 +86,38 @@
         number: -1,
         name,
         numPeople,
-        time: `${time}〜${add10Minutes(time)}`,
+        time,
         used: false,
         createdAt: serverTimestamp()
       });
 
       alert("特別ファストパスを発行しました");
     });
-
-    // 10分足す補助関数
-    function add10Minutes(timeStr) {
-      const [h, m] = timeStr.split(":").map(Number);
-      let newM = m + 10;
-      let newH = h;
-      if (newM >= 60) {
-        newH += 1;
-        newM -= 60;
-      }
-      const pad = n => n.toString().padStart(2,"0");
-      return `${pad(newH)}:${pad(newM)}`;
-    }
   </script>
 </head>
 <body>
   <h1>ファストパス設定</h1>
 
   <form id="setTimeSlots" class="section">
-    <h2>案内可能時間の設定（開始時刻のみ）</h2>
-    <input type="text" id="slot1" placeholder="例：10:00" required pattern="\d{2}:\d{2}"><br>
-    <input type="text" id="slot2" placeholder="例：10:10" pattern="\d{2}:\d{2}"><br>
-    <input type="text" id="slot3" placeholder="例：10:20" pattern="\d{2}:\d{2}"><br>
-    <small>10分刻みで開始時刻を入力してください。終了時刻は自動で計算されます。</small><br>
+    <h2>案内可能時間の設定（開始時刻と終了時刻）</h2>
+    <div class="slot-group">
+      <label for="slot1_start">スロット1 開始:</label>
+      <input type="time" id="slot1_start" required>
+      <label for="slot1_end">終了:</label>
+      <input type="time" id="slot1_end" required>
+    </div>
+    <div class="slot-group">
+      <label for="slot2_start">スロット2 開始:</label>
+      <input type="time" id="slot2_start">
+      <label for="slot2_end">終了:</label>
+      <input type="time" id="slot2_end">
+    </div>
+    <div class="slot-group">
+      <label for="slot3_start">スロット3 開始:</label>
+      <input type="time" id="slot3_start">
+      <label for="slot3_end">終了:</label>
+      <input type="time" id="slot3_end">
+    </div>
     <button type="submit">設定を保存</button>
   </form>
 
@@ -109,9 +125,8 @@
     <h2>特別ファストパス発行</h2>
     <input type="text" id="specialName" placeholder="名前" required><br>
     <input type="number" id="specialPeople" placeholder="人数" required min="1"><br>
-    <input type="text" id="specialTime" placeholder="案内開始時間（HH:mm）" required pattern="\d{2}:\d{2}"><br>
+    <input type="text" id="specialTime" placeholder="案内時間（例: 10:00〜10:10）" required><br>
     <button type="submit">特別発行</button>
   </form>
 </body>
 </html>
-
