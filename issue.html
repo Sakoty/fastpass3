@@ -36,7 +36,7 @@
     let isIssuing = false;
     let timeSlots = [];
 
-    // 発券開始・停止状態をFirestoreで監視
+    // 発券開始・停止状態監視
     const issueStatusRef = doc(db, "settings", "issueStatus");
     onSnapshot(issueStatusRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -47,7 +47,7 @@
       updateUI();
     });
 
-    // 管理画面設定の案内時間スロット監視
+    // 時間スロット監視
     const timeSlotsDocRef = doc(db, "settings", "timeSlots");
     onSnapshot(timeSlotsDocRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -55,7 +55,7 @@
       } else {
         timeSlots = [];
       }
-      showNextAvailableTime(); // 時間表示更新
+      showNextAvailableTime();
     });
 
     // 次の番号取得
@@ -76,30 +76,7 @@
       return snapshot.size;
     }
 
-    // 10分間隔の時間帯文字列を作る関数
-    function formatSlotTime(startTimeStr) {
-      // startTimeStr = "10:00" の形式想定
-      const [h, m] = startTimeStr.split(":").map(Number);
-      const start = new Date();
-      start.setHours(h, m, 0, 0);
-
-      const end = new Date(start.getTime() + 10 * 60 * 1000); // 10分後
-
-      const pad = n => n.toString().padStart(2, "0");
-      return `${pad(start.getHours())}:${pad(start.getMinutes())}〜${pad(end.getHours())}:${pad(end.getMinutes())}`;
-    }
-
-    // 現在の案内時間（発券済み枚数に応じて）
-    async function getAvailableTime() {
-      if (timeSlots.length === 0) {
-        return "案内時間未設定";
-      }
-      const count = await getIssuedCount();
-      const index = count % timeSlots.length;
-      return formatSlotTime(timeSlots[index]);
-    }
-
-    // 発券前に表示する「今発券すると案内される時間」
+    // 発券前の案内時間表示（スロットの開始・終了をそのまま使う）
     async function showNextAvailableTime() {
       const el = document.getElementById("currentTime");
       if (!isIssuing) {
@@ -112,7 +89,8 @@
       }
       const count = await getIssuedCount();
       const nextIndex = count % timeSlots.length;
-      el.textContent = `今発券すると案内される時間：${formatSlotTime(timeSlots[nextIndex])}`;
+      const slot = timeSlots[nextIndex];
+      el.textContent = `今発券すると案内される時間：${slot.start}〜${slot.end}`;
     }
 
     function updateUI() {
@@ -181,11 +159,22 @@
         showNextAvailableTime();
       });
     });
+
+    // 発券済み枚数に応じた案内時間を返す（スロットの開始終了を結合）
+    async function getAvailableTime() {
+      if (timeSlots.length === 0) {
+        return "案内時間未設定";
+      }
+      const count = await getIssuedCount();
+      const index = count % timeSlots.length;
+      const slot = timeSlots[index];
+      return `${slot.start}〜${slot.end}`;
+    }
   </script>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div id="currentTime">今発券すると案内される時間：--:--〜--:--</div>
+  <div id="currentTime">ただ今の発券時間：--:--〜--:--</div>
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
     <label>人数 <input type="number" id="people" required min="1" /></label>
