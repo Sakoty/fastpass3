@@ -9,11 +9,21 @@
     video { width: 100%; max-width: 400px; border: 1px solid #ccc; }
     #result {
       margin-top: 20px;
-      font-size: 1.2em;
+      font-size: 1.1em;
       font-weight: bold;
       color: green;
     }
     .error { color: red; }
+    #enableSoundBtn {
+      margin: 12px 0;
+      padding: 10px 16px;
+      font-size: 1em;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
   </style>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <script type="module">
@@ -36,16 +46,39 @@
 
     const resultEl = document.getElementById("result");
     const sound = document.getElementById("sound");
+    const enableBtn = document.getElementById("enableSoundBtn");
 
     const codeReader = new ZXing.BrowserQRCodeReader();
     let isReading = false;
+    let audioUnlocked = false;
 
     function showResult(message, isError = false) {
       resultEl.textContent = message;
       resultEl.className = isError ? "error" : "";
     }
 
-    // 読み取り制御付きスキャン開始
+    async function unlockAudio() {
+      try {
+        // 1回だけ再生してすぐ止めることで、以後の自動再生を許可させる
+        await sound.play();
+        sound.pause();
+        sound.currentTime = 0;
+        audioUnlocked = true;
+        enableBtn.style.display = "none";
+        showResult("音声を有効化しました（読み取り時に音が鳴ります）");
+      } catch (e) {
+        console.warn("音声の解錠に失敗しました:", e);
+        showResult("音声の自動再生がブロックされています。もう一度「音を有効化」を押してください。", true);
+      }
+    }
+
+    enableBtn.addEventListener("click", unlockAudio);
+    // iOS対策として、どこかタップされたら解錠トライ（1回だけ）
+    document.addEventListener("touchstart", () => {
+      if (!audioUnlocked) unlockAudio();
+    }, { once: true });
+
+    // スキャン開始
     codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
       if (!res || isReading) return;
       isReading = true;
@@ -66,8 +99,17 @@
           } else {
             await updateDoc(doc(db, "passes", passDoc.id), { used: true });
             showResult(`ファストパス ${code} を使用済みにしました`);
-            sound.currentTime = 0;
-            sound.play().catch(err => console.warn("音声再生エラー:", err));
+            if (audioUnlocked) {
+              sound.currentTime = 0;
+              sound.play().catch(err => {
+                console.warn("音声再生エラー:", err);
+                showResult("音声が再生できませんでした。『音を有効化』を押してください。", true);
+                enableBtn.style.display = "inline-block";
+              });
+            } else {
+              enableBtn.style.display = "inline-block";
+              showResult("音を鳴らすには『音を有効化』を押してください。", true);
+            }
           }
         }
       } catch (e) {
@@ -75,17 +117,20 @@
         showResult("エラーが発生しました", true);
       }
 
-      // 5秒後に再びスキャン再開
-      setTimeout(() => {
-        isReading = false;
-      }, 5000);
+      // 5秒後に再度読み取り可
+      setTimeout(() => { isReading = false; }, 5000);
     });
   </script>
 </head>
 <body>
   <h1>ファストパススキャン</h1>
-  <video id="video" autoplay muted></video>
+
+  <button id="enableSoundBtn">🔊 音を有効化</button>
+
+  <video id="video" autoplay muted playsinline></video>
   <div id="result">QRコードを読み取ってください</div>
+
+  <!-- 音源は同じディレクトリに置いてください -->
   <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
 </body>
 </html>
