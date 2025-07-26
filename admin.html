@@ -7,31 +7,39 @@
   <style>
     body {
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      padding: 20px;
+      padding: 15px;
       background: #fefbd8;
       max-width: 900px;
       margin: auto;
+      color: #333;
     }
     h1 {
       text-align: center;
       color: #444;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    .table-container {
+      overflow-x: auto;
       margin-top: 20px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       background: white;
+      border-radius: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 600px;
     }
     th, td {
       border: 1px solid #ddd;
-      padding: 10px;
+      padding: 10px 8px;
       text-align: center;
       vertical-align: middle;
+      font-size: 14px;
     }
     th {
       background-color: #f0e68c;
       color: #333;
+      font-weight: 600;
     }
     tr:nth-child(even) {
       background-color: #fafafa;
@@ -43,6 +51,9 @@
       border: none;
       border-radius: 4px;
       transition: background-color 0.3s ease;
+      margin: 2px 0;
+      width: 100%;
+      max-width: 120px;
     }
     .btn-delete {
       background-color: #e74c3c;
@@ -65,6 +76,21 @@
     .status-unused {
       color: red;
       font-weight: bold;
+    }
+
+    /* スマホ対応 */
+    @media (max-width: 600px) {
+      body {
+        padding: 10px 8px;
+      }
+      th, td {
+        font-size: 12px;
+        padding: 8px 6px;
+      }
+      button {
+        font-size: 0.85rem;
+        max-width: 100px;
+      }
     }
   </style>
   <script type="module">
@@ -112,22 +138,19 @@
           <td>${typeLabel}</td>
           <td class="${usedStatusClass}">${usedStatusText}</td>
           <td>
-            <button class="btn-toggle-used">${data.used ? "未使用に戻す" : "使用済みにする"}</button>
+            <button class="btn-toggle-used">${data.used ? "未使用に戻す" : "使用済みにする"}</button><br>
             <button class="btn-delete">削除</button>
           </td>
         `;
 
-        // 使用済み・未使用切り替えボタン
         tr.querySelector(".btn-toggle-used").addEventListener("click", async () => {
           try {
             await updateDoc(doc(db, "passes", id), { used: !data.used });
-            // 状態はonSnapshotで自動更新されるのでここで何もしなくてOK
           } catch (error) {
             alert("状態の切り替えに失敗しました: " + error.message);
           }
         });
 
-        // 削除ボタン
         tr.querySelector(".btn-delete").addEventListener("click", async () => {
           if (confirm(`ファストパス「${data.id}」を削除しますか？`)) {
             try {
@@ -150,21 +173,23 @@
 </head>
 <body>
   <h1>ファストパス管理画面</h1>
-  <table>
-    <thead>
-      <tr>
-        <th>発券ID</th>
-        <th>名前</th>
-        <th>人数</th>
-        <th>案内時間</th>
-        <th>種別</th>
-        <th>状態</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody id="passesTableBody">
-      <!-- ここにデータ行が入ります -->
-    </tbody>
-  </table>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>発券ID</th>
+          <th>名前</th>
+          <th>人数</th>
+          <th>案内時間</th>
+          <th>種別</th>
+          <th>状態</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="passesTableBody">
+        <!-- Firestoreデータ -->
+      </tbody>
+    </table>
+  </div>
 </body>
 </html>
