@@ -16,25 +16,13 @@
       overflow-y: auto;
     }
     aside#roomList h2 { margin-top: 0; }
-    aside#roomList div.roomItem {
+    aside#roomList div {
       padding: 8px;
       margin-bottom: 4px;
       cursor: pointer;
       border-radius: 4px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
-    aside#roomList div.roomItem:hover { background: #eee; }
-    aside#roomList button.deleteRoomBtn {
-      background: #e74c3c;
-      border: none;
-      color: white;
-      border-radius: 3px;
-      cursor: pointer;
-      padding: 2px 6px;
-      font-size: 0.8rem;
-    }
+    aside#roomList div:hover { background: #eee; }
     #chatSection {
       flex: 1;
       display: flex;
@@ -61,7 +49,6 @@
       background: white;
       border-radius: 6px;
       position: relative;
-      word-break: break-word;
     }
     .message.mention {
       background: #ffffcc;
@@ -79,11 +66,6 @@
       font-size: 1.2rem;
       margin-right: 5px;
       cursor: pointer;
-      user-select: none;
-    }
-    .reaction-button.active {
-      font-weight: bold;
-      text-shadow: 0 0 3px #000;
     }
     footer {
       background: #fff;
@@ -101,21 +83,11 @@
       padding: 10px;
       font-size: 1rem;
     }
-    @media (max-width: 600px) {
-      #app { flex-direction: column; }
-      aside#roomList { width: 100%; height: 120px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
-      aside#roomList div.roomItem {
-        display: inline-block;
-        margin-right: 8px;
-        margin-bottom: 0;
-      }
-      #chatSection { flex: 1 1 auto; height: calc(100vh - 120px); }
-    }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, setDoc, getDocs, getDoc, deleteDoc
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, setDoc, getDocs, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -141,21 +113,18 @@
         if (userName) localStorage.setItem("chatUserName", userName);
       }
       listRooms();
+      document.getElementById("sendBtn").addEventListener("click", sendMessage);
     };
 
     async function listRooms() {
       const roomList = document.getElementById("roomList");
-      roomList.innerHTML = '<h2>ルーム</h2><button id="createRoomBtn">＋ルーム作成</button>';
-      document.getElementById("createRoomBtn").onclick = createRoom;
-
+      roomList.innerHTML = "<h2>ルーム</h2>";
       const roomsRef = collection(db, "rooms");
       const q = query(roomsRef, orderBy("lastMessageAt", "desc"));
       const snap = await getDocs(q);
       snap.forEach(docSnap => {
         const div = document.createElement("div");
-        div.className = "roomItem";
         div.textContent = docSnap.id;
-
         div.onclick = async () => {
           const roomData = (await getDoc(docSnap.ref)).data();
           if (roomData.password) {
@@ -167,42 +136,8 @@
           }
           joinRoom(docSnap.id);
         };
-
-        // 削除ボタン追加
-        const delBtn = document.createElement("button");
-        delBtn.textContent = "削除";
-        delBtn.className = "deleteRoomBtn";
-        delBtn.onclick = async (e) => {
-          e.stopPropagation();
-          const confirmPass = prompt("ルーム削除のためパスワードを入力してください。");
-          if (confirmPass !== "vcbm") {
-            alert("パスワードが違います。削除できません。");
-            return;
-          }
-          if (confirm(`ルーム「${docSnap.id}」を本当に削除しますか？`)) {
-            await deleteRoom(docSnap.id);
-            await listRooms();
-            if(currentRoom === docSnap.id){
-              document.getElementById("chatArea").innerHTML = "";
-              currentRoom = null;
-              document.getElementById("currentRoom").textContent = "";
-            }
-          }
-        };
-        div.appendChild(delBtn);
-
         roomList.appendChild(div);
       });
-    }
-
-    async function deleteRoom(roomName) {
-      // ルームドキュメント削除
-      await deleteDoc(doc(db, "rooms", roomName));
-      // ルーム内のメッセージも削除（Firestoreにはバッチ削除がないので）
-      const messagesRef = collection(db, "rooms", roomName, "messages");
-      const snap = await getDocs(messagesRef);
-      const batchDeletes = snap.docs.map(d => deleteDoc(d.ref));
-      await Promise.all(batchDeletes);
     }
 
     async function createRoom() {
@@ -214,12 +149,11 @@
         password: password || ""
       });
       joinRoom(name);
-      await listRooms();
     }
+    window.createRoom = createRoom;
 
     async function joinRoom(roomName) {
       currentRoom = roomName;
-      document.getElementById("currentRoom").textContent = `ルーム: ${roomName}`;
       const chatArea = document.getElementById("chatArea");
       chatArea.innerHTML = "";
 
@@ -239,46 +173,33 @@
           if (!data.readUsers?.includes(userName)) {
             updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
           }
-
-          // リアクション表示部分
           const reactionDiv = document.createElement("div");
           reactionDiv.className = "reactions";
           ["👍", "❤️", "😂", "🎉"].forEach(emoji => {
             const btn = document.createElement("span");
             btn.textContent = emoji;
             btn.className = "reaction-button";
-
-            // 既に自分が押しているか
-            const userHasReacted = data.reactions && data.reactions[emoji] && data.reactions[emoji].includes(userName);
-            if (userHasReacted) btn.classList.add("active");
-
+            const userReacted = data.reactions?.[emoji]?.includes(userName);
+            btn.style.opacity = userReacted ? 1 : 0.5;
             btn.onclick = async () => {
               const reactions = data.reactions || {};
-
-              if (!reactions[emoji]) reactions[emoji] = [];
-
-              if (reactions[emoji].includes(userName)) {
-                // 取り消し
-                reactions[emoji] = reactions[emoji].filter(u => u !== userName);
-                if (reactions[emoji].length === 0) {
-                  delete reactions[emoji];
-                }
+              const users = new Set(reactions[emoji] || []);
+              if (users.has(userName)) {
+                users.delete(userName);
               } else {
-                // 追加
-                reactions[emoji].push(userName);
+                users.add(userName);
               }
-
+              reactions[emoji] = Array.from(users);
               await updateDoc(docSnap.ref, { reactions });
             };
             reactionDiv.appendChild(btn);
-
-            const count = document.createElement("span");
-            const countNum = data.reactions && data.reactions[emoji] ? data.reactions[emoji].length : 0;
-            count.textContent = countNum > 0 ? ` ${countNum}` : "";
-            reactionDiv.appendChild(count);
+            if (data.reactions?.[emoji]?.length) {
+              const count = document.createElement("span");
+              count.textContent = ` ${data.reactions[emoji].length}`;
+              reactionDiv.appendChild(count);
+            }
           });
           div.appendChild(reactionDiv);
-
           chatArea.appendChild(div);
         });
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -289,8 +210,9 @@
       const text = document.getElementById("messageInput").value.trim();
       const imageInput = document.getElementById("imageInput");
       if (!text && !imageInput.files[0]) return;
+
       if (!currentRoom) {
-        alert("ルームを選択してください。");
+        alert("ルームを選択してください");
         return;
       }
 
@@ -323,7 +245,7 @@
 <body>
   <div id="app">
     <aside id="roomList">
-      <!-- ルームリストと作成ボタンはスクリプトで動的に作成 -->
+      <button id="createRoomBtn">＋ルーム作成</button>
     </aside>
     <div id="chatSection">
       <header>
@@ -334,7 +256,7 @@
       <footer>
         <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
         <input type="file" id="imageInput" accept="image/*" />
-        <button onclick="sendMessage()">送信</button>
+        <button id="sendBtn">送信</button>
       </footer>
     </div>
   </div>
