@@ -110,7 +110,7 @@
       const time = await getAvailableTime();
       const currentTimeEl = document.getElementById("currentTime");
       currentTimeEl.textContent =
-        time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
+        time ? `現在発券中の案内時間：${time}` : "";
       return time;
     }
 
