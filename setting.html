@@ -133,6 +133,51 @@
       }
     }
 
+    // ここから新規追加 --- FirestoreのtimeSlotsから開始・終了時間をフォームにセットする処理 ---
+    async function loadTimeSlotsToForm() {
+      try {
+        const snap = await getDoc(doc(db, "settings", "timeSlots"));
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (!data.slots || !Array.isArray(data.slots)) return;
+
+        // slotsは "HH:mm〜HH:mm" の配列。連続した時間帯でグルーピングする処理
+        const grouped = [];
+        let currentGroup = [];
+        for (let i = 0; i < data.slots.length; i++) {
+          if (currentGroup.length === 0) {
+            currentGroup.push(data.slots[i]);
+          } else {
+            const prev = currentGroup[currentGroup.length - 1];
+            const prevEnd = prev.split("〜")[1];
+            const thisStart = data.slots[i].split("〜")[0];
+            if (prevEnd === thisStart) {
+              currentGroup.push(data.slots[i]);
+            } else {
+              grouped.push(currentGroup);
+              currentGroup = [data.slots[i]];
+            }
+          }
+        }
+        if (currentGroup.length > 0) grouped.push(currentGroup);
+
+        for (let i = 0; i < 3; i++) {
+          const group = grouped[i];
+          if (group) {
+            const startTime = group[0].split("〜")[0];
+            const endTime = group[group.length - 1].split("〜")[1];
+            document.getElementById(`start${i+1}`).value = startTime;
+            document.getElementById(`end${i+1}`).value = endTime;
+          } else {
+            document.getElementById(`start${i+1}`).value = "";
+            document.getElementById(`end${i+1}`).value = "";
+          }
+        }
+      } catch (error) {
+        console.error("案内時間の読み込みに失敗しました:", error);
+      }
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       const startBtn = document.getElementById("startBtn");
       const stopBtn = document.getElementById("stopBtn");
@@ -142,6 +187,8 @@
 
       updateStatusDisplay();
       startCurrentTimeClock();
+
+      loadTimeSlotsToForm();  // ← ここでFirestoreの時間帯読み込みを呼び出す
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
