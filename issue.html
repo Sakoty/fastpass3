@@ -11,14 +11,12 @@
     label, input { display: block; margin: 10px auto; }
     #qrcode { margin: 20px auto; }
     #currentTime { font-weight: bold; margin-bottom: 15px; }
-    #message { color: red; font-weight: bold; margin-bottom: 20px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, limit, getDocs,
-      serverTimestamp, doc, getDoc
+      getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, doc, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -33,191 +31,161 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let slots = [];
-    let issuingEnabled = false;
-
-    const pad = n => n.toString().padStart(2, "0");
-
-    function hhmmToDate(hhmm) {
-      const [h, m] = hhmm.split(":").map(Number);
-      const d = new Date();
-      d.setHours(h, m, 0, 0);
-      return d;
-    }
-
-    function parseSlot(slotStr) {
-      const [startStr, endStr] = slotStr.split("〜");
-      return {
-        start: hhmmToDate(startStr),
-        end: hhmmToDate(endStr),
-        startStr,
-        endStr
-      };
-    }
-
-    function firstNotPastSlotIndex(slotsArr) {
+    // 日付を YYYY-MM-DD 形式で取得
+    function getTodayString() {
       const now = new Date();
-      for (let i = 0; i < slotsArr.length; i++) {
-        const { end } = parseSlot(slotsArr[i]);
-        if (end.getTime() > now.getTime()) return i;
-      }
-      return slotsArr.length;
+      return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
     }
 
+    // 発券済み情報を保存
+    function savePassToLocal(pass) {
+      const todayStr = getTodayString();
+      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: todayStr }));
+    }
+
+    // localStorageから当日中の発券情報を取得
+    function loadPassFromLocal() {
+      const saved = localStorage.getItem("fp_pass");
+      if (!saved) return null;
+      const data = JSON.parse(saved);
+      return data.date === getTodayString() ? data : null;
+    }
+
+    // 発券済み枚数取得
     async function getIssuedCount() {
-      const q = query(collection(db, "passes"));
+      const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
       const snapshot = await getDocs(q);
       return snapshot.size;
     }
 
-    async function getNextNumber() {
-      const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) return 1;
-      const last = snapshot.docs[0].data().number;
-      return typeof last === "number" && last >= 1 ? last + 1 : 1;
+    // Firestoreから案内時間設定を取得
+    async function getTimeSlots() {
+      const docRef = doc(db, "settings", "timeRange");
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) return [];
+      return docSnap.data().slots || [];
     }
 
-    async function fetchSlots() {
-      const ref = doc(db, "settings", "timeSlots");
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return [];
-      return snap.data().slots || [];
+    // 10分刻みで案内時間を生成
+    function generateTimeBlocks(start, end) {
+      const blocks = [];
+      const [startH, startM] = start.split(":").map(Number);
+      const [endH, endM] = end.split(":").map(Number);
+      const startTime = new Date();
+      startTime.setHours(startH, startM, 0, 0);
+      const endTime = new Date();
+      endTime.setHours(endH, endM, 0, 0);
+      while (startTime < endTime) {
+        const s = new Date(startTime);
+        const e = new Date(startTime);
+        e.setMinutes(e.getMinutes() + 10);
+        const format = t => t.toTimeString().slice(0,5);
+        blocks.push(`${format(s)}〜${format(e)}`);
+        startTime.setMinutes(startTime.getMinutes() + 10);
+      }
+      return blocks;
     }
 
-    async function fetchIssuingEnabled() {
-      const ref = doc(db, "settings", "issueStatus");
-      const snap = await getDoc(ref);
-      return snap.exists() && snap.data().enabled === true;
-    }
-
-    async function getNextIndex() {
-      const issued = await getIssuedCount();
-      const notPastIdx = firstNotPastSlotIndex(slots);
-      return Math.max(issued, notPastIdx);
-    }
-
+    // 現在の案内時間（有効なもの）を取得
     async function getAvailableTime() {
-      if (!slots.length) return null;
-      const index = await getNextIndex();
-      if (index >= slots.length) return null;
-      return slots[index];
+      const slots = await getTimeSlots();
+      if (slots.length === 0) return null;
+
+      let allBlocks = [];
+      slots.forEach(slot => {
+        const [start, end] = slot.split("〜");
+        allBlocks.push(...generateTimeBlocks(start, end));
+      });
+
+      const issuedCount = await getIssuedCount();
+      return allBlocks[issuedCount] || null;
     }
 
-    function displayIssuedPass(pass) {
-      const infoEl = document.getElementById("info");
-      const qrContainer = document.getElementById("qrcode");
-      const formEl = document.getElementById("form");
-      const currentTimeEl = document.getElementById("currentTime");
+    // 現在の案内時間を表示
+    async function showCurrentTime() {
+      const time = await getAvailableTime();
+      document.getElementById("currentTime").textContent =
+        time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
+    }
 
-      formEl.style.display = "none";
-      currentTimeEl.textContent = "";
-      infoEl.innerHTML = `
-        <h2>ファストパス発券済み</h2>
-        <p>番号：${pass.id}</p>
-        <p>名前：${pass.name}</p>
-        <p>人数：${pass.numPeople}</p>
-        <p>案内時間：${pass.time}</p>
-      `;
+    // QRコード描画
+    function drawQRCode(id) {
+      const qrContainer = document.getElementById("qrcode");
       qrContainer.innerHTML = "";
-      QRCode.toCanvas(document.createElement("canvas"), pass.id, { width: 200 }, (err, canvas) => {
+      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
         if (!err) qrContainer.appendChild(canvas);
       });
     }
 
-    async function initializePage() {
-      const messageEl = document.getElementById("message");
+    window.addEventListener("load", async () => {
+      const savedPass = loadPassFromLocal();
 
-      // localStorage に保存された発券情報を確認
-      const saved = localStorage.getItem("fp_pass");
-      if (saved) {
-        const pass = JSON.parse(saved);
-        displayIssuedPass(pass);
+      if (savedPass) {
+        document.getElementById("form").style.display = "none";
+        document.getElementById("info").innerHTML = `
+          <h2>発券済みです</h2>
+          <p>番号：${savedPass.id}</p>
+          <p>名前：${savedPass.name}</p>
+          <p>人数：${savedPass.numPeople}</p>
+          <p>案内時間：${savedPass.time}</p>
+        `;
+        drawQRCode(savedPass.id);
         return;
       }
 
-      // 新規発券処理
-      [issuingEnabled, slots] = await Promise.all([
-        fetchIssuingEnabled(),
-        fetchSlots()
-      ]);
-
-      const currentTimeEl = document.getElementById("currentTime");
-      const formEl = document.getElementById("form");
-
-      if (!issuingEnabled) {
-        messageEl.textContent = "現在、発券は停止中です。";
-        formEl.style.display = "none";
-        currentTimeEl.textContent = "";
-        return;
-      }
-
-      const time = await getAvailableTime();
-      if (!time) {
-        messageEl.textContent = "発券終了しました（出せる案内時間がありません）";
-        formEl.style.display = "none";
-        currentTimeEl.textContent = "";
-        return;
-      }
-
-      currentTimeEl.textContent = `今発券すると案内される時間：${time}`;
-    }
-
-    window.addEventListener("load", () => {
-      initializePage();
+      showCurrentTime();
+      setInterval(showCurrentTime, 60000);
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const name = document.getElementById("name").value.trim();
         const numPeople = parseInt(document.getElementById("people").value);
-
-        if (!name) {
-          alert("名前を入力してください");
-          return;
-        }
-        if (isNaN(numPeople) || numPeople < 1) {
-          alert("人数は1以上の数字で入力してください");
+        if (!name || isNaN(numPeople) || numPeople < 1) {
+          alert("正しい名前と人数を入力してください");
           return;
         }
 
         const time = await getAvailableTime();
         if (!time) {
-          alert("発券終了しました");
+          alert("すべての案内時間が発券済みです");
           return;
         }
 
-        const number = await getNextNumber();
+        const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
+        const snapshot = await getDocs(q);
+        const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
         const id = `FP${number.toString().padStart(3, "0")}`;
 
-        const pass = {
-          id, name, numPeople, time
-        };
-
+        const newPass = { id, number, name, numPeople, time, used: false };
         await addDoc(collection(db, "passes"), {
-          ...pass,
-          number,
-          used: false,
+          ...newPass,
           createdAt: serverTimestamp()
         });
 
-        localStorage.setItem("fp_pass", JSON.stringify(pass));
-        displayIssuedPass(pass);
+        savePassToLocal(newPass);
+
+        document.getElementById("form").style.display = "none";
+        document.getElementById("info").innerHTML = `
+          <h2>ファストパス発券完了！</h2>
+          <p>番号：${id}</p>
+          <p>名前：${name}</p>
+          <p>人数：${numPeople}</p>
+          <p>案内時間：${time}</p>
+        `;
+        drawQRCode(id);
       });
     });
   </script>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div id="message"></div>
-  <div id="currentTime">今発券すると案内される時間：--:--〜--:--</div>
-
+  <div id="currentTime">現在発券中の案内時間：--:--〜--:--</div>
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
     <label>人数 <input type="number" id="people" required min="1" /></label>
     <button type="submit">発券する</button>
   </form>
-
   <div id="info"></div>
   <div id="qrcode"></div>
 </body>
