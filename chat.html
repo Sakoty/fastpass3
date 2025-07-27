@@ -102,6 +102,7 @@
       padding: 12px 16px;
       overflow-y: auto;
       background: #f7f7f7;
+      word-break: break-word;
     }
     .message {
       margin-bottom: 12px;
@@ -109,7 +110,6 @@
       background: white;
       border-radius: 8px;
       position: relative;
-      word-break: break-word;
       font-size: 1rem;
     }
     .message.mention {
@@ -266,6 +266,9 @@
     let currentRoom = null;
     let userName = localStorage.getItem("chatUserName") || "";
 
+    // 監視解除用
+    let unsubscribeMessages = null;
+
     window.onload = () => {
       if (!userName) {
         userName = prompt("あなたの名前を入力してください");
@@ -314,6 +317,10 @@
             currentRoom = null;
             document.getElementById("chatArea").innerHTML = "";
             document.getElementById("currentRoom").textContent = "";
+            if (unsubscribeMessages) {
+              unsubscribeMessages();
+              unsubscribeMessages = null;
+            }
           }
           listRooms();
           alert("ルームを削除しました");
@@ -335,49 +342,84 @@
         lastMessageAt: serverTimestamp(),
         password: password || ""
       });
+      await listRooms();
       joinRoom(name);
     }
     window.createRoom = createRoom;
 
     async function joinRoom(roomName) {
+      if (unsubscribeMessages) {
+        unsubscribeMessages();
+        unsubscribeMessages = null;
+      }
       currentRoom = roomName;
       document.getElementById("currentRoom").textContent = roomName;
       const chatArea = document.getElementById("chatArea");
       chatArea.innerHTML = "";
 
+      const roomDoc = await getDoc(doc(db, "rooms", roomName));
+      if (!roomDoc.exists()) {
+        alert("ルームが存在しません。");
+        currentRoom = null;
+        document.getElementById("currentRoom").textContent = "";
+        return;
+      }
+      const roomData = roomDoc.data();
+      if (roomData.password) {
+        const input = prompt("このルームはパスワードで保護されています。パスワードを入力してください。");
+        if (input !== roomData.password) {
+          alert("パスワードが違います");
+          currentRoom = null;
+          document.getElementById("currentRoom").textContent = "";
+          return;
+        }
+      }
+
       const messagesRef = collection(db, "rooms", roomName, "messages");
       const q = query(messagesRef, orderBy("createdAt"));
 
-      onSnapshot(q, snapshot => {
+      unsubscribeMessages = onSnapshot(q, async snapshot => {
         chatArea.innerHTML = "";
-        snapshot.forEach(docSnap => {
+        for (const docSnap of snapshot.docs) {
           const data = docSnap.data();
           const div = document.createElement("div");
           div.className = "message" + (data.text?.includes("@" + userName) ? " mention" : "");
-          div.innerHTML = `<b>${data.name}</b>: ${escapeHTML(data.text || "")}`;
+
+          // エスケープ処理をしてテキスト表示
+          const safeText = escapeHTML(data.text || "");
+          div.innerHTML = `<b>${escapeHTML(data.name)}</b>: ${safeText}`;
+
           if (data.imageURL) {
-            div.innerHTML += `<br><img src="${data.imageURL}" class="chat-image" />`;
-          }
-          if (!data.readUsers?.includes(userName)) {
-            updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
+            const img = document.createElement("img");
+            img.src = data.imageURL;
+            img.className = "chat-image";
+            div.appendChild(document.createElement("br"));
+            div.appendChild(img);
           }
 
-          // リアクションエリア
+          // 既読処理
+          if (!Array.isArray(data.readUsers) || !data.readUsers.includes(userName)) {
+            await updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
+          }
+
+          // リアクション処理
           const reactionDiv = document.createElement("div");
           reactionDiv.className = "reactions";
+
           const userReactions = data.reactions || {};
-          const userReactedEmojis = Object.entries(userReactions)
-            .filter(([, users]) => Array.isArray(users) && users.includes(userName))
-            .map(([emoji]) => emoji);
-          const reactionEmojis = ["👍", "❤️", "😂", "🎉"];
-          reactionEmojis.forEach(emoji => {
+          const emojis = ["👍", "❤️", "😂", "🎉"];
+          emojis.forEach(emoji => {
             const btn = document.createElement("span");
             btn.textContent = emoji;
             btn.className = "reaction-button";
-            if (userReactedEmojis.includes(emoji)) btn.classList.add("active");
+            if (Array.isArray(userReactions[emoji]) && userReactions[emoji].includes(userName)) {
+              btn.classList.add("active");
+            }
             btn.onclick = async () => {
-              const refDoc = doc(db, "rooms", roomName, "messages", docSnap.id);
+              const refDoc = doc(db, "rooms", currentRoom, "messages", docSnap.id);
               const docSnapLatest = await getDoc(refDoc);
+              if (!docSnapLatest.exists()) return;
+
               const dataLatest = docSnapLatest.data();
               let reactions = dataLatest.reactions || {};
 
@@ -393,7 +435,7 @@
             };
             reactionDiv.appendChild(btn);
 
-            if (userReactions[emoji]?.length > 0) {
+            if (Array.isArray(userReactions[emoji]) && userReactions[emoji].length > 0) {
               const count = document.createElement("span");
               count.className = "reaction-count";
               count.textContent = userReactions[emoji].length;
@@ -403,12 +445,11 @@
           div.appendChild(reactionDiv);
 
           chatArea.appendChild(div);
-        });
+        }
         chatArea.scrollTop = chatArea.scrollHeight;
       });
-
-      listRooms();
     }
+    window.joinRoom = joinRoom;
 
     async function sendMessage() {
       const textInput = document.getElementById("messageInput");
@@ -440,6 +481,7 @@
       textInput.value = "";
       imageInput.value = "";
     }
+    window.sendMessage = sendMessage;
 
     // 簡易XSS対策
     function escapeHTML(str) {
