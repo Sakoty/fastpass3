@@ -53,7 +53,6 @@
     }
 
     window.addEventListener("DOMContentLoaded", () => {
-      // 案内時間帯設定フォーム送信処理
       document.getElementById("setTimeSlots").addEventListener("submit", async (e) => {
         e.preventDefault();
 
@@ -70,7 +69,7 @@
         }
 
         if (slots.length === 0) {
-          alert("有効な案内時間がありません。");
+          alert("有効な案内時間がありません。最低1つの時間枠を入力してください。");
           return;
         }
 
@@ -82,7 +81,6 @@
         }
       });
 
-      // 発券開始ボタン処理
       document.getElementById("startBtn").addEventListener("click", async () => {
         try {
           await setDoc(doc(db, "settings", "issueStatus"), { enabled: true });
@@ -92,7 +90,6 @@
         }
       });
 
-      // 発券中止ボタン処理
       document.getElementById("stopBtn").addEventListener("click", async () => {
         try {
           await setDoc(doc(db, "settings", "issueStatus"), { enabled: false });
@@ -102,7 +99,6 @@
         }
       });
 
-      // 特別ファストパス発行フォーム処理
       document.getElementById("specialForm").addEventListener("submit", async (e) => {
         e.preventDefault();
 
@@ -131,7 +127,8 @@
             numPeople,
             time,
             used: false,
-            createdAt: serverTimestamp()
+            createdAt: serverTimestamp(),
+            special: true
           });
           alert("特別ファストパスを発行しました");
           e.target.reset();
