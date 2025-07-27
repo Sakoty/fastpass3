@@ -27,17 +27,15 @@
       projectId: "fastpass-system",
       storageBucket: "fastpass-system.appspot.com",
       messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5",
-      measurementId: "G-SLPKMCNY53"
+      appId: "1:858745521872:web:29289b673855097e1200d5"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let slots = []; // ["10:00〜10:10", ...]
+    let slots = [];
     let issuingEnabled = false;
 
-    // ---------- util ----------
     const pad = n => n.toString().padStart(2, "0");
 
     function hhmmToDate(hhmm) {
@@ -57,7 +55,6 @@
       };
     }
 
-    // 現在時刻より未来(終了が現在より後)の最初のスロットindexを返す。無ければ slots.length
     function firstNotPastSlotIndex(slotsArr) {
       const now = new Date();
       for (let i = 0; i < slotsArr.length; i++) {
@@ -78,7 +75,7 @@
       const snapshot = await getDocs(q);
       if (snapshot.empty) return 1;
       const last = snapshot.docs[0].data().number;
-      return (typeof last === "number" && last >= 1) ? last + 1 : 1;
+      return typeof last === "number" && last >= 1 ? last + 1 : 1;
     }
 
     async function fetchSlots() {
@@ -94,7 +91,6 @@
       return snap.exists() && snap.data().enabled === true;
     }
 
-    // 次に発券すべきインデックスを返す（発券枚数 or 現在時刻 越えた分の大きい方）
     async function getNextIndex() {
       const issued = await getIssuedCount();
       const notPastIdx = firstNotPastSlotIndex(slots);
@@ -104,54 +100,67 @@
     async function getAvailableTime() {
       if (!slots.length) return null;
       const index = await getNextIndex();
-      if (index >= slots.length) return null; // もう出せる枠が無い
+      if (index >= slots.length) return null;
       return slots[index];
     }
 
-    async function updateCurrentTimeDisplay() {
-      const el = document.getElementById("currentTime");
-      if (!issuingEnabled) {
-        el.textContent = "現在、発券は停止中です。";
-        return;
-      }
-      const time = await getAvailableTime();
-      if (!time) {
-        el.textContent = "発券終了しました（出せる案内時間がありません）";
-      } else {
-        el.textContent = `今発券すると案内される時間：${time}`;
-      }
+    function displayIssuedPass(pass) {
+      const infoEl = document.getElementById("info");
+      const qrContainer = document.getElementById("qrcode");
+      const formEl = document.getElementById("form");
+      const currentTimeEl = document.getElementById("currentTime");
+
+      formEl.style.display = "none";
+      currentTimeEl.textContent = "";
+      infoEl.innerHTML = `
+        <h2>ファストパス発券済み</h2>
+        <p>番号：${pass.id}</p>
+        <p>名前：${pass.name}</p>
+        <p>人数：${pass.numPeople}</p>
+        <p>案内時間：${pass.time}</p>
+      `;
+      qrContainer.innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), pass.id, { width: 200 }, (err, canvas) => {
+        if (!err) qrContainer.appendChild(canvas);
+      });
     }
 
     async function initializePage() {
       const messageEl = document.getElementById("message");
-      const formEl = document.getElementById("form");
 
+      // localStorage に保存された発券情報を確認
+      const saved = localStorage.getItem("fp_pass");
+      if (saved) {
+        const pass = JSON.parse(saved);
+        displayIssuedPass(pass);
+        return;
+      }
+
+      // 新規発券処理
       [issuingEnabled, slots] = await Promise.all([
         fetchIssuingEnabled(),
         fetchSlots()
       ]);
 
+      const currentTimeEl = document.getElementById("currentTime");
+      const formEl = document.getElementById("form");
+
       if (!issuingEnabled) {
         messageEl.textContent = "現在、発券は停止中です。";
         formEl.style.display = "none";
-        await updateCurrentTimeDisplay();
+        currentTimeEl.textContent = "";
         return;
       }
 
-      const index = await getNextIndex();
-      if (!slots.length || index >= slots.length) {
+      const time = await getAvailableTime();
+      if (!time) {
         messageEl.textContent = "発券終了しました（出せる案内時間がありません）";
         formEl.style.display = "none";
-        await updateCurrentTimeDisplay();
+        currentTimeEl.textContent = "";
         return;
       }
 
-      messageEl.textContent = "";
-      formEl.style.display = "block";
-      await updateCurrentTimeDisplay();
-
-      // 1分ごとに再評価（時間経過で過去枠をスキップするため）
-      setInterval(updateCurrentTimeDisplay, 60000);
+      currentTimeEl.textContent = `今発券すると案内される時間：${time}`;
     }
 
     window.addEventListener("load", () => {
@@ -159,18 +168,6 @@
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
-
-        if (!issuingEnabled) {
-          alert("現在、発券は停止中です。");
-          return;
-        }
-
-        const time = await getAvailableTime();
-        if (!time) {
-          alert("発券終了しました（出せる案内時間がありません）");
-          await updateCurrentTimeDisplay();
-          return;
-        }
 
         const name = document.getElementById("name").value.trim();
         const numPeople = parseInt(document.getElementById("people").value);
@@ -184,35 +181,28 @@
           return;
         }
 
+        const time = await getAvailableTime();
+        if (!time) {
+          alert("発券終了しました");
+          return;
+        }
+
         const number = await getNextNumber();
         const id = `FP${number.toString().padStart(3, "0")}`;
 
+        const pass = {
+          id, name, numPeople, time
+        };
+
         await addDoc(collection(db, "passes"), {
-          id,
+          ...pass,
           number,
-          name,
-          numPeople,
-          time,
           used: false,
           createdAt: serverTimestamp()
         });
 
-        document.getElementById("info").innerHTML = `
-          <h2>ファストパス発券完了！</h2>
-          <p>番号：${id}</p>
-          <p>名前：${name}</p>
-          <p>人数：${numPeople}</p>
-          <p>案内時間：${time}</p>
-        `;
-
-        const qrContainer = document.getElementById("qrcode");
-        qrContainer.innerHTML = "";
-        QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
-          if (!err) qrContainer.appendChild(canvas);
-        });
-
-        // 再評価（枠を使い切ったり、時間が進んだりした可能性がある）
-        await initializePage();
+        localStorage.setItem("fp_pass", JSON.stringify(pass));
+        displayIssuedPass(pass);
       });
     });
   </script>
