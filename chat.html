@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>業務チャット（リアクション＆パスワード対応）</title>
+  <title>業務チャット（リアクション＆パスワード対応・画像送信なし）</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: sans-serif; background-color: #f0f0f0; }
@@ -54,7 +54,6 @@
     }
     .message.mention { background: #ffffcc; }
     .msg-meta { font-size: 0.75rem; color: #888; margin-bottom: 2px; }
-    .chat-image { max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 5px; }
 
     .reactions {
       margin-top: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
@@ -86,14 +85,14 @@
     footer {
       background: #fff; padding: 10px; display: flex; gap: 5px; flex-wrap: wrap;
     }
-    footer input[type=text], footer input[type=file] {
+    footer input[type=text] {
       flex: 1 1 100%; padding: 8px; font-size: 1rem;
     }
     footer button {
       flex: 1 1 48%; padding: 10px; font-size: 1rem; cursor: pointer;
     }
     @media (min-width: 600px) {
-      footer input[type=text], footer input[type=file], footer button { flex: 1; }
+      footer input[type=text], footer button { flex: 1; }
     }
   </style>
 </head>
@@ -116,7 +115,6 @@
       <main id="chatArea"></main>
       <footer>
         <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
-        <input type="file" id="imageInput" accept="image/*" />
         <button id="sendBtn">送信</button>
       </footer>
     </div>
@@ -128,7 +126,6 @@
       getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp,
       doc, updateDoc, setDoc, getDocs, getDoc, deleteDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
     // Firebase初期化
     const firebaseConfig = {
@@ -141,7 +138,6 @@
     };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const storage = getStorage(app);
 
     // 状態管理
     let currentRoom = null;
@@ -156,7 +152,6 @@
     const chatArea = document.getElementById('chatArea');
     const sendBtn = document.getElementById('sendBtn');
     const messageInput = document.getElementById('messageInput');
-    const imageInput = document.getElementById('imageInput');
 
     // 定数
     const DELETE_ROOM_PASSWORD = "1928mickeymouse";
@@ -290,14 +285,6 @@
           body.innerHTML = escapeHTML(data.text || '');
           div.appendChild(body);
 
-          // 画像表示
-          if (data.imageURL) {
-            const img = document.createElement('img');
-            img.src = data.imageURL;
-            img.className = 'chat-image';
-            div.appendChild(img);
-          }
-
           // 送信者本人はメッセージ削除ボタン表示
           if (data.name === userName) {
             const delBtn = document.createElement('button');
@@ -372,20 +359,11 @@
         return;
       }
       const text = messageInput.value.trim();
-      const file = imageInput.files[0];
-      if (!text && !file) return;
-
-      let imageURL = null;
-      if (file) {
-        const fileRef = ref(storage, `uploads/${currentRoom}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        imageURL = await getDownloadURL(fileRef);
-      }
+      if (!text) return;
 
       await addDoc(collection(db, 'rooms', currentRoom, 'messages'), {
         name: userName,
         text,
-        imageURL,
         createdAt: serverTimestamp(),
         readUsers: [userName],
         reactions: {}
@@ -396,7 +374,6 @@
       });
 
       messageInput.value = '';
-      imageInput.value = '';
     }
 
     // エスケープ処理
