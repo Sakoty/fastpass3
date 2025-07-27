@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>業務チャット（リアクション対応）</title>
+  <title>業務チャット（リアクション＋送信取り消し対応）</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: sans-serif; background-color: #f0f0f0; }
@@ -50,6 +50,7 @@
     }
     .message {
       margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; word-break: break-word;
+      position: relative;
     }
     .message.mention { background: #ffffcc; }
     .msg-meta { font-size: 0.75rem; color: #888; margin-bottom: 2px; }
@@ -63,6 +64,19 @@
     }
     .reaction-button.active { opacity: 1; font-weight: bold; }
     .reaction-count { font-size: .85rem; margin-right: 6px; }
+
+    .delete-message-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
 
     footer {
       background: #fff; padding: 10px; display: flex; gap: 5px; flex-wrap: wrap;
@@ -129,7 +143,6 @@
     let userName = localStorage.getItem('chat_display_name') || '';
     let messagesUnsub = null;
 
-    // 削除用パスワード（固定）
     const DELETE_PASSWORD = "1928mickeymouse";
 
     // ------------------ DOM refs ------------------
@@ -170,14 +183,12 @@
         span.onclick = async () => {
           joinRoom(docSnap.id);
         };
-        // 個別削除ボタン（任意・必要なら使う）
         const del = document.createElement('button');
         del.textContent = '削除';
         del.className = 'room-delete-btn';
         del.onclick = async (e) => {
           e.stopPropagation();
           if (confirm(`ルーム「${docSnap.id}」を削除しますか？`)) {
-            // 削除パスワード入力
             const inputPass = prompt('ルーム削除のためパスワードを入力してください');
             if (inputPass !== DELETE_PASSWORD) {
               alert('パスワードが違います。削除できません。');
@@ -213,18 +224,13 @@
 
     async function deleteRoom() {
       if (!currentRoom) return alert('ルームに入室してください');
-
-      // 削除パスワード入力
       const inputPass = prompt('ルーム削除のためパスワードを入力してください');
       if (inputPass !== DELETE_PASSWORD) {
         alert('パスワードが違います。削除できません。');
         return;
       }
-
       if (!confirm(`ルーム「${currentRoom}」を削除しますか？`)) return;
-
       await deleteRoomByName(currentRoom);
-
       currentRoom = null;
       currentRoomNameEl.textContent = '（未入室）';
       chatArea.innerHTML = '';
@@ -233,7 +239,7 @@
     }
 
     async function deleteRoomByName(roomName) {
-      // メッセージを先に削除
+      // メッセージ削除
       const msgsSnap = await getDocs(collection(db, 'rooms', roomName, 'messages'));
       for (const m of msgsSnap.docs) {
         await deleteDoc(m.ref);
@@ -274,6 +280,19 @@
             img.src = data.imageURL;
             img.className = 'chat-image';
             div.appendChild(img);
+          }
+
+          // 削除ボタン（自分のメッセージのみ）
+          if (data.name === userName) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-message-btn';
+            delBtn.textContent = '×取り消し';
+            delBtn.onclick = async () => {
+              if (confirm('このメッセージを取り消しますか？')) {
+                await deleteDoc(doc(db, 'rooms', roomName, 'messages', d.id));
+              }
+            };
+            div.appendChild(delBtn);
           }
 
           // 既読
