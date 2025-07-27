@@ -77,6 +77,10 @@
       color: red;
       font-weight: bold;
     }
+    .status-expired { /* 追加 */
+      color: darkorange;
+      font-weight: bold;
+    }
 
     /* 一括削除ボタン用 */
     #deleteAllBtn {
@@ -130,6 +134,18 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 期限切れ判定用関数を追加
+    function isExpired(timeStr) {
+      if (!timeStr) return false;
+      const parts = timeStr.split("〜");
+      if (parts.length !== 2) return false;
+      const endTimeStr = parts[1];
+      const [eh, em] = endTimeStr.split(":").map(Number);
+      const now = new Date();
+      const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em, 0, 0);
+      return now > endDate;
+    }
+
     const passesRef = collection(db, "passes");
     const q = query(passesRef, orderBy("createdAt", "desc"));
 
@@ -145,8 +161,23 @@
                           data.number === -1 ? "特別ファストパス" : 
                           "通常ファストパス";
 
-        const usedStatusText = data.used ? "使用済み" : "未使用";
-        const usedStatusClass = data.used ? "status-used" : "status-unused";
+        // 期限切れ判定
+        const expired = isExpired(data.time);
+
+        // 状態表示
+        let usedStatusText = "";
+        let usedStatusClass = "";
+
+        if (expired) {
+          usedStatusText = "期限切れ";
+          usedStatusClass = "status-expired";
+        } else if (data.used) {
+          usedStatusText = "使用済み";
+          usedStatusClass = "status-used";
+        } else {
+          usedStatusText = "未使用";
+          usedStatusClass = "status-unused";
+        }
 
         const tr = document.createElement("tr");
         tr.innerHTML = `
