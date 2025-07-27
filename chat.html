@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>業務チャット（リアクション＋送信取り消し対応）</title>
+  <title>業務チャット（リアクション＆パスワード対応）</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: sans-serif; background-color: #f0f0f0; }
@@ -67,15 +67,20 @@
 
     .delete-message-btn {
       position: absolute;
-      top: 4px;
-      right: 4px;
+      top: 6px;
+      right: 6px;
       background: #e74c3c;
-      color: white;
       border: none;
-      border-radius: 3px;
-      padding: 2px 6px;
-      font-size: 0.7rem;
+      color: white;
+      font-size: 0.8rem;
+      padding: 2px 5px;
+      border-radius: 4px;
       cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.3s;
+    }
+    .delete-message-btn:hover {
+      opacity: 1;
     }
 
     footer {
@@ -125,7 +130,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // ------------------ Firebase ------------------
+    // Firebase初期化
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -138,14 +143,12 @@
     const db = getFirestore(app);
     const storage = getStorage(app);
 
-    // ------------------ State ------------------
+    // 状態管理
     let currentRoom = null;
     let userName = localStorage.getItem('chat_display_name') || '';
     let messagesUnsub = null;
 
-    const DELETE_PASSWORD = "1928mickeymouse";
-
-    // ------------------ DOM refs ------------------
+    // DOM取得
     const roomItemsEl = document.getElementById('roomItems');
     const createRoomBtn = document.getElementById('createRoomBtn');
     const deleteRoomBtn = document.getElementById('deleteRoomBtn');
@@ -155,7 +158,9 @@
     const messageInput = document.getElementById('messageInput');
     const imageInput = document.getElementById('imageInput');
 
-    // ------------------ Init ------------------
+    // 定数
+    const DELETE_ROOM_PASSWORD = "1928mickeymouse";
+
     window.addEventListener('DOMContentLoaded', init);
     async function init() {
       if (!userName) {
@@ -168,7 +173,7 @@
       await listRooms();
     }
 
-    // ------------------ Rooms ------------------
+    // ルーム一覧表示
     async function listRooms() {
       roomItemsEl.innerHTML = '';
       const roomsRef = collection(db, 'rooms');
@@ -181,6 +186,14 @@
         span.textContent = docSnap.id;
         span.style.flex = '1';
         span.onclick = async () => {
+          const data = (await getDoc(docSnap.ref)).data();
+          if (data?.password) {
+            const input = prompt('このルームはパスワードで保護されています。パスワードを入力してください。');
+            if (input !== data.password) {
+              alert('パスワードが違います');
+              return;
+            }
+          }
           joinRoom(docSnap.id);
         };
         const del = document.createElement('button');
@@ -189,9 +202,9 @@
         del.onclick = async (e) => {
           e.stopPropagation();
           if (confirm(`ルーム「${docSnap.id}」を削除しますか？`)) {
-            const inputPass = prompt('ルーム削除のためパスワードを入力してください');
-            if (inputPass !== DELETE_PASSWORD) {
-              alert('パスワードが違います。削除できません。');
+            const inputPwd = prompt("ルーム削除用のパスワードを入力してください");
+            if (inputPwd !== DELETE_ROOM_PASSWORD) {
+              alert("パスワードが違います");
               return;
             }
             await deleteRoomByName(docSnap.id);
@@ -201,7 +214,6 @@
               chatArea.innerHTML = '';
             }
             await listRooms();
-            alert('ルームを削除しました');
           }
         };
         div.appendChild(span);
@@ -210,6 +222,7 @@
       });
     }
 
+    // ルーム作成
     async function createRoom() {
       const name = prompt('ルーム名を入力してください');
       if (!name) return;
@@ -222,11 +235,12 @@
       joinRoom(name);
     }
 
+    // ルーム削除（現在のルーム）
     async function deleteRoom() {
       if (!currentRoom) return alert('ルームに入室してください');
-      const inputPass = prompt('ルーム削除のためパスワードを入力してください');
-      if (inputPass !== DELETE_PASSWORD) {
-        alert('パスワードが違います。削除できません。');
+      const inputPwd = prompt("ルーム削除用のパスワードを入力してください");
+      if (inputPwd !== DELETE_ROOM_PASSWORD) {
+        alert("パスワードが違います");
         return;
       }
       if (!confirm(`ルーム「${currentRoom}」を削除しますか？`)) return;
@@ -235,11 +249,11 @@
       currentRoomNameEl.textContent = '（未入室）';
       chatArea.innerHTML = '';
       await listRooms();
-      alert('ルームを削除しました');
     }
 
+    // ルーム削除のヘルパー
     async function deleteRoomByName(roomName) {
-      // メッセージ削除
+      // メッセージを先に削除
       const msgsSnap = await getDocs(collection(db, 'rooms', roomName, 'messages'));
       for (const m of msgsSnap.docs) {
         await deleteDoc(m.ref);
@@ -247,7 +261,7 @@
       await deleteDoc(doc(db, 'rooms', roomName));
     }
 
-    // ------------------ Chat ------------------
+    // ルーム入室処理
     async function joinRoom(roomName) {
       currentRoom = roomName;
       currentRoomNameEl.textContent = `ルーム: ${roomName}`;
@@ -264,17 +278,19 @@
           const div = document.createElement('div');
           div.className = 'message' + (data.text?.includes('@' + userName) ? ' mention' : '');
 
-          // meta & body
+          // メタ情報
           const meta = document.createElement('div');
           meta.className = 'msg-meta';
           const createdAt = data.createdAt?.toDate?.() ? data.createdAt.toDate() : null;
           meta.textContent = `${escapeHTML(data.name || '-')}${createdAt ? ' ・ ' + formatDate(createdAt) : ''}`;
           div.appendChild(meta);
 
+          // メッセージ本文
           const body = document.createElement('div');
           body.innerHTML = escapeHTML(data.text || '');
           div.appendChild(body);
 
+          // 画像表示
           if (data.imageURL) {
             const img = document.createElement('img');
             img.src = data.imageURL;
@@ -282,27 +298,28 @@
             div.appendChild(img);
           }
 
-          // 削除ボタン（自分のメッセージのみ）
+          // 送信者本人はメッセージ削除ボタン表示
           if (data.name === userName) {
             const delBtn = document.createElement('button');
+            delBtn.textContent = '×';
+            delBtn.title = 'メッセージ削除';
             delBtn.className = 'delete-message-btn';
-            delBtn.textContent = '×取り消し';
             delBtn.onclick = async () => {
-              if (confirm('このメッセージを取り消しますか？')) {
+              if (confirm('このメッセージを削除しますか？')) {
                 await deleteDoc(doc(db, 'rooms', roomName, 'messages', d.id));
               }
             };
             div.appendChild(delBtn);
           }
 
-          // 既読
+          // 既読処理（読んだユーザーを追加）
           if (!data.readUsers?.includes(userName)) {
             updateDoc(doc(db, 'rooms', roomName, 'messages', d.id), {
               readUsers: [...(data.readUsers || []), userName]
             });
           }
 
-          // --- Reactions ---
+          // リアクション機能
           const reactionsObj = data.reactions || {}; // {"👍": ["A", "B"], ...}
           const reactionDiv = document.createElement('div');
           reactionDiv.className = 'reactions';
@@ -318,7 +335,7 @@
               const currentList = newReactions[emoji] ? [...newReactions[emoji]] : [];
               const idx = currentList.indexOf(userName);
               if (idx >= 0) {
-                currentList.splice(idx, 1); // remove
+                currentList.splice(idx, 1); // 取り消し
                 if (currentList.length === 0) {
                   delete newReactions[emoji];
                 } else {
@@ -348,6 +365,7 @@
       });
     }
 
+    // メッセージ送信処理
     async function sendMessage() {
       if (!currentRoom) {
         alert('ルームに入室してください');
@@ -381,7 +399,7 @@
       imageInput.value = '';
     }
 
-    // ------------------ Utils ------------------
+    // エスケープ処理
     function escapeHTML(str = '') {
       return str
         .replace(/&/g, '&amp;')
@@ -390,6 +408,7 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
+    // 日付フォーマット
     function pad(n){ return n.toString().padStart(2, '0'); }
     function formatDate(d){ return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   </script>
