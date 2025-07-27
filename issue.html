@@ -12,6 +12,7 @@
     #qrcode { margin: 20px auto; }
     #currentTime { font-weight: bold; margin-bottom: 15px; }
     #info .ended { color: red; font-weight: bold; }
+    #info .used { color: red; font-weight: bold; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script type="module">
@@ -109,7 +110,7 @@
       const time = await getAvailableTime();
       const currentTimeEl = document.getElementById("currentTime");
       currentTimeEl.textContent =
-        time ? `現在発券中の案内時間：${time}` : "";
+        time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
       return time;
     }
 
@@ -126,11 +127,9 @@
       const form = document.getElementById("form");
       const info = document.getElementById("info");
 
-      // チェックして発券可能時間を取得
       const availableTime = await showCurrentTime();
 
       if (savedPass) {
-        // Firestoreから最新データを取得
         const passesRef = collection(db, "passes");
         const q = query(passesRef, orderBy("createdAt", "desc"), limit(20));
         const snapshot = await getDocs(q);
@@ -146,7 +145,7 @@
 
         form.style.display = "none";
         info.innerHTML = `
-          <h2>${passToShow.used ? "使用済み" : "発券済み"}です</h2>
+          <h2 class="${passToShow.used ? "used" : ""}">${passToShow.used ? "使用済み" : "発券済み"}です</h2>
           <p>番号：${passToShow.id}</p>
           <p>名前：${passToShow.name}</p>
           <p>人数：${passToShow.numPeople}</p>
@@ -157,11 +156,9 @@
       }
 
       if (!availableTime) {
-        // 全発券終了ならフォーム非表示＆赤文字メッセージ
         form.style.display = "none";
         info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
       } else {
-        // 発券可能ならフォーム表示＆infoリセット
         form.style.display = "block";
         info.innerHTML = "";
       }
@@ -181,7 +178,6 @@
           return;
         }
 
-        // 発券可能時間を再チェック
         const availableTime = await getAvailableTime();
         if (!availableTime) {
           form.style.display = "none";
@@ -204,7 +200,6 @@
         updateUI();
       });
 
-      // 1分毎に更新して最新状態を反映
       setInterval(updateUI, 60000);
     });
   </script>
