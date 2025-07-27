@@ -87,7 +87,8 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, setDoc, getDocs, getDoc
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp,
+      doc, updateDoc, setDoc, getDocs, getDoc, deleteDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -113,7 +114,6 @@
         if (userName) localStorage.setItem("chatUserName", userName);
       }
       listRooms();
-      document.getElementById("sendBtn").addEventListener("click", sendMessage);
     };
 
     async function listRooms() {
@@ -150,7 +150,6 @@
       });
       joinRoom(name);
     }
-    window.createRoom = createRoom;
 
     async function joinRoom(roomName) {
       currentRoom = roomName;
@@ -170,32 +169,34 @@
           if (data.imageURL) {
             div.innerHTML += `<br><img src="${data.imageURL}" class="chat-image" />`;
           }
+          // 既読処理
           if (!data.readUsers?.includes(userName)) {
-            updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
+            updateDoc(doc(db, "rooms", currentRoom, "messages", docSnap.id), {
+              readUsers: [...(data.readUsers || []), userName]
+            });
           }
+          // リアクション
           const reactionDiv = document.createElement("div");
           reactionDiv.className = "reactions";
           ["👍", "❤️", "😂", "🎉"].forEach(emoji => {
             const btn = document.createElement("span");
             btn.textContent = emoji;
             btn.className = "reaction-button";
-            const userReacted = data.reactions?.[emoji]?.includes(userName);
-            btn.style.opacity = userReacted ? 1 : 0.5;
             btn.onclick = async () => {
               const reactions = data.reactions || {};
-              const users = new Set(reactions[emoji] || []);
-              if (users.has(userName)) {
-                users.delete(userName);
+              const userSet = new Set(reactions[emoji]?.users || []);
+              if (userSet.has(userName)) {
+                userSet.delete(userName);
               } else {
-                users.add(userName);
+                userSet.add(userName);
               }
-              reactions[emoji] = Array.from(users);
-              await updateDoc(docSnap.ref, { reactions });
+              reactions[emoji] = { count: userSet.size, users: Array.from(userSet) };
+              await updateDoc(doc(db, "rooms", currentRoom, "messages", docSnap.id), { reactions });
             };
             reactionDiv.appendChild(btn);
-            if (data.reactions?.[emoji]?.length) {
+            if (data.reactions?.[emoji]?.count > 0) {
               const count = document.createElement("span");
-              count.textContent = ` ${data.reactions[emoji].length}`;
+              count.textContent = ` ${data.reactions[emoji].count}`;
               reactionDiv.appendChild(count);
             }
           });
@@ -209,12 +210,20 @@
     async function sendMessage() {
       const text = document.getElementById("messageInput").value.trim();
       const imageInput = document.getElementById("imageInput");
-      if (!text && !imageInput.files[0]) return;
 
-      if (!currentRoom) {
-        alert("ルームを選択してください");
+      if (!currentRoom) return alert("ルームを選択してください");
+      if (text === "vcbm") {
+        const confirmDelete = confirm(`${currentRoom} を削除しますか？`);
+        if (confirmDelete) {
+          await deleteDoc(doc(db, "rooms", currentRoom));
+          currentRoom = null;
+          document.getElementById("chatArea").innerHTML = "";
+          listRooms();
+        }
         return;
       }
+
+      if (!text && !imageInput.files[0]) return;
 
       let imageURL = null;
       if (imageInput.files[0]) {
@@ -240,12 +249,16 @@
       document.getElementById("messageInput").value = "";
       imageInput.value = "";
     }
+
+    // 公開関数
+    window.createRoom = createRoom;
+    window.sendMessage = sendMessage;
   </script>
 </head>
 <body>
   <div id="app">
     <aside id="roomList">
-      <button id="createRoomBtn">＋ルーム作成</button>
+      <button onclick="createRoom()">＋ルーム作成</button>
     </aside>
     <div id="chatSection">
       <header>
@@ -256,7 +269,7 @@
       <footer>
         <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
         <input type="file" id="imageInput" accept="image/*" />
-        <button id="sendBtn">送信</button>
+        <button onclick="sendMessage()">送信</button>
       </footer>
     </div>
   </div>
