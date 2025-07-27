@@ -31,19 +31,15 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 日付を YYYY-MM-DD 形式で取得
     function getTodayString() {
       const now = new Date();
       return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
     }
 
-    // 発券済み情報を保存
     function savePassToLocal(pass) {
-      const todayStr = getTodayString();
-      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: todayStr }));
+      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: getTodayString() }));
     }
 
-    // localStorageから当日中の発券情報を取得
     function loadPassFromLocal() {
       const saved = localStorage.getItem("fp_pass");
       if (!saved) return null;
@@ -51,64 +47,41 @@
       return data.date === getTodayString() ? data : null;
     }
 
-    // 発券済み枚数取得
     async function getIssuedCount() {
       const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
       const snapshot = await getDocs(q);
       return snapshot.size;
     }
 
-    // Firestoreから案内時間設定を取得
     async function getTimeSlots() {
-      const docRef = doc(db, "settings", "timeRange");
+      const docRef = doc(db, "settings", "timeSlots");
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) return [];
       return docSnap.data().slots || [];
     }
 
-    // 10分刻みで案内時間を生成
-    function generateTimeBlocks(start, end) {
-      const blocks = [];
-      const [startH, startM] = start.split(":").map(Number);
-      const [endH, endM] = end.split(":").map(Number);
-      const startTime = new Date();
-      startTime.setHours(startH, startM, 0, 0);
-      const endTime = new Date();
-      endTime.setHours(endH, endM, 0, 0);
-      while (startTime < endTime) {
-        const s = new Date(startTime);
-        const e = new Date(startTime);
-        e.setMinutes(e.getMinutes() + 10);
-        const format = t => t.toTimeString().slice(0,5);
-        blocks.push(`${format(s)}〜${format(e)}`);
-        startTime.setMinutes(startTime.getMinutes() + 10);
-      }
-      return blocks;
+    function isFutureSlot(slot) {
+      const now = new Date();
+      const [start] = slot.split("〜");
+      const [h, m] = start.split(":".map(Number));
+      const slotTime = new Date();
+      slotTime.setHours(h, m, 0, 0);
+      return now <= slotTime;
     }
 
-    // 現在の案内時間（有効なもの）を取得
     async function getAvailableTime() {
       const slots = await getTimeSlots();
-      if (slots.length === 0) return null;
-
-      let allBlocks = [];
-      slots.forEach(slot => {
-        const [start, end] = slot.split("〜");
-        allBlocks.push(...generateTimeBlocks(start, end));
-      });
-
-      const issuedCount = await getIssuedCount();
-      return allBlocks[issuedCount] || null;
+      const validSlots = slots.filter(isFutureSlot);
+      const count = await getIssuedCount();
+      return validSlots[count] || null;
     }
 
-    // 現在の案内時間を表示
     async function showCurrentTime() {
       const time = await getAvailableTime();
       document.getElementById("currentTime").textContent =
         time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
     }
 
-    // QRコード描画
     function drawQRCode(id) {
       const qrContainer = document.getElementById("qrcode");
       qrContainer.innerHTML = "";
@@ -119,7 +92,6 @@
 
     window.addEventListener("load", async () => {
       const savedPass = loadPassFromLocal();
-
       if (savedPass) {
         document.getElementById("form").style.display = "none";
         document.getElementById("info").innerHTML = `
@@ -138,31 +110,24 @@
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
-
         const name = document.getElementById("name").value.trim();
         const numPeople = parseInt(document.getElementById("people").value);
         if (!name || isNaN(numPeople) || numPeople < 1) {
           alert("正しい名前と人数を入力してください");
           return;
         }
-
         const time = await getAvailableTime();
         if (!time) {
-          alert("すべての案内時間が発券済みです");
+          alert("すべての案内時間が発券済み、または時間外です。");
           return;
         }
-
         const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
         const snapshot = await getDocs(q);
         const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
         const id = `FP${number.toString().padStart(3, "0")}`;
 
         const newPass = { id, number, name, numPeople, time, used: false };
-        await addDoc(collection(db, "passes"), {
-          ...newPass,
-          createdAt: serverTimestamp()
-        });
-
+        await addDoc(collection(db, "passes"), { ...newPass, createdAt: serverTimestamp() });
         savePassToLocal(newPass);
 
         document.getElementById("form").style.display = "none";
