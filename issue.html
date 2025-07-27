@@ -10,7 +10,6 @@
     form { margin-bottom: 20px; }
     label, input { display: block; margin: 10px auto; }
     #qrcode { margin: 20px auto; }
-    #currentTime { font-weight: bold; margin-bottom: 15px; }
     #info .ended, #info .used, #info .expired, #info .stopped, #info .notset {
       color: red; font-weight: bold;
     }
@@ -20,7 +19,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getFirestore, collection, addDoc, query, orderBy, limit,
-      getDocs, serverTimestamp, doc, getDoc
+      getDocs, serverTimestamp, doc, getDoc, where
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -125,6 +124,14 @@
       return new Date() > end;
     }
 
+    async function checkUsedStatus(passId) {
+      const q = query(collection(db, "passes"), where("id", "==", passId));
+      const snap = await getDocs(q);
+      if (snap.empty) return false;
+      const data = snap.docs[0].data();
+      return data.used === true;
+    }
+
     async function updateUI() {
       const form = document.getElementById("form");
       const info = document.getElementById("info");
@@ -147,7 +154,10 @@
       if (saved) {
         form.style.display = "none";
 
-        const used = saved.used || false;
+        const used = await checkUsedStatus(saved.id);
+        saved.used = used;
+        if (used) savePassToLocal(saved);
+
         const expired = isExpired(saved.time);
 
         info.innerHTML = `
@@ -175,7 +185,7 @@
 
     window.addEventListener("load", () => {
       updateUI();
-      setInterval(updateUI, 60000);
+      setInterval(updateUI, 30000);
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
