@@ -25,6 +25,7 @@
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      flex-shrink: 0;
     }
     aside#roomList h2 {
       margin: 10px 0 8px;
@@ -42,10 +43,10 @@
       align-items: center;
       font-size: 1rem;
       user-select: none;
-      flex-shrink: 0;
       background: #fafafa;
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       transition: background-color 0.2s;
+      flex-shrink: 0;
     }
     aside#roomList div.room:hover {
       background: #eee;
@@ -285,7 +286,7 @@
             const input = prompt("このルームはパスワードで保護されています。パスワードを入力してください。");
             if (input !== roomData.password) {
               alert("パスワードが違います");
-              return;
+              return; // ← パスワード違いで中断
             }
           }
           joinRoom(docSnap.id);
@@ -314,11 +315,13 @@
         return;
       }
 
+      // メッセージ削除
       const messagesRef = collection(db, "rooms", currentRoom, "messages");
       const msgs = await getDocs(messagesRef);
       const batchDeletes = msgs.docs.map(msg => deleteDoc(msg.ref));
       await Promise.all(batchDeletes);
 
+      // ルーム削除
       await deleteDoc(doc(db, "rooms", currentRoom));
       alert("ルームを削除しました");
 
@@ -339,45 +342,68 @@
 
       onSnapshot(q, snapshot => {
         chatArea.innerHTML = "";
-        snapshot.forEach(docSnap => {
+        snapshot.forEach(async (docSnap) => {
           const data = docSnap.data();
           const div = document.createElement("div");
           div.className = "message" + (data.text?.includes("@" + userName) ? " mention" : "");
           div.innerHTML = `<b>${escapeHTML(data.name)}</b>: ${escapeHTML(data.text || "")}`;
+
           if (data.imageURL) {
-            div.innerHTML += `<br><img src="${escapeHTML(data.imageURL)}" class="chat-image" />`;
+            const img = document.createElement("img");
+            img.src = data.imageURL;
+            img.className = "chat-image";
+            img.alt = "チャット画像";
+            div.appendChild(document.createElement("br"));
+            div.appendChild(img);
           }
+
+          // 既読登録
           if (!data.readUsers?.includes(userName)) {
             updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
           }
 
+          // リアクション表示と操作
           const reactionDiv = document.createElement("div");
           reactionDiv.className = "reactions";
+
+          const userReactions = data.reactions || {};
+          // ユーザーが押したリアクションセット
+          const userReactedEmojis = [];
+          for (const [emoji, users] of Object.entries(userReactions)) {
+            if (users.includes(userName)) userReactedEmojis.push(emoji);
+          }
+
           ["👍", "❤️", "😂", "🎉"].forEach(emoji => {
             const btn = document.createElement("span");
             btn.textContent = emoji;
             btn.className = "reaction-button";
-            if (data.reactions && data.reactions[emoji] && data.reactions[emoji].includes(userName)) {
-              btn.classList.add("selected");
-            }
+            if (userReactedEmojis.includes(emoji)) btn.classList.add("selected");
             btn.onclick = async () => {
-              const reactions = data.reactions || {};
-              reactions[emoji] = reactions[emoji] || [];
-              if (reactions[emoji].includes(userName)) {
+              const msgRef = doc(db, "rooms", roomName, "messages", docSnap.id);
+              const snap = await getDoc(msgRef);
+              const msgData = snap.data();
+              const reactions = msgData.reactions || {};
+
+              if (reactions[emoji]?.includes(userName)) {
+                // 既に押している場合は外す
                 reactions[emoji] = reactions[emoji].filter(u => u !== userName);
                 if (reactions[emoji].length === 0) delete reactions[emoji];
               } else {
+                // 押していない場合は追加
+                if (!reactions[emoji]) reactions[emoji] = [];
                 reactions[emoji].push(userName);
               }
-              await updateDoc(docSnap.ref, { reactions });
+              await updateDoc(msgRef, { reactions });
             };
             reactionDiv.appendChild(btn);
-            if (data.reactions && data.reactions[emoji]) {
+
+            if (data.reactions?.[emoji]) {
               const count = document.createElement("span");
               count.textContent = ` ${data.reactions[emoji].length}`;
               reactionDiv.appendChild(count);
             }
           });
+
           div.appendChild(reactionDiv);
 
           chatArea.appendChild(div);
@@ -387,6 +413,7 @@
     }
 
     window.sendMessage = async function () {
+      if (!currentRoom) return alert("ルームを選択してください");
       const textInput = document.getElementById("messageInput");
       const imageInput = document.getElementById("imageInput");
       const text = textInput.value.trim();
@@ -422,16 +449,12 @@
 
       textInput.value = "";
       imageInput.value = "";
-    }
+    };
   </script>
 </head>
 <body>
   <div id="app">
-    <aside id="roomList">
-      <button onclick="createRoom()">＋ルーム作成</button>
-      <button onclick="deleteCurrentRoom()">ルーム削除</button>
-      <h2>ルーム</h2>
-    </aside>
+    <aside id="roomList"></aside>
     <div id="chatSection">
       <header>
         <h1>業務チャット</h1>
