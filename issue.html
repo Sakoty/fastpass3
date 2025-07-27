@@ -10,7 +10,7 @@
     form { margin-bottom: 20px; }
     label, input { display: block; margin: 10px auto; }
     #qrcode { margin: 20px auto; }
-    #info .ended, #info .used, #info .expired, #info .stopped, #info .notset {
+    .ended, .used, .expired, .stopped, .notset {
       color: red; font-weight: bold;
     }
   </style>
@@ -18,8 +18,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, limit,
-      doc, onSnapshot, where
+      getFirestore, collection, addDoc, doc, onSnapshot
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -56,7 +55,6 @@
       const [eh, em] = end.split(":").map(Number);
       const startTime = new Date(); startTime.setHours(sh, sm, 0, 0);
       const endTime = new Date(); endTime.setHours(eh, em, 0, 0);
-
       while (startTime < endTime) {
         const next = new Date(startTime.getTime() + 10 * 60000);
         const pad = n => n.toString().padStart(2, "0");
@@ -66,7 +64,6 @@
       return blocks;
     }
 
-    // 全時間枠を生成
     function generateAllBlocks(slots) {
       let all = [];
       for (const slot of slots) {
@@ -84,17 +81,6 @@
       return new Date() > end;
     }
 
-    async function checkUsedStatus(passId) {
-      const q = query(collection(db, "passes"), where("id", "==", passId));
-      let used = false;
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        used = snap.docs[0].data().used === true;
-      }
-      return used;
-    }
-
-    // 発券枚数から現在の利用可能時間を判断
     function getNextAvailableTime(blocks, issuedCount) {
       const now = new Date();
       for (let i = issuedCount; i < blocks.length; i++) {
@@ -106,7 +92,15 @@
       return null;
     }
 
-    async function updateUI(latestPasses, slots, issueEnabled) {
+    function drawQRCode(id) {
+      const qrContainer = document.getElementById("qrcode");
+      qrContainer.innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
+        if (!err) qrContainer.appendChild(canvas);
+      });
+    }
+
+    function updateUI(latestPasses, slots, issueEnabled) {
       const form = document.getElementById("form");
       const info = document.getElementById("info");
 
@@ -124,14 +118,11 @@
 
       const saved = loadPassFromLocal();
       if (saved) {
-        // 最新の使用状況をセット
         const passInDb = latestPasses.find(p => p.id === saved.id);
         const used = passInDb?.used || false;
         saved.used = used;
         if (used) savePassToLocal(saved);
-
         const expired = isExpired(saved.time);
-
         form.style.display = "none";
         info.innerHTML = `
           <h2 class="${used ? "used" : expired ? "expired" : ""}">
@@ -148,24 +139,20 @@
 
       const allBlocks = generateAllBlocks(slots);
       const nextTime = getNextAvailableTime(allBlocks, latestPasses.length);
+      console.log("最新発券数:", latestPasses.length);
+      console.log("全ブロック数:", allBlocks.length);
+      console.log("次の案内時間:", nextTime);
+
       if (!nextTime) {
         form.style.display = "none";
         info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
       } else {
         form.style.display = "block";
-        info.innerHTML = "";
+        info.innerHTML = `<p>次の案内時間：<strong>${nextTime}</strong></p>`;
       }
     }
 
-    function drawQRCode(id) {
-      const qrContainer = document.getElementById("qrcode");
-      qrContainer.innerHTML = "";
-      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
-        if (!err) qrContainer.appendChild(canvas);
-      });
-    }
-
-    window.addEventListener("load", async () => {
+    window.addEventListener("load", () => {
       const passesCol = collection(db, "passes");
       const timeSlotsDoc = doc(db, "settings", "timeSlots");
       const issueStatusDoc = doc(db, "settings", "issueStatus");
@@ -174,21 +161,26 @@
       let slots = [];
       let issueEnabled = false;
 
-      // リアルタイム監視セットアップ
+      function tryUpdateUI() {
+        if (slots.length && typeof issueEnabled === "boolean") {
+          updateUI(latestPasses, slots, issueEnabled);
+        }
+      }
+
       onSnapshot(timeSlotsDoc, (snap) => {
         const data = snap.data();
         slots = data?.slots || [];
-        updateUI(latestPasses, slots, issueEnabled);
+        tryUpdateUI();
       });
 
       onSnapshot(issueStatusDoc, (snap) => {
         issueEnabled = snap.data()?.enabled === true;
-        updateUI(latestPasses, slots, issueEnabled);
+        tryUpdateUI();
       });
 
       onSnapshot(passesCol, (snap) => {
         latestPasses = snap.docs.map(doc => doc.data()).sort((a,b) => (a.number || 0) - (b.number || 0));
-        updateUI(latestPasses, slots, issueEnabled);
+        tryUpdateUI();
       });
 
       document.getElementById("form").addEventListener("submit", async (e) => {
@@ -216,7 +208,6 @@
         try {
           await addDoc(passesCol, { ...newPass, createdAt: new Date() });
           savePassToLocal(newPass);
-          // 画面はonSnapshotで自動更新される
         } catch (err) {
           alert("発券に失敗しました: " + err.message);
         }
@@ -226,6 +217,7 @@
 </head>
 <body>
   <h1>ファストパス発券</h1>
+  <div id="info"></div> <!-- 表示位置をここに修正 -->
 
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
@@ -233,7 +225,6 @@
     <button type="submit">発券する</button>
   </form>
 
-  <div id="info"></div>
   <div id="qrcode"></div>
 </body>
 </html>
