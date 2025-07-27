@@ -78,6 +78,21 @@
       font-weight: bold;
     }
 
+    /* 一括削除ボタン用 */
+    #deleteAllBtn {
+      background-color: #d32f2f;
+      color: white;
+      margin: 20px auto 0 auto;
+      display: block;
+      max-width: 180px;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(211, 47, 47, 0.4);
+      transition: background-color 0.3s ease;
+    }
+    #deleteAllBtn:hover {
+      background-color: #9b1d1d;
+    }
+
     /* スマホ対応 */
     @media (max-width: 600px) {
       body {
@@ -91,12 +106,16 @@
         font-size: 0.85rem;
         max-width: 100px;
       }
+      #deleteAllBtn {
+        max-width: 100%;
+        margin-top: 15px;
+      }
     }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc
+      getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc, getDocs
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -169,6 +188,37 @@
     onSnapshot(q, (snapshot) => {
       renderPasses(snapshot.docs);
     });
+
+    // 一括削除処理
+    async function deleteAllPasses() {
+      const password = prompt("パスワードを入力してください");
+      if (password !== "1928mickeymouse") {
+        alert("パスワードが違います。処理を中止します。");
+        return;
+      }
+
+      if (!confirm("本当にすべてのファストパスを削除しますか？ この操作は取り消せません。")) {
+        return;
+      }
+
+      try {
+        // Firestoreのドキュメントをすべて取得して順に削除
+        const snapshot = await getDocs(passesRef);
+        const deletePromises = [];
+        snapshot.forEach(docSnap => {
+          deletePromises.push(deleteDoc(doc(db, "passes", docSnap.id)));
+        });
+        await Promise.all(deletePromises);
+        alert("すべてのファストパスを削除しました。");
+      } catch (error) {
+        alert("一括削除に失敗しました: " + error.message);
+      }
+    }
+
+    window.addEventListener("load", () => {
+      const btn = document.getElementById("deleteAllBtn");
+      btn.addEventListener("click", deleteAllPasses);
+    });
   </script>
 </head>
 <body>
@@ -191,5 +241,8 @@
       </tbody>
     </table>
   </div>
+
+  <!-- 一括削除ボタン -->
+  <button id="deleteAllBtn">すべてのファストパスを一括削除</button>
 </body>
 </html>
