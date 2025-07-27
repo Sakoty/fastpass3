@@ -107,18 +107,8 @@
 
     async function showCurrentTime() {
       const time = await getAvailableTime();
-      const form = document.getElementById("form");
-      const info = document.getElementById("info");
-
-      if (time) {
-        document.getElementById("currentTime").textContent = `現在発券中の案内時間：${time}`;
-        form.style.display = "block";
-        info.innerHTML = "";
-      } else {
-        document.getElementById("currentTime").textContent = "";
-        form.style.display = "none";
-        info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
-      }
+      document.getElementById("currentTime").textContent =
+        time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
     }
 
     function drawQRCode(id) {
@@ -137,21 +127,13 @@
       if (savedPass) {
         form.style.display = "none";
         info.innerHTML = `
-          <h2>発券済みです</h2>
+          <h2>${savedPass.used ? "使用済み" : "発券済み"}です</h2>
           <p>番号：${savedPass.id}</p>
           <p>名前：${savedPass.name}</p>
           <p>人数：${savedPass.numPeople}</p>
           <p>案内時間：${savedPass.time}</p>
         `;
         drawQRCode(savedPass.id);
-        return;
-      }
-
-      const time = await getAvailableTime();
-      if (!time) {
-        form.style.display = "none";
-        info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
-        document.getElementById("currentTime").textContent = "";
         return;
       }
 
