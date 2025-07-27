@@ -214,6 +214,8 @@
         try {
           await addDoc(passesCol, { ...newPass, createdAt: new Date() });
           savePassToLocal(newPass);
+          latestPasses.push(newPass); // ここで最新データに追加
+          updateUI(latestPasses, slots, issueEnabled); // ここで即UI反映
         } catch (err) {
           alert("発券に失敗しました: " + err.message);
         }
@@ -225,7 +227,7 @@
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div id="info"></div> <!-- 次の案内時間表示位置 -->
+  <div id="info"></div>
 
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
