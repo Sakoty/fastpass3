@@ -139,10 +139,6 @@
 
       const allBlocks = generateAllBlocks(slots);
       const nextTime = getNextAvailableTime(allBlocks, latestPasses.length);
-      console.log("最新発券数:", latestPasses.length);
-      console.log("全ブロック数:", allBlocks.length);
-      console.log("次の案内時間:", nextTime);
-
       if (!nextTime) {
         form.style.display = "none";
         info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
@@ -160,6 +156,7 @@
       let latestPasses = [];
       let slots = [];
       let issueEnabled = false;
+      let isSubmitting = false;
 
       function tryUpdateUI() {
         if (slots.length && typeof issueEnabled === "boolean") {
@@ -185,18 +182,27 @@
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
+        isSubmitting = true;
+
         const name = document.getElementById("name").value.trim();
         const num = parseInt(document.getElementById("people").value);
         if (!name || isNaN(num) || num < 1) {
           alert("正しい名前と人数を入力してください");
+          isSubmitting = false;
           return;
         }
-        if (!issueEnabled) return;
+
+        if (!issueEnabled) {
+          isSubmitting = false;
+          return;
+        }
 
         const allBlocks = generateAllBlocks(slots);
         const nextTime = getNextAvailableTime(allBlocks, latestPasses.length);
         if (!nextTime) {
           alert("本日のファストパスはすべて発券終了しました");
+          isSubmitting = false;
           return;
         }
 
@@ -211,13 +217,15 @@
         } catch (err) {
           alert("発券に失敗しました: " + err.message);
         }
+
+        isSubmitting = false;
       });
     });
   </script>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div id="info"></div> <!-- 表示位置をここに修正 -->
+  <div id="info"></div> <!-- 次の案内時間表示位置 -->
 
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
