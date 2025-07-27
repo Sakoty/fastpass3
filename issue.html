@@ -125,15 +125,29 @@
       const info = document.getElementById("info");
 
       if (savedPass) {
+        // Firestoreから最新データを取得
+        const passesRef = collection(db, "passes");
+        const q = query(passesRef, orderBy("createdAt", "desc"), limit(20));
+        const snapshot = await getDocs(q);
+
+        let freshPass = null;
+        snapshot.forEach(docSnap => {
+          if (docSnap.data().id === savedPass.id) {
+            freshPass = docSnap.data();
+          }
+        });
+
+        const passToShow = freshPass || savedPass;
+
         form.style.display = "none";
         info.innerHTML = `
-          <h2>${savedPass.used ? "使用済み" : "発券済み"}です</h2>
-          <p>番号：${savedPass.id}</p>
-          <p>名前：${savedPass.name}</p>
-          <p>人数：${savedPass.numPeople}</p>
-          <p>案内時間：${savedPass.time}</p>
+          <h2>${passToShow.used ? "使用済み" : "発券済み"}です</h2>
+          <p>番号：${passToShow.id}</p>
+          <p>名前：${passToShow.name}</p>
+          <p>人数：${passToShow.numPeople}</p>
+          <p>案内時間：${passToShow.time}</p>
         `;
-        drawQRCode(savedPass.id);
+        drawQRCode(passToShow.id);
         return;
       }
 
