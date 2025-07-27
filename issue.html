@@ -20,16 +20,8 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getFirestore, collection, addDoc, query, orderBy, limit,
-      getDocs, serverTimestamp, doc, getDoc
+      getDocs, serverTimestamp, doc, getDoc, where
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    /**********************
-     * 初期化
-     **********************/
-    const DEBUG = true; // 必要に応じて false に
-    const log = (...args) => { if (DEBUG) console.log("[ISSUE]", ...args); };
-    const warn = (...args) => { if (DEBUG) console.warn("[ISSUE]", ...args); };
-    const error = (...args) => { if (DEBUG) console.error("[ISSUE]", ...args); };
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -43,9 +35,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    /**********************
-     * ユーティリティ
-     **********************/
     function getTodayString() {
       const now = new Date();
       return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
@@ -62,36 +51,23 @@
       return data.date === getTodayString() ? data : null;
     }
 
-    // （注意）全日ベースでカウントしています。日ごとにリセットしたい場合は createdAt の日付でフィルタしてください。
     async function getIssuedCount() {
       const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
       const snapshot = await getDocs(q);
-      log("issuedCount:", snapshot.size);
       return snapshot.size;
     }
 
     async function getTimeSlots() {
       const ref = doc(db, "settings", "timeSlots");
       const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        warn("timeSlots doc not found.");
-        return [];
-      }
-      const slots = snap.data().slots || [];
-      log("loaded timeSlots:", slots);
-      return slots;
+      if (!snap.exists()) return [];
+      return snap.data().slots || [];
     }
 
     async function getIssueStatus() {
       const ref = doc(db, "settings", "issueStatus");
       const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        warn("issueStatus doc not found. default=false");
-        return false;
-      }
-      const enabled = snap.data().enabled === true;
-      log("issueStatus.enabled:", enabled);
-      return enabled;
+      return snap.exists() && snap.data().enabled === true;
     }
 
     function generateTimeBlocks(start, end) {
@@ -112,34 +88,24 @@
 
     async function getAllBlocks() {
       const slots = await getTimeSlots();
-      if (slots.length === 0) return [];
       let allBlocks = [];
       for (const slot of slots) {
         const [start, end] = slot.split("〜");
         allBlocks.push(...generateTimeBlocks(start, end));
       }
-      log("all 10min blocks:", allBlocks);
       return allBlocks;
     }
 
     async function getAvailableTime() {
       const blocks = await getAllBlocks();
       if (blocks.length === 0) return null;
-
       const now = new Date();
       const issuedCount = await getIssuedCount();
-
-      // 発券済み枚数をベースに、さらに現在時刻を過ぎた枠はスキップ
       for (let i = issuedCount; i < blocks.length; i++) {
         const [h, m] = blocks[i].split("〜")[0].split(":").map(Number);
-        const blockDate = new Date();
-        blockDate.setHours(h, m, 0, 0);
-        if (blockDate >= now) {
-          log("available block:", blocks[i], "(idx:", i, ")");
-          return blocks[i];
-        }
+        const blockDate = new Date(); blockDate.setHours(h, m, 0, 0);
+        if (blockDate >= now) return blocks[i];
       }
-      log("no available block.");
       return null;
     }
 
@@ -150,7 +116,7 @@
         el.textContent = time ? `現在発券中の案内時間：${time}` : "";
         return time;
       } catch (e) {
-        error("showCurrentTime error:", e);
+        console.error("showCurrentTime error:", e);
         document.getElementById("currentTime").textContent = "";
         return null;
       }
@@ -168,19 +134,14 @@
       if (!timeRangeStr) return true;
       const endStr = timeRangeStr.split("〜")[1];
       const [eh, em] = endStr.split(":").map(Number);
-      const end = new Date();
-      end.setHours(eh, em, 0, 0);
+      const end = new Date(); end.setHours(eh, em, 0, 0);
       return new Date() > end;
     }
 
-    /**********************
-     * 画面更新
-     **********************/
     async function updateUI() {
       const form = document.getElementById("form");
       const info = document.getElementById("info");
 
-      // 1) ステータス確認
       const issueEnabled = await getIssueStatus();
       if (!issueEnabled) {
         form.style.display = "none";
@@ -189,7 +150,6 @@
         return;
       }
 
-      // 2) slots が無いなら発券不可
       const allBlocks = await getAllBlocks();
       if (allBlocks.length === 0) {
         form.style.display = "none";
@@ -198,10 +158,20 @@
         return;
       }
 
-      // 3) すでに発券しているなら、状態表示
       const saved = loadPassFromLocal();
       if (saved) {
         form.style.display = "none";
+
+        // Firestoreから使用状態取得
+        try {
+          const q = query(collection(db, "passes"), where("id", "==", saved.id));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            saved.used = snap.docs[0].data().used || false;
+          }
+        } catch (e) {
+          console.warn("used状態の取得に失敗", e);
+        }
 
         if (isExpired(saved.time)) {
           info.innerHTML = `
@@ -226,7 +196,6 @@
         return;
       }
 
-      // 4) 次の発券可能時間を表示
       const time = await showCurrentTime();
       if (!time) {
         form.style.display = "none";
@@ -237,9 +206,6 @@
       }
     }
 
-    /**********************
-     * 起動
-     **********************/
     window.addEventListener("load", () => {
       updateUI();
       setInterval(updateUI, 60000);
@@ -247,46 +213,37 @@
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const form = document.getElementById("form");
-        const info = document.getElementById("info");
-
-        try {
-          const name = document.getElementById("name").value.trim();
-          const numPeople = parseInt(document.getElementById("people").value);
-          if (!name || isNaN(numPeople) || numPeople < 1) {
-            alert("正しい名前と人数を入力してください");
-            return;
-          }
-
-          const issueEnabled = await getIssueStatus();
-          if (!issueEnabled) {
-            form.style.display = "none";
-            info.innerHTML = `<p class="stopped">現在、ファストパスの発券は停止中です</p>`;
-            return;
-          }
-
-          const time = await getAvailableTime();
-          if (!time) {
-            form.style.display = "none";
-            info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
-            return;
-          }
-
-          // 次の番号を採番
-          const qLast = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
-          const snapshot = await getDocs(qLast);
-          const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
-          const id = `FP${number.toString().padStart(3, "0")}`;
-
-          const newPass = { id, number, name, numPeople, time, used: false };
-          await addDoc(collection(db, "passes"), { ...newPass, createdAt: serverTimestamp() });
-
-          savePassToLocal(newPass);
-          await updateUI();
-        } catch (e2) {
-          error("submit error:", e2);
-          alert("発券処理中にエラーが発生しました。コンソールを確認してください。");
+        const name = document.getElementById("name").value.trim();
+        const numPeople = parseInt(document.getElementById("people").value);
+        if (!name || isNaN(numPeople) || numPeople < 1) {
+          alert("正しい名前と人数を入力してください");
+          return;
         }
+
+        const issueEnabled = await getIssueStatus();
+        if (!issueEnabled) {
+          document.getElementById("form").style.display = "none";
+          document.getElementById("info").innerHTML = `<p class="stopped">現在、ファストパスの発券は停止中です</p>`;
+          return;
+        }
+
+        const time = await getAvailableTime();
+        if (!time) {
+          document.getElementById("form").style.display = "none";
+          document.getElementById("info").innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
+          return;
+        }
+
+        const qLast = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
+        const snapshot = await getDocs(qLast);
+        const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
+        const id = `FP${number.toString().padStart(3, "0")}`;
+
+        const newPass = { id, number, name, numPeople, time, used: false };
+        await addDoc(collection(db, "passes"), { ...newPass, createdAt: serverTimestamp() });
+
+        savePassToLocal(newPass);
+        await updateUI();
       });
     });
   </script>
