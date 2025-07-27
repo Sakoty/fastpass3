@@ -11,7 +11,7 @@
     label, input { display: block; margin: 10px auto; }
     #qrcode { margin: 20px auto; }
     #currentTime { font-weight: bold; margin-bottom: 15px; }
-    #info .ended, #info .used, #info .expired, #info .stopped, #info .notset, #info .deleted {
+    #info .ended, #info .used, #info .expired, #info .stopped, #info .notset {
       color: red; font-weight: bold;
     }
   </style>
@@ -19,13 +19,10 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, limit, where,
-      getDocs, serverTimestamp, doc, onSnapshot, getDoc
+      getFirestore, collection, addDoc, query, orderBy, limit,
+      getDocs, serverTimestamp, doc, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    /**********************
-     * Firebase init
-     **********************/
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -34,50 +31,82 @@
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5"
     };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    /**********************
-     * State
-     **********************/
-    const state = {
-      issueEnabled: false,
-      slots: [],           // ["10:00〜11:00", ...]
-      blocks: [],          // 10分刻み ["10:00〜10:10", ...]
-      issuedCount: 0,
-      savedPass: null,     // localStorageからの当日発券分
-      passDocUnsub: null,  // 自分のパスのリアルタイム監視解除用
-      passesUnsub: null,   // 全passes監視解除用
-      statusUnsub: null,
-      slotsUnsub: null
-    };
+    function getTodayString() {
+      const now = new Date();
+      return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
+    }
 
-    /**********************
-     * Utils
-     **********************/
-    const pad = n => n.toString().padStart(2, "0");
-    const todayStr = () => {
-      const d = new Date();
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    };
-    const savePassToLocal = pass => {
-      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: todayStr() }));
-    };
-    const loadPassFromLocal = () => {
-      const raw = localStorage.getItem("fp_pass");
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      return data.date === todayStr() ? data : null;
-    };
-    const clearLocalPass = () => localStorage.removeItem("fp_pass");
+    function savePassToLocal(pass) {
+      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: getTodayString() }));
+    }
 
-    function isExpired(range) {
-      if (!range) return true;
-      const endStr = range.split("〜")[1];
-      const [eh, em] = endStr.split(":").map(Number);
-      const end = new Date();
-      end.setHours(eh, em, 0, 0);
-      return new Date() > end;
+    function loadPassFromLocal() {
+      const saved = localStorage.getItem("fp_pass");
+      if (!saved) return null;
+      const data = JSON.parse(saved);
+      return data.date === getTodayString() ? data : null;
+    }
+
+    async function getIssuedCount() {
+      const q = query(collection(db, "passes"), orderBy("createdAt", "asc"));
+      const snapshot = await getDocs(q);
+      return snapshot.size;
+    }
+
+    async function getTimeSlots() {
+      const ref = doc(db, "settings", "timeSlots");
+      const snap = await getDoc(ref);
+      return snap.exists() ? (snap.data().slots || []) : [];
+    }
+
+    async function getIssueStatus() {
+      const ref = doc(db, "settings", "issueStatus");
+      const snap = await getDoc(ref);
+      return snap.exists() && snap.data().enabled === true;
+    }
+
+    function generateTimeBlocks(start, end) {
+      const blocks = [];
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      const startTime = new Date(); startTime.setHours(sh, sm, 0, 0);
+      const endTime = new Date(); endTime.setHours(eh, em, 0, 0);
+
+      while (startTime < endTime) {
+        const next = new Date(startTime.getTime() + 10 * 60000);
+        const pad = n => n.toString().padStart(2, "0");
+        blocks.push(`${pad(startTime.getHours())}:${pad(startTime.getMinutes())}〜${pad(next.getHours())}:${pad(next.getMinutes())}`);
+        startTime.setMinutes(startTime.getMinutes() + 10);
+      }
+      return blocks;
+    }
+
+    async function getAllBlocks() {
+      const slots = await getTimeSlots();
+      let all = [];
+      for (const slot of slots) {
+        const [start, end] = slot.split("〜");
+        all.push(...generateTimeBlocks(start, end));
+      }
+      return all;
+    }
+
+    async function getAvailableTime() {
+      const blocks = await getAllBlocks();
+      if (blocks.length === 0) return null;
+
+      const issued = await getIssuedCount();
+      const now = new Date();
+      for (let i = issued; i < blocks.length; i++) {
+        const [h, m] = blocks[i].split("〜")[0].split(":").map(Number);
+        const slotTime = new Date(); slotTime.setHours(h, m, 0, 0);
+        if (slotTime >= now) return blocks[i];
+      }
+      return null;
     }
 
     function drawQRCode(id) {
@@ -88,233 +117,96 @@
       });
     }
 
-    function generateBlocksFromSlots(slots) {
-      const out = [];
-      for (const slot of slots) {
-        const [start, end] = slot.split("〜");
-        const [sh, sm] = start.split(":").map(Number);
-        const [eh, em] = end.split(":").map(Number);
-        let cur = new Date(); cur.setHours(sh, sm, 0, 0);
-        const endD = new Date(); endD.setHours(eh, em, 0, 0);
-        while (cur < endD) {
-          const next = new Date(cur.getTime() + 10 * 60 * 1000);
-          if (next > endD) break;
-          out.push(`${pad(cur.getHours())}:${pad(cur.getMinutes())}〜${pad(next.getHours())}:${pad(next.getMinutes())}`);
-          cur = next;
-        }
-      }
-      return out;
+    function isExpired(timeStr) {
+      if (!timeStr) return true;
+      const [eh, em] = timeStr.split("〜")[1].split(":").map(Number);
+      const end = new Date();
+      end.setHours(eh, em, 0, 0);
+      return new Date() > end;
     }
 
-    function calcAvailableTime() {
-      if (!state.blocks.length) return null;
-      const now = new Date();
-      // 発券済み数をベースに、現在時刻を過ぎた枠はスキップ
-      for (let i = state.issuedCount; i < state.blocks.length; i++) {
-        const [h, m] = state.blocks[i].split("〜")[0].split(":").map(Number);
-        const blockDate = new Date();
-        blockDate.setHours(h, m, 0, 0);
-        if (blockDate >= now) return state.blocks[i];
-      }
-      return null;
-    }
-
-    function render() {
+    async function updateUI() {
       const form = document.getElementById("form");
       const info = document.getElementById("info");
-      const currentTimeEl = document.getElementById("currentTime");
 
-      // 発券停止中
-      if (!state.issueEnabled) {
+      const enabled = await getIssueStatus();
+      if (!enabled) {
         form.style.display = "none";
-        currentTimeEl.textContent = "";
         info.innerHTML = `<p class="stopped">現在、ファストパスの発券は停止中です</p>`;
         return;
       }
 
-      // 案内時間が設定されていない
-      if (!state.blocks.length) {
+      const slots = await getTimeSlots();
+      if (slots.length === 0) {
         form.style.display = "none";
-        currentTimeEl.textContent = "";
-        info.innerHTML = `<p class="notset">案内時間が設定されていません。管理画面で設定してください。</p>`;
+        info.innerHTML = `<p class="notset">案内時間が設定されていません</p>`;
         return;
       }
 
-      // すでに発券済みの場合
-      if (state.savedPass) {
+      const saved = loadPassFromLocal();
+      if (saved) {
         form.style.display = "none";
 
-        // Firestore上で削除されていたらリセット
-        if (state.savedPass.__deleted) {
-          clearLocalPass();
-          state.savedPass = null;
-          info.innerHTML = `<p class="deleted">このパスは管理側で削除されました。再度発券してください。</p>`;
-          currentTimeEl.textContent = "";
-          return;
-        }
-
-        // 案内時間切れ
-        if (isExpired(state.savedPass.time)) {
-          info.innerHTML = `
-            <h2 class="expired">無効なパスです（案内時間終了）</h2>
-            <p>番号：${state.savedPass.id}</p>
-            <p>名前：${state.savedPass.name}</p>
-            <p>人数：${state.savedPass.numPeople}</p>
-            <p>案内時間：${state.savedPass.time}</p>
-          `;
-          currentTimeEl.textContent = "";
-          return;
-        }
+        const used = saved.used || false;
+        const expired = isExpired(saved.time);
 
         info.innerHTML = `
-          <h2 class="${state.savedPass.used ? "used" : ""}">${state.savedPass.used ? "使用済み" : "発券済み"}です</h2>
-          <p>番号：${state.savedPass.id}</p>
-          <p>名前：${state.savedPass.name}</p>
-          <p>人数：${state.savedPass.numPeople}</p>
-          <p>案内時間：${state.savedPass.time}</p>
+          <h2 class="${used ? "used" : expired ? "expired" : ""}">
+            ${used ? "使用済み" : expired ? "無効（時間切れ）" : "発券済み"}です
+          </h2>
+          <p>番号：${saved.id}</p>
+          <p>名前：${saved.name}</p>
+          <p>人数：${saved.numPeople}</p>
+          <p>案内時間：${saved.time}</p>
         `;
-        drawQRCode(state.savedPass.id);
-
-        const av = calcAvailableTime();
-        currentTimeEl.textContent = av ? `現在発券中の案内時間：${av}` : "";
+        drawQRCode(saved.id);
         return;
       }
 
-      // 未発券 → 次の案内時間を表示
-      const available = calcAvailableTime();
-      if (!available) {
+      const nextTime = await getAvailableTime();
+      if (!nextTime) {
         form.style.display = "none";
-        currentTimeEl.textContent = "";
         info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
-        return;
+      } else {
+        form.style.display = "block";
+        info.innerHTML = "";
       }
-
-      form.style.display = "block";
-      info.innerHTML = "";
-      currentTimeEl.textContent = `現在発券中の案内時間：${available}`;
     }
 
-    /**********************
-     * Listeners
-     **********************/
-    function listenIssueStatus() {
-      const r = doc(db, "settings", "issueStatus");
-      state.statusUnsub = onSnapshot(r, snap => {
-        state.issueEnabled = snap.exists() && snap.data().enabled === true;
-        render();
-      }, console.error);
-    }
-
-    function listenTimeSlots() {
-      const r = doc(db, "settings", "timeSlots");
-      state.slotsUnsub = onSnapshot(r, snap => {
-        state.slots = snap.exists() ? (snap.data().slots || []) : [];
-        state.blocks = generateBlocksFromSlots(state.slots);
-        render();
-      }, console.error);
-    }
-
-    function listenPasses() {
-      const qPasses = query(collection(db, "passes"), orderBy("createdAt", "asc"));
-      state.passesUnsub = onSnapshot(qPasses, snap => {
-        state.issuedCount = snap.size; //（日ごとにカウントしたい場合はここでフィルタする）
-        // 自分のパスの DocID が分からない場合のため snapshot から探す
-        if (state.savedPass) {
-          const hit = snap.docs.find(d => d.data().id === state.savedPass.id);
-          if (hit) {
-            const data = hit.data();
-            state.savedPass.used = !!data.used;
-            state.savedPass.time = data.time; // 時間が変わるケースは通常無いが一応同期
-          } else {
-            // 削除された
-            state.savedPass.__deleted = true;
-          }
-        }
-        render();
-      }, console.error);
-    }
-
-    function listenMyPass(id) {
-      // id で unique なので、query で監視
-      const qMine = query(collection(db, "passes"), where("id", "==", id));
-      state.passDocUnsub = onSnapshot(qMine, snap => {
-        if (!state.savedPass) return; // ローカル削除済みなら無視
-        if (snap.empty) {
-          state.savedPass.__deleted = true;
-        } else {
-          const data = snap.docs[0].data();
-          state.savedPass.used = !!data.used;
-          state.savedPass.time = data.time;
-        }
-        render();
-      }, console.error);
-    }
-
-    /**********************
-     * Main
-     **********************/
     window.addEventListener("load", () => {
-      // 1. localStorage から読み取り
-      state.savedPass = loadPassFromLocal();
+      updateUI();
+      setInterval(updateUI, 60000);
 
-      // 2. 発券状態・案内時間・passes をリアルタイム購読
-      listenIssueStatus();
-      listenTimeSlots();
-      listenPasses();
-
-      // 3. 自分のパスがあればリアルタイム監視
-      if (state.savedPass) {
-        listenMyPass(state.savedPass.id);
-      }
-
-      // 4. submit
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
-
         const name = document.getElementById("name").value.trim();
-        const numPeople = parseInt(document.getElementById("people").value);
-
-        if (!name || isNaN(numPeople) || numPeople < 1) {
+        const num = parseInt(document.getElementById("people").value);
+        if (!name || isNaN(num) || num < 1) {
           alert("正しい名前と人数を入力してください");
           return;
         }
-        if (!state.issueEnabled) {
-          alert("現在、発券は停止中です");
-          return;
-        }
 
-        const available = calcAvailableTime();
-        if (!available) {
-          alert("本日のファストパスは全て発券終了しました");
-          return;
-        }
+        const enabled = await getIssueStatus();
+        if (!enabled) return;
 
-        // 採番
+        const time = await getAvailableTime();
+        if (!time) return;
+
         const qLast = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
         const snapshot = await getDocs(qLast);
         const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
         const id = `FP${number.toString().padStart(3, "0")}`;
+        const newPass = { id, number, name, numPeople: num, time, used: false };
 
-        const newPass = { id, number, name, numPeople, time: available, used: false };
         await addDoc(collection(db, "passes"), { ...newPass, createdAt: serverTimestamp() });
-
         savePassToLocal(newPass);
-        state.savedPass = newPass;
-
-        // 自分のパスの監視を開始（初回発券時）
-        if (state.passDocUnsub) state.passDocUnsub();
-        listenMyPass(newPass.id);
-
-        render();
+        updateUI();
       });
-
-      render(); // 初回
     });
   </script>
 </head>
 <body>
   <h1>ファストパス発券</h1>
-  <div id="currentTime">現在発券中の案内時間：--:--〜--:--</div>
 
   <form id="form">
     <label>名前 <input type="text" id="name" required /></label>
