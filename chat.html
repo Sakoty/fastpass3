@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>業務チャット</title>
   <style>
     * { box-sizing: border-box; }
@@ -24,14 +24,23 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      font-size: 1rem;
     }
     aside#roomList div.room:hover { background: #eee; }
     aside#roomList button {
       margin-bottom: 10px;
-      padding: 8px;
+      padding: 10px;
       width: 100%;
-      font-size: 1rem;
+      font-size: 1.1rem;
       cursor: pointer;
+      border: none;
+      background-color: #4caf50;
+      color: white;
+      border-radius: 6px;
+      transition: background-color 0.3s ease;
+    }
+    aside#roomList button:hover {
+      background-color: #45a049;
     }
     #chatSection {
       flex: 1;
@@ -39,15 +48,16 @@
       flex-direction: column;
     }
     header {
-      background: #4CAF50;
+      background: #4caf50;
       color: white;
       padding: 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
+      font-size: 1.1rem;
     }
-    header h1 { margin: 0; font-size: 1.2rem; }
+    header h1 { margin: 0; font-size: 1.3rem; }
     main#chatArea {
       flex: 1;
       padding: 10px;
@@ -61,6 +71,8 @@
       border-radius: 6px;
       position: relative;
       word-wrap: break-word;
+      font-size: 1rem;
+      line-height: 1.4;
     }
     .message.mention {
       background: #ffffcc;
@@ -73,12 +85,14 @@
     }
     .reactions {
       margin-top: 5px;
+      user-select: none;
     }
     .reaction-button {
-      font-size: 1.2rem;
-      margin-right: 5px;
+      font-size: 1.4rem;
+      margin-right: 8px;
       cursor: pointer;
       user-select: none;
+      transition: color 0.3s ease;
     }
     .reaction-button.selected {
       color: #ff5722;
@@ -88,18 +102,30 @@
       background: #fff;
       padding: 10px;
       display: flex;
-      gap: 5px;
+      gap: 8px;
       flex-wrap: wrap;
+      align-items: center;
     }
     footer input[type=text], footer input[type=file] {
-      flex: 1 1 200px;
-      padding: 8px;
-      font-size: 1rem;
+      flex: 1 1 220px;
+      padding: 10px;
+      font-size: 1.1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
     }
     footer button {
-      padding: 10px 20px;
-      font-size: 1rem;
+      padding: 12px 24px;
+      font-size: 1.1rem;
       cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      background-color: #4caf50;
+      color: white;
+      transition: background-color 0.3s ease;
+      flex-shrink: 0;
+    }
+    footer button:hover {
+      background-color: #45a049;
     }
 
     @media (max-width: 600px) {
@@ -108,29 +134,44 @@
       }
       aside#roomList {
         width: 100%;
-        height: 150px;
+        height: 130px;
         border-right: none;
         border-bottom: 1px solid #ccc;
         display: flex;
         overflow-x: auto;
         overflow-y: hidden;
-        padding: 5px;
+        padding: 8px;
       }
       aside#roomList div.room {
         flex: 0 0 auto;
-        margin-right: 10px;
+        margin-right: 12px;
         margin-bottom: 0;
+        font-size: 1rem;
+        padding: 6px 12px;
+        background: #fafafa;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      aside#roomList div.room:hover {
+        background: #e0e0e0;
+      }
+      aside#roomList button {
+        flex-shrink: 0;
+        padding: 10px 16px;
+        font-size: 1rem;
+        margin-right: 12px;
+        border-radius: 6px;
       }
       #chatSection {
         flex: 1;
-        height: calc(100vh - 150px);
+        height: calc(100vh - 130px);
       }
       footer {
         flex-direction: column;
+        gap: 10px;
       }
       footer input[type=text], footer input[type=file], footer button {
         flex: 1 1 100%;
-        margin-bottom: 8px;
       }
     }
   </style>
@@ -165,7 +206,6 @@
       listRooms();
     };
 
-    // Escape HTML to prevent XSS
     function escapeHTML(text) {
       const div = document.createElement("div");
       div.textContent = text;
@@ -174,7 +214,10 @@
 
     async function listRooms() {
       const roomList = document.getElementById("roomList");
-      roomList.innerHTML = "<button onclick=\"createRoom()\">＋ルーム作成</button><button onclick=\"deleteCurrentRoom()\">ルーム削除</button><h2>ルーム</h2>";
+      roomList.innerHTML = `
+        <button onclick="createRoom()">＋ルーム作成</button>
+        <button onclick="deleteCurrentRoom()">ルーム削除</button>
+        <h2>ルーム</h2>`;
       const roomsRef = collection(db, "rooms");
       const q = query(roomsRef, orderBy("lastMessageAt", "desc"));
       const snap = await getDocs(q);
@@ -217,13 +260,11 @@
         return;
       }
 
-      // メッセージを削除（サブコレクション）
       const messagesRef = collection(db, "rooms", currentRoom, "messages");
       const msgs = await getDocs(messagesRef);
       const batchDeletes = msgs.docs.map(msg => deleteDoc(msg.ref));
       await Promise.all(batchDeletes);
 
-      // ルーム本体を削除
       await deleteDoc(doc(db, "rooms", currentRoom));
       alert("ルームを削除しました");
 
@@ -269,7 +310,6 @@
               const reactions = data.reactions || {};
               reactions[emoji] = reactions[emoji] || [];
               if (reactions[emoji].includes(userName)) {
-                // 既に押してたら取り消し
                 reactions[emoji] = reactions[emoji].filter(u => u !== userName);
                 if (reactions[emoji].length === 0) delete reactions[emoji];
               } else {
@@ -345,7 +385,7 @@
       </header>
       <main id="chatArea"></main>
       <footer>
-        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
+        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" autocomplete="off" />
         <input type="file" id="imageInput" accept="image/*" />
         <button onclick="sendMessage()">送信</button>
       </footer>
