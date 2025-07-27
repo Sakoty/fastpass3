@@ -11,6 +11,7 @@
     label, input { display: block; margin: 10px auto; }
     #qrcode { margin: 20px auto; }
     #currentTime { font-weight: bold; margin-bottom: 15px; }
+    #info .ended { color: red; font-weight: bold; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script type="module">
@@ -63,41 +64,51 @@
 
     function generateTimeBlocks(start, end) {
       const blocks = [];
-      const [startH, startM] = start.split(":".toString()).map(Number);
-      const [endH, endM] = end.split(":".toString()).map(Number);
+      const [startH, startM] = start.split(":").map(Number);
+      const [endH, endM] = end.split(":").map(Number);
       const startTime = new Date();
       startTime.setHours(startH, startM, 0, 0);
       const endTime = new Date();
       endTime.setHours(endH, endM, 0, 0);
-
       while (startTime < endTime) {
         const s = new Date(startTime);
-        const e = new Date(startTime.getTime() + 10 * 60 * 1000);
-        if (e > endTime) break;
-        const format = t => t.toTimeString().slice(0, 5);
+        const e = new Date(startTime);
+        e.setMinutes(e.getMinutes() + 10);
+        const format = t => t.toTimeString().slice(0,5);
         blocks.push(`${format(s)}〜${format(e)}`);
         startTime.setMinutes(startTime.getMinutes() + 10);
       }
-
       return blocks;
     }
 
     async function getAvailableTime() {
       const slots = await getTimeSlots();
       if (slots.length === 0) return null;
+
       let allBlocks = [];
-      for (const slot of slots) {
+      slots.forEach(slot => {
         const [start, end] = slot.split("〜");
         allBlocks.push(...generateTimeBlocks(start, end));
-      }
+      });
+
+      const now = new Date();
       const issuedCount = await getIssuedCount();
-      return allBlocks[issuedCount] || null;
+
+      for (let i = issuedCount; i < allBlocks.length; i++) {
+        const blockStart = allBlocks[i].split("〜")[0];
+        const [h, m] = blockStart.split(":").map(Number);
+        const blockDate = new Date();
+        blockDate.setHours(h, m, 0, 0);
+        if (blockDate >= now) return allBlocks[i];
+      }
+
+      return null;
     }
 
     async function showCurrentTime() {
       const time = await getAvailableTime();
       document.getElementById("currentTime").textContent =
-        time ? `現在発券中の案内時間：${time}` : "本日のファストパスは全て発券終了しました。";
+        time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
     }
 
     function drawQRCode(id) {
@@ -110,6 +121,7 @@
 
     window.addEventListener("load", async () => {
       const savedPass = loadPassFromLocal();
+
       if (savedPass) {
         document.getElementById("form").style.display = "none";
         document.getElementById("info").innerHTML = `
@@ -126,7 +138,10 @@
       showCurrentTime();
       setInterval(showCurrentTime, 60000);
 
-      document.getElementById("form").addEventListener("submit", async (e) => {
+      const form = document.getElementById("form");
+      const info = document.getElementById("info");
+
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const name = document.getElementById("name").value.trim();
@@ -138,7 +153,8 @@
 
         const time = await getAvailableTime();
         if (!time) {
-          alert("本日のファストパスは全て発券終了しました");
+          form.style.display = "none";
+          info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
           return;
         }
 
@@ -154,9 +170,8 @@
         });
 
         savePassToLocal(newPass);
-
-        document.getElementById("form").style.display = "none";
-        document.getElementById("info").innerHTML = `
+        form.style.display = "none";
+        info.innerHTML = `
           <h2>ファストパス発券完了！</h2>
           <p>番号：${id}</p>
           <p>名前：${name}</p>
