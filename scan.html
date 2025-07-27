@@ -36,7 +36,6 @@
 
     const resultEl = document.getElementById("result");
     const sound = document.getElementById("sound");
-
     const codeReader = new ZXing.BrowserQRCodeReader();
     let isReading = false;
 
@@ -45,7 +44,17 @@
       resultEl.className = isError ? "error" : "";
     }
 
-    // 読み取り制御付きスキャン開始
+    function parseTimeRange(rangeStr) {
+      const [startStr, endStr] = rangeStr.split("〜");
+      const toDate = (timeStr) => {
+        const [h, m] = timeStr.split(":").map(Number);
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d;
+      };
+      return [toDate(startStr), toDate(endStr)];
+    }
+
     codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
       if (!res || isReading) return;
       isReading = true;
@@ -61,7 +70,12 @@
           const passDoc = snapshot.docs[0];
           const data = passDoc.data();
 
-          if (data.used) {
+          const [start, end] = parseTimeRange(data.time);
+          const now = new Date();
+
+          if (now > end) {
+            showResult(`ファストパス ${code} は案内時間を過ぎており無効です`, true);
+          } else if (data.used) {
             showResult(`ファストパス ${code} はすでに使用済みです`, true);
           } else {
             await updateDoc(doc(db, "passes", passDoc.id), { used: true });
@@ -75,7 +89,6 @@
         showResult("エラーが発生しました", true);
       }
 
-      // 5秒後に再びスキャン再開
       setTimeout(() => {
         isReading = false;
       }, 5000);
