@@ -107,8 +107,10 @@
 
     async function showCurrentTime() {
       const time = await getAvailableTime();
-      document.getElementById("currentTime").textContent =
+      const currentTimeEl = document.getElementById("currentTime");
+      currentTimeEl.textContent =
         time ? `現在発券中の案内時間：${time}` : "案内可能時間をすべて発券しました。";
+      return time;
     }
 
     function drawQRCode(id) {
@@ -119,10 +121,13 @@
       });
     }
 
-    window.addEventListener("load", async () => {
+    async function updateUI() {
       const savedPass = loadPassFromLocal();
       const form = document.getElementById("form");
       const info = document.getElementById("info");
+
+      // チェックして発券可能時間を取得
+      const availableTime = await showCurrentTime();
 
       if (savedPass) {
         // Firestoreから最新データを取得
@@ -151,9 +156,21 @@
         return;
       }
 
-      showCurrentTime();
-      setInterval(showCurrentTime, 60000);
+      if (!availableTime) {
+        // 全発券終了ならフォーム非表示＆赤文字メッセージ
+        form.style.display = "none";
+        info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
+      } else {
+        // 発券可能ならフォーム表示＆infoリセット
+        form.style.display = "block";
+        info.innerHTML = "";
+      }
+    }
 
+    window.addEventListener("load", () => {
+      updateUI();
+
+      const form = document.getElementById("form");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
@@ -164,10 +181,11 @@
           return;
         }
 
-        const time = await getAvailableTime();
-        if (!time) {
+        // 発券可能時間を再チェック
+        const availableTime = await getAvailableTime();
+        if (!availableTime) {
           form.style.display = "none";
-          info.innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
+          document.getElementById("info").innerHTML = `<p class="ended">本日のファストパスは全て発券終了しました</p>`;
           return;
         }
 
@@ -176,23 +194,18 @@
         const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
         const id = `FP${number.toString().padStart(3, "0")}`;
 
-        const newPass = { id, number, name, numPeople, time, used: false };
+        const newPass = { id, number, name, numPeople, time: availableTime, used: false };
         await addDoc(collection(db, "passes"), {
           ...newPass,
           createdAt: serverTimestamp()
         });
 
         savePassToLocal(newPass);
-        form.style.display = "none";
-        info.innerHTML = `
-          <h2>ファストパス発券完了！</h2>
-          <p>番号：${id}</p>
-          <p>名前：${name}</p>
-          <p>人数：${numPeople}</p>
-          <p>案内時間：${time}</p>
-        `;
-        drawQRCode(id);
+        updateUI();
       });
+
+      // 1分毎に更新して最新状態を反映
+      setInterval(updateUI, 60000);
     });
   </script>
 </head>
