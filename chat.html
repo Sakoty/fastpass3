@@ -2,254 +2,122 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>業務チャット</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>業務チャット（リアクション対応）</title>
   <style>
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background-color: #f0f0f0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
+    body { margin: 0; font-family: sans-serif; background-color: #f0f0f0; }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    @media (min-width: 600px) {
+      #app { flex-direction: row; }
+      aside#roomList { width: 260px; }
+      #chatSection { flex: 1; }
     }
-    #app {
-      display: flex;
-      flex: 1;
-      height: 100%;
-      overflow: hidden;
-    }
+
     aside#roomList {
-      width: 220px;
-      min-width: 150px;
       background: #fff;
       border-right: 1px solid #ccc;
       padding: 10px;
       overflow-y: auto;
-      display: flex;
-      flex-direction: column;
     }
-    aside#roomList h2 {
-      margin-top: 0;
-      font-size: 1.2rem;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #ddd;
+    aside#roomList h2 { margin: 0 0 8px; font-size: 1rem; }
+    .room-actions {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;
     }
-    aside#roomList button {
-      margin-bottom: 10px;
-      padding: 10px 8px;
-      font-size: 1rem;
-      cursor: pointer;
-      border-radius: 6px;
-      background-color: #4caf50;
-      color: white;
-      border: none;
+    .room-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px; border-radius: 4px; cursor: pointer;
     }
-    aside#roomList div.roomItem {
-      padding: 10px 8px;
-      margin-bottom: 6px;
-      cursor: pointer;
-      border-radius: 6px;
-      border: 1px solid transparent;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      overflow: hidden;
-      user-select: none;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .room-item:hover { background: #eee; }
+    .room-delete-btn {
+      background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer;
+      padding: 2px 6px; font-size: 0.75rem;
     }
-    aside#roomList div.roomItem:hover {
-      background: #eee;
-    }
-    aside#roomList div.roomItem.active {
-      background: #c8e6c9;
-      border-color: #4caf50;
-      font-weight: bold;
-    }
-    aside#roomList div.roomItem button.deleteRoomBtn {
-      background: #f44336;
-      border: none;
-      color: white;
-      border-radius: 4px;
-      padding: 4px 6px;
-      font-size: 0.85rem;
-      cursor: pointer;
-      margin-left: 8px;
-      flex-shrink: 0;
-    }
+
     #chatSection {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      background: #e9e9e9;
+      display: flex; flex-direction: column; flex: 1; min-width: 0;
+      height: 100vh;
     }
     header {
-      background: #4caf50;
-      color: white;
-      padding: 12px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 1.2rem;
-      user-select: none;
+      background: #4CAF50; color: white; padding: 10px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+      flex-shrink: 0;
     }
+    header h1 { margin: 0; font-size: 1.1rem; }
+    #currentRoomName { font-weight: 600; }
+
     main#chatArea {
-      flex: 1;
-      padding: 12px 16px;
-      overflow-y: auto;
-      background: #f7f7f7;
-      word-break: break-word;
+      flex: 1; padding: 10px; overflow-y: auto; background: #e9e9e9;
+      -webkit-overflow-scrolling: touch;
     }
     .message {
-      margin-bottom: 12px;
-      padding: 10px 14px;
-      background: white;
-      border-radius: 8px;
-      position: relative;
-      font-size: 1rem;
+      margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; word-break: break-word;
     }
-    .message.mention {
-      background: #fff9c4;
-    }
-    .message b {
-      font-weight: 600;
-      display: block;
-      margin-bottom: 6px;
-      color: #333;
-    }
-    .message img.chat-image {
-      max-width: 100%;
-      max-height: 200px;
-      margin-top: 6px;
-      border-radius: 8px;
-    }
+    .message.mention { background: #ffffcc; }
+    .msg-meta { font-size: 0.75rem; color: #888; margin-bottom: 2px; }
+    .chat-image { max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 5px; }
+
+    /* === reactions === */
     .reactions {
-      margin-top: 6px;
+      margin-top: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
       user-select: none;
     }
     .reaction-button {
-      font-size: 1.4rem;
-      margin-right: 10px;
-      cursor: pointer;
-      user-select: none;
-      transition: transform 0.1s ease;
+      font-size: 1.1rem; cursor: pointer; opacity: .6; transition: opacity .15s;
     }
-    .reaction-button.active {
-      transform: scale(1.3);
-      color: #f44336;
-    }
-    .reaction-count {
-      font-size: 0.9rem;
-      margin-right: 14px;
-      vertical-align: middle;
-      color: #555;
-      user-select: none;
-    }
+    .reaction-button.active { opacity: 1; font-weight: bold; }
+    .reaction-count { font-size: .85rem; margin-right: 8px; }
+
     footer {
-      background: #fff;
-      padding: 10px 12px;
-      display: flex;
-      gap: 8px;
-      flex-wrap: nowrap;
-      align-items: center;
-    }
-    footer input[type=text] {
-      flex: 1;
-      padding: 10px 12px;
-      font-size: 1.1rem;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-    }
-    footer input[type=file] {
+      background: #fff; padding: 10px; display: flex; gap: 5px; flex-wrap: wrap;
       flex-shrink: 0;
+    }
+    footer input[type=text], footer input[type=file] {
+      flex: 1 1 100%; padding: 8px; font-size: 1rem;
     }
     footer button {
-      padding: 10px 16px;
-      font-size: 1.1rem;
-      border-radius: 8px;
-      background-color: #4caf50;
-      color: white;
-      border: none;
-      cursor: pointer;
-      flex-shrink: 0;
+      flex: 1 1 48%; padding: 10px; font-size: 1rem; cursor: pointer;
     }
-    @media screen and (max-width: 640px) {
-      #app {
-        flex-direction: column;
-        height: 100vh;
-      }
-      aside#roomList {
-        width: 100%;
-        min-width: auto;
-        max-height: 160px;
-        border-right: none;
-        border-bottom: 1px solid #ccc;
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-        padding: 6px 8px;
-      }
-      aside#roomList h2 {
-        display: none;
-      }
-      aside#roomList button {
-        margin-bottom: 0;
-        margin-right: 8px;
-        padding: 8px 10px;
-        font-size: 1rem;
-      }
-      aside#roomList div.roomItem {
-        padding: 8px 12px;
-        margin-right: 8px;
-        margin-bottom: 0;
-        white-space: nowrap;
-        border-radius: 20px;
-        display: inline-flex;
-        align-items: center;
-        border: 1px solid transparent;
-      }
-      aside#roomList div.roomItem button.deleteRoomBtn {
-        padding: 2px 6px;
-        font-size: 0.85rem;
-        margin-left: 6px;
-      }
-      #chatSection {
-        height: calc(100vh - 160px);
-      }
-      main#chatArea {
-        padding: 10px 12px;
-        font-size: 1rem;
-      }
-      footer {
-        padding: 8px 10px;
-        flex-wrap: wrap;
-      }
-      footer input[type=text] {
-        flex: 1 1 100%;
-        margin-bottom: 6px;
-      }
-      footer input[type=file] {
-        flex-shrink: 1;
-        margin-bottom: 6px;
-      }
-      footer button {
-        width: 100%;
-        flex-shrink: 1;
-      }
+    @media (min-width: 600px) {
+      footer input[type=text], footer input[type=file], footer button { flex: 1; }
     }
   </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="roomList">
+      <h2>ルーム</h2>
+      <div class="room-actions">
+        <button id="createRoomBtn">＋ルーム作成</button>
+        <button id="deleteRoomBtn">🗑 ルーム削除</button>
+      </div>
+      <div id="roomItems"></div>
+    </aside>
+
+    <div id="chatSection">
+      <header>
+        <h1>業務チャット</h1>
+        <span id="currentRoomName">（未入室）</span>
+      </header>
+      <main id="chatArea"></main>
+      <footer>
+        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" />
+        <input type="file" id="imageInput" accept="image/*" />
+        <button id="sendBtn">送信</button>
+      </footer>
+    </div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot,
-      serverTimestamp, doc, updateDoc, setDoc, getDocs, getDoc, deleteDoc
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp,
+      doc, updateDoc, setDoc, getDocs, getDoc, deleteDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+    // ------------------ Firebase ------------------
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -258,203 +126,206 @@
       messagingSenderId: "858745521872",
       appId: "1:858745521872:web:29289b673855097e1200d5"
     };
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const storage = getStorage(app);
 
+    // ------------------ State ------------------
     let currentRoom = null;
-    let userName = localStorage.getItem("chatUserName") || "";
+    let userName = localStorage.getItem('chat_display_name') || '';
+    let messagesUnsub = null;
 
-    // 監視解除用
-    let unsubscribeMessages = null;
+    // ------------------ DOM refs ------------------
+    const roomItemsEl = document.getElementById('roomItems');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const deleteRoomBtn = document.getElementById('deleteRoomBtn');
+    const currentRoomNameEl = document.getElementById('currentRoomName');
+    const chatArea = document.getElementById('chatArea');
+    const sendBtn = document.getElementById('sendBtn');
+    const messageInput = document.getElementById('messageInput');
+    const imageInput = document.getElementById('imageInput');
 
-    window.onload = () => {
+    // ------------------ Init ------------------
+    window.addEventListener('DOMContentLoaded', init);
+    async function init() {
       if (!userName) {
-        userName = prompt("あなたの名前を入力してください");
-        if (userName) localStorage.setItem("chatUserName", userName);
+        userName = prompt('あなたの名前を入力してください');
+        if (userName) localStorage.setItem('chat_display_name', userName);
       }
-      listRooms();
-    };
+      createRoomBtn.addEventListener('click', createRoom);
+      deleteRoomBtn.addEventListener('click', deleteRoom);
+      sendBtn.addEventListener('click', sendMessage);
+      await listRooms();
+    }
 
+    // ------------------ Rooms ------------------
     async function listRooms() {
-      const roomList = document.getElementById("roomList");
-      roomList.innerHTML = "<h2>ルーム</h2>";
-      const roomsRef = collection(db, "rooms");
-      const q = query(roomsRef, orderBy("lastMessageAt", "desc"));
+      roomItemsEl.innerHTML = '';
+      const roomsRef = collection(db, 'rooms');
+      const q = query(roomsRef, orderBy('lastMessageAt', 'desc'));
       const snap = await getDocs(q);
       snap.forEach(docSnap => {
-        const div = document.createElement("div");
-        div.className = "roomItem";
-        div.textContent = docSnap.id;
-        if (docSnap.id === currentRoom) div.classList.add("active");
-
-        // 削除ボタン
-        const delBtn = document.createElement("button");
-        delBtn.textContent = "削除";
-        delBtn.className = "deleteRoomBtn";
-        delBtn.title = "ルームを削除";
-        delBtn.onclick = async (ev) => {
-          ev.stopPropagation();
-          const password = prompt("削除用パスワードを入力してください");
-          if (password !== "vcbm") {
-            alert("パスワードが違います");
-            return;
-          }
-          const confirmDelete = confirm(`ルーム「${docSnap.id}」を本当に削除しますか？`);
-          if (!confirmDelete) return;
-
-          // メッセージを削除（サブコレクション）
-          const messagesRef = collection(db, "rooms", docSnap.id, "messages");
-          const msgs = await getDocs(messagesRef);
-          const batchDeletes = msgs.docs.map(msg => deleteDoc(msg.ref));
-          await Promise.all(batchDeletes);
-
-          // ルーム本体を削除
-          await deleteDoc(doc(db, "rooms", docSnap.id));
-
-          if (currentRoom === docSnap.id) {
-            currentRoom = null;
-            document.getElementById("chatArea").innerHTML = "";
-            document.getElementById("currentRoom").textContent = "";
-            if (unsubscribeMessages) {
-              unsubscribeMessages();
-              unsubscribeMessages = null;
+        const div = document.createElement('div');
+        div.className = 'room-item';
+        const span = document.createElement('span');
+        span.textContent = docSnap.id;
+        span.style.flex = '1';
+        span.onclick = async () => {
+          const data = (await getDoc(docSnap.ref)).data();
+          if (data?.password) {
+            const input = prompt('このルームはパスワードで保護されています。パスワードを入力してください。');
+            if (input !== data.password) {
+              alert('パスワードが違います');
+              return;
             }
           }
-          listRooms();
-          alert("ルームを削除しました");
-        };
-
-        div.appendChild(delBtn);
-        div.onclick = () => {
           joinRoom(docSnap.id);
         };
-        roomList.appendChild(div);
+        const del = document.createElement('button');
+        del.textContent = '削除';
+        del.className = 'room-delete-btn';
+        del.onclick = async (e) => {
+          e.stopPropagation();
+          if (confirm(`ルーム「${docSnap.id}」を削除しますか？`)) {
+            await deleteRoomByName(docSnap.id);
+            if (currentRoom === docSnap.id) {
+              currentRoom = null;
+              currentRoomNameEl.textContent = '（未入室）';
+              chatArea.innerHTML = '';
+            }
+            await listRooms();
+          }
+        };
+        div.appendChild(span);
+        div.appendChild(del);
+        roomItemsEl.appendChild(div);
       });
     }
 
     async function createRoom() {
-      const name = prompt("ルーム名を入力してください");
+      const name = prompt('ルーム名を入力してください');
       if (!name) return;
-      const password = prompt("このルームにパスワードを設定しますか？（空欄でスキップ）");
-      await setDoc(doc(db, "rooms", name), {
+      const password = prompt('このルームにパスワードを設定しますか？（空欄でスキップ）');
+      await setDoc(doc(db, 'rooms', name), {
         lastMessageAt: serverTimestamp(),
-        password: password || ""
+        password: password || ''
       });
       await listRooms();
       joinRoom(name);
     }
-    window.createRoom = createRoom;
 
+    async function deleteRoom() {
+      if (!currentRoom) return alert('ルームに入室してください');
+      if (!confirm(`ルーム「${currentRoom}」を削除しますか？`)) return;
+      await deleteRoomByName(currentRoom);
+      currentRoom = null;
+      currentRoomNameEl.textContent = '（未入室）';
+      chatArea.innerHTML = '';
+      await listRooms();
+    }
+
+    async function deleteRoomByName(roomName) {
+      const msgsSnap = await getDocs(collection(db, 'rooms', roomName, 'messages'));
+      for (const m of msgsSnap.docs) {
+        await deleteDoc(m.ref);
+      }
+      await deleteDoc(doc(db, 'rooms', roomName));
+    }
+
+    // ------------------ Chat ------------------
     async function joinRoom(roomName) {
-      if (unsubscribeMessages) {
-        unsubscribeMessages();
-        unsubscribeMessages = null;
-      }
       currentRoom = roomName;
-      document.getElementById("currentRoom").textContent = roomName;
-      const chatArea = document.getElementById("chatArea");
-      chatArea.innerHTML = "";
+      currentRoomNameEl.textContent = `ルーム: ${roomName}`;
+      if (messagesUnsub) messagesUnsub();
+      chatArea.innerHTML = '';
 
-      const roomDoc = await getDoc(doc(db, "rooms", roomName));
-      if (!roomDoc.exists()) {
-        alert("ルームが存在しません。");
-        currentRoom = null;
-        document.getElementById("currentRoom").textContent = "";
-        return;
-      }
-      const roomData = roomDoc.data();
-      if (roomData.password) {
-        const input = prompt("このルームはパスワードで保護されています。パスワードを入力してください。");
-        if (input !== roomData.password) {
-          alert("パスワードが違います");
-          currentRoom = null;
-          document.getElementById("currentRoom").textContent = "";
-          return;
-        }
-      }
+      const messagesRef = collection(db, 'rooms', roomName, 'messages');
+      const q = query(messagesRef, orderBy('createdAt'));
 
-      const messagesRef = collection(db, "rooms", roomName, "messages");
-      const q = query(messagesRef, orderBy("createdAt"));
+      messagesUnsub = onSnapshot(q, (snapshot) => {
+        chatArea.innerHTML = '';
+        snapshot.forEach((d) => {
+          const data = d.data();
+          const div = document.createElement('div');
+          div.className = 'message' + (data.text?.includes('@' + userName) ? ' mention' : '');
 
-      unsubscribeMessages = onSnapshot(q, async snapshot => {
-        chatArea.innerHTML = "";
-        for (const docSnap of snapshot.docs) {
-          const data = docSnap.data();
-          const div = document.createElement("div");
-          div.className = "message" + (data.text?.includes("@" + userName) ? " mention" : "");
+          const meta = document.createElement('div');
+          meta.className = 'msg-meta';
+          const createdAt = data.createdAt?.toDate?.() ? data.createdAt.toDate() : null;
+          meta.textContent = `${escapeHTML(data.name || '-')}${createdAt ? ' ・ ' + formatDate(createdAt) : ''}`;
+          div.appendChild(meta);
 
-          // エスケープ処理をしてテキスト表示
-          const safeText = escapeHTML(data.text || "");
-          div.innerHTML = `<b>${escapeHTML(data.name)}</b>: ${safeText}`;
+          const body = document.createElement('div');
+          body.innerHTML = escapeHTML(data.text || '');
+          div.appendChild(body);
 
           if (data.imageURL) {
-            const img = document.createElement("img");
+            const img = document.createElement('img');
             img.src = data.imageURL;
-            img.className = "chat-image";
-            div.appendChild(document.createElement("br"));
+            img.className = 'chat-image';
             div.appendChild(img);
           }
 
-          // 既読処理
-          if (!Array.isArray(data.readUsers) || !data.readUsers.includes(userName)) {
-            await updateDoc(docSnap.ref, { readUsers: [...(data.readUsers || []), userName] });
+          // 既読
+          if (!data.readUsers?.includes(userName)) {
+            updateDoc(doc(db, 'rooms', roomName, 'messages', d.id), {
+              readUsers: [...(data.readUsers || []), userName]
+            });
           }
 
-          // リアクション処理
-          const reactionDiv = document.createElement("div");
-          reactionDiv.className = "reactions";
+          // --- Reactions ---
+          const reactionsObj = data.reactions || {}; // {"👍": ["A", "B"], ...}
+          const reactionDiv = document.createElement('div');
+          reactionDiv.className = 'reactions';
+          const emojis = ['👍', '❤️', '😂', '🎉'];
+          emojis.forEach((emoji) => {
+            const list = reactionsObj[emoji] || [];
+            const reacted = list.includes(userName);
 
-          const userReactions = data.reactions || {};
-          const emojis = ["👍", "❤️", "😂", "🎉"];
-          emojis.forEach(emoji => {
-            const btn = document.createElement("span");
+            const btn = document.createElement('span');
             btn.textContent = emoji;
-            btn.className = "reaction-button";
-            if (Array.isArray(userReactions[emoji]) && userReactions[emoji].includes(userName)) {
-              btn.classList.add("active");
-            }
+            btn.className = 'reaction-button' + (reacted ? ' active' : '');
             btn.onclick = async () => {
-              const refDoc = doc(db, "rooms", currentRoom, "messages", docSnap.id);
-              const docSnapLatest = await getDoc(refDoc);
-              if (!docSnapLatest.exists()) return;
-
-              const dataLatest = docSnapLatest.data();
-              let reactions = dataLatest.reactions || {};
-
-              if (!Array.isArray(reactions[emoji])) reactions[emoji] = [];
-              if (reactions[emoji].includes(userName)) {
-                // 取り消し
-                reactions[emoji] = reactions[emoji].filter(u => u !== userName);
+              const newReactions = { ...reactionsObj };
+              const currentList = newReactions[emoji] ? [...newReactions[emoji]] : [];
+              const idx = currentList.indexOf(userName);
+              if (idx >= 0) {
+                currentList.splice(idx, 1); // remove
+                if (currentList.length === 0) {
+                  delete newReactions[emoji];
+                } else {
+                  newReactions[emoji] = currentList;
+                }
               } else {
-                // 追加
-                reactions[emoji].push(userName);
+                currentList.push(userName);
+                newReactions[emoji] = currentList;
               }
-              await updateDoc(refDoc, { reactions });
+              await updateDoc(doc(db, 'rooms', roomName, 'messages', d.id), {
+                reactions: newReactions
+              });
             };
             reactionDiv.appendChild(btn);
 
-            if (Array.isArray(userReactions[emoji]) && userReactions[emoji].length > 0) {
-              const count = document.createElement("span");
-              count.className = "reaction-count";
-              count.textContent = userReactions[emoji].length;
-              reactionDiv.appendChild(count);
-            }
+            const count = document.createElement('span');
+            count.className = 'reaction-count';
+            const c = list.length;
+            count.textContent = c > 0 ? `${c}` : '';
+            if (c > 0) reactionDiv.appendChild(count);
           });
           div.appendChild(reactionDiv);
 
           chatArea.appendChild(div);
-        }
+        });
         chatArea.scrollTop = chatArea.scrollHeight;
       });
     }
-    window.joinRoom = joinRoom;
 
     async function sendMessage() {
-      const textInput = document.getElementById("messageInput");
-      const text = textInput.value.trim();
-      const imageInput = document.getElementById("imageInput");
+      if (!currentRoom) {
+        alert('ルームに入室してください');
+        return;
+      }
+      const text = messageInput.value.trim();
       const file = imageInput.files[0];
       if (!text && !file) return;
 
@@ -465,7 +336,7 @@
         imageURL = await getDownloadURL(fileRef);
       }
 
-      await addDoc(collection(db, "rooms", currentRoom, "messages"), {
+      await addDoc(collection(db, 'rooms', currentRoom, 'messages'), {
         name: userName,
         text,
         imageURL,
@@ -474,47 +345,25 @@
         reactions: {}
       });
 
-      await updateDoc(doc(db, "rooms", currentRoom), {
+      await updateDoc(doc(db, 'rooms', currentRoom), {
         lastMessageAt: serverTimestamp()
       });
 
-      textInput.value = "";
-      imageInput.value = "";
+      messageInput.value = '';
+      imageInput.value = '';
     }
-    window.sendMessage = sendMessage;
 
-    // 簡易XSS対策
-    function escapeHTML(str) {
-      return str.replace(/[&<>"']/g, m => {
-        switch(m) {
-          case '&': return '&amp;';
-          case '<': return '&lt;';
-          case '>': return '&gt;';
-          case '"': return '&quot;';
-          case "'": return '&#39;';
-          default: return m;
-        }
-      });
+    // ------------------ Utils ------------------
+    function escapeHTML(str = '') {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
+    function pad(n){ return n.toString().padStart(2, '0'); }
+    function formatDate(d){ return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   </script>
-</head>
-<body>
-  <div id="app">
-    <aside id="roomList">
-      <button onclick="createRoom()">＋ルーム作成</button>
-    </aside>
-    <div id="chatSection">
-      <header>
-        <div>業務チャット</div>
-        <div id="currentRoom"></div>
-      </header>
-      <main id="chatArea" tabindex="0" aria-label="チャットメッセージ"></main>
-      <footer>
-        <input type="text" id="messageInput" placeholder="メッセージまたは @名前" autocomplete="off" />
-        <input type="file" id="imageInput" accept="image/*" />
-        <button onclick="sendMessage()">送信</button>
-      </footer>
-    </div>
-  </div>
 </body>
 </html>
