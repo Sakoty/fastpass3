@@ -37,7 +37,8 @@
     }
 
     function savePassToLocal(pass) {
-      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: getTodayString() }));
+      const todayStr = getTodayString();
+      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: todayStr }));
     }
 
     function loadPassFromLocal() {
@@ -60,20 +61,37 @@
       return docSnap.data().slots || [];
     }
 
-    function isFutureSlot(slot) {
-      const now = new Date();
-      const [start] = slot.split("〜");
-      const [h, m] = start.split(":".map(Number));
-      const slotTime = new Date();
-      slotTime.setHours(h, m, 0, 0);
-      return now <= slotTime;
+    function generateTimeBlocks(start, end) {
+      const blocks = [];
+      const [startH, startM] = start.split(":".toString()).map(Number);
+      const [endH, endM] = end.split(":".toString()).map(Number);
+      const startTime = new Date();
+      startTime.setHours(startH, startM, 0, 0);
+      const endTime = new Date();
+      endTime.setHours(endH, endM, 0, 0);
+
+      while (startTime < endTime) {
+        const s = new Date(startTime);
+        const e = new Date(startTime.getTime() + 10 * 60 * 1000);
+        if (e > endTime) break;
+        const format = t => t.toTimeString().slice(0, 5);
+        blocks.push(`${format(s)}〜${format(e)}`);
+        startTime.setMinutes(startTime.getMinutes() + 10);
+      }
+
+      return blocks;
     }
 
     async function getAvailableTime() {
       const slots = await getTimeSlots();
-      const validSlots = slots.filter(isFutureSlot);
-      const count = await getIssuedCount();
-      return validSlots[count] || null;
+      if (slots.length === 0) return null;
+      let allBlocks = [];
+      for (const slot of slots) {
+        const [start, end] = slot.split("〜");
+        allBlocks.push(...generateTimeBlocks(start, end));
+      }
+      const issuedCount = await getIssuedCount();
+      return allBlocks[issuedCount] || null;
     }
 
     async function showCurrentTime() {
@@ -110,24 +128,31 @@
 
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
+
         const name = document.getElementById("name").value.trim();
         const numPeople = parseInt(document.getElementById("people").value);
         if (!name || isNaN(numPeople) || numPeople < 1) {
           alert("正しい名前と人数を入力してください");
           return;
         }
+
         const time = await getAvailableTime();
         if (!time) {
-          alert("すべての案内時間が発券済み、または時間外です。");
+          alert("すべての案内時間が発券済みです");
           return;
         }
+
         const q = query(collection(db, "passes"), orderBy("createdAt", "desc"), limit(1));
         const snapshot = await getDocs(q);
         const number = snapshot.empty ? 1 : (snapshot.docs[0].data().number || 0) + 1;
         const id = `FP${number.toString().padStart(3, "0")}`;
 
         const newPass = { id, number, name, numPeople, time, used: false };
-        await addDoc(collection(db, "passes"), { ...newPass, createdAt: serverTimestamp() });
+        await addDoc(collection(db, "passes"), {
+          ...newPass,
+          createdAt: serverTimestamp()
+        });
+
         savePassToLocal(newPass);
 
         document.getElementById("form").style.display = "none";
