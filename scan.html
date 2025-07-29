@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ファストパススキャン</title>
+  <title>プライオリティパススキャン</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f8ff; }
     video { width: 100%; max-width: 400px; border: 1px solid #ccc; }
@@ -65,7 +65,7 @@
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-          showResult(`該当するファストパスが見つかりません`, true);
+          showResult(`該当するプライオリティパスが見つかりません`, true);
         } else {
           const passDoc = snapshot.docs[0];
           const data = passDoc.data();
@@ -74,12 +74,12 @@
           const now = new Date();
 
           if (now > end) {
-            showResult(`ファストパス ${code} は案内時間を過ぎており無効です`, true);
+            showResult(`プライオリティパス ${code} は案内時間を過ぎており無効です`, true);
           } else if (data.used) {
-            showResult(`ファストパス ${code} はすでに使用済みです`, true);
+            showResult(`プライオリティパス ${code} はすでに使用済みです`, true);
           } else {
             await updateDoc(doc(db, "passes", passDoc.id), { used: true });
-            showResult(`ファストパス ${code} を使用済みにしました`);
+            showResult(`プライオリティパス ${code} を使用済みにしました`);
             sound.currentTime = 0;
             sound.play().catch(err => console.warn("音声再生エラー:", err));
           }
@@ -96,7 +96,7 @@
   </script>
 </head>
 <body>
-  <h1>ファストパススキャン</h1>
+  <h1>プライオリティパススキャン</h1>
   <video id="video" autoplay muted></video>
   <div id="result">QRコードを読み取ってください</div>
   <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
