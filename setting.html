@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>案内時間と特別ファストパス設定</title>
+  <title>案内時間と特別プライオリティパス設定</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
     input, button { margin: 5px; padding: 5px; font-size: 1rem; }
@@ -109,7 +109,7 @@
       }
     }
 
-    // 特別ファストパス発券処理
+    // 特別プライオリティパス発券処理
     async function issueSpecialPass(name, numPeople, startTime, endTime) {
       const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
       const time = `${startTime}〜${endTime}`;
@@ -124,7 +124,7 @@
           createdAt: serverTimestamp(),
           special: true
         });
-        alert("特別ファストパスを発行しました: " + id);
+        alert("特別プライオリティパスを発行しました: " + id);
         await updatePassCountDisplay(parseInt(document.getElementById("maxLimitPerSlot").value) || 10);
         return true;
       } catch (error) {
@@ -239,7 +239,7 @@
         localStorage.setItem("maxLimitPerSlot", maxLimitInput.value);
       });
 
-      // 特別ファストパス発券フォーム処理
+      // 特別プライオリティパス発券フォーム処理
       specialForm.addEventListener("submit", async (e) => {
         e.preventDefault();
 
@@ -273,7 +273,7 @@
   </script>
 </head>
 <body>
-  <h1>ファストパス設定</h1>
+  <h1>プライオリティパス設定</h1>
 
   <div id="currentTimeDisplay" style="font-weight:bold; margin-bottom:15px;">現在時刻：--</div>
 
@@ -303,7 +303,7 @@
   <div id="passCountDisplay" class="section">発券枚数情報を取得中...</div>
 
   <form id="specialForm" class="section">
-    <h2>特別ファストパス発行</h2>
+    <h2>特別プライオリティパス発行</h2>
     <input type="text" id="specialName" placeholder="名前" required /><br />
     <input type="number" id="specialPeople" placeholder="人数" required min="1" /><br />
     <label>案内開始時間：</label>
