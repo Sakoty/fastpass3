@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ファストパス管理画面</title>
+  <title>プライオリティパス管理画面</title>
   <style>
     body {
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -157,9 +157,9 @@
         const data = docSnap.data();
         const id = docSnap.id;
 
-        const typeLabel = data.type === "special" ? "特別ファストパス" :
-                          data.number === -1 ? "特別ファストパス" : 
-                          "通常ファストパス";
+        const typeLabel = data.type === "special" ? "特別プライオリティパス" :
+                          data.number === -1 ? "特別プライオリティパス" : 
+                          "通常プライオリティパス";
 
         // 期限切れ判定
         const expired = isExpired(data.time);
@@ -202,7 +202,7 @@
         });
 
         tr.querySelector(".btn-delete").addEventListener("click", async () => {
-          if (confirm(`ファストパス「${data.id}」を削除しますか？`)) {
+          if (confirm(`プライオリティパス「${data.id}」を削除しますか？`)) {
             try {
               await deleteDoc(doc(db, "passes", id));
               alert("削除しました。");
@@ -228,7 +228,7 @@
         return;
       }
 
-      if (!confirm("本当にすべてのファストパスを削除しますか？ この操作は取り消せません。")) {
+      if (!confirm("本当にすべてのプライオリティパスを削除しますか？ この操作は取り消せません。")) {
         return;
       }
 
@@ -240,7 +240,7 @@
           deletePromises.push(deleteDoc(doc(db, "passes", docSnap.id)));
         });
         await Promise.all(deletePromises);
-        alert("すべてのファストパスを削除しました。");
+        alert("すべてのプライオリティパスを削除しました。");
       } catch (error) {
         alert("一括削除に失敗しました: " + error.message);
       }
@@ -253,7 +253,7 @@
   </script>
 </head>
 <body>
-  <h1>ファストパス管理画面</h1>
+  <h1>プライオリティパス管理画面</h1>
   <div class="table-container">
     <table>
       <thead>
@@ -274,6 +274,6 @@
   </div>
 
   <!-- 一括削除ボタン -->
-  <button id="deleteAllBtn">すべてのファストパスを一括削除</button>
+  <button id="deleteAllBtn">すべてのプライオリティパスを一括削除</button>
 </body>
 </html>
