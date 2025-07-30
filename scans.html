@@ -9,7 +9,6 @@
       font-family: sans-serif;
       text-align: center;
       padding: 10px;
-      margin: 0;
       background-color: #f0f8ff;
     }
     video {
@@ -19,12 +18,36 @@
       border: 1px solid #ccc;
     }
     #result {
-      margin-top: 15px;
-      font-size: 1.1em;
+      margin-top: 16px;
+      font-size: 1.2em;
       font-weight: bold;
       color: green;
     }
-    .error { color: red; }
+    .error {
+      color: red;
+    }
+    #modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 300px;
+      text-align: center;
+    }
+    .modal-content button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+    }
   </style>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <script type="module">
@@ -47,13 +70,17 @@
 
     const resultEl = document.getElementById("result");
     const sound = document.getElementById("sound");
-    const videoElement = document.getElementById("video");
+    const modal = document.getElementById("modal");
+    const modalText = document.getElementById("modalText");
+    const confirmBtn = document.getElementById("confirmBtn");
+    const cancelBtn = document.getElementById("cancelBtn");
 
-    let codeReader = new ZXing.BrowserQRCodeReader();
-    let lastScanTime = 0;
+    let isReading = false;
+    let pendingDoc = null;
+    let pendingCode = "";
 
-    function showResult(message, isError = false) {
-      resultEl.textContent = message;
+    function showResult(msg, isError = false) {
+      resultEl.textContent = msg;
       resultEl.className = isError ? "error" : "";
     }
 
@@ -68,76 +95,81 @@
       return [toDate(startStr), toDate(endStr)];
     }
 
-    async function processScan(resultText) {
-      const now = new Date();
-      if (now - lastScanTime < 5000) return; // 5秒以内のスキャンは無視
-      lastScanTime = now;
+    const codeReader = new ZXing.BrowserQRCodeReader();
+    codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
+      if (!res || isReading) return;
+      isReading = true;
 
-      const q = query(collection(db, "passes"), where("id", "==", resultText));
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        showResult("該当するプライオリティパスが見つかりません", true);
-        return;
-      }
-
-      const passDoc = snapshot.docs[0];
-      const data = passDoc.data();
-      const [start, end] = parseTimeRange(data.time);
-
-      if (now > end) {
-        showResult(`パス ${resultText} は案内時間を過ぎており無効です`, true);
-        return;
-      }
-
-      if (data.used) {
-        showResult(`パス ${resultText} はすでに使用済みです`, true);
-        return;
-      }
-
-      if (now < start) {
-        const confirmUse = confirm(`このパス ${resultText} はまだ案内時間前です。\n使用済みにしますか？`);
-        if (!confirmUse) {
-          showResult(`読み取りキャンセルしました`, true);
-          return;
-        }
-      }
-
-      await updateDoc(doc(db, "passes", passDoc.id), { used: true });
-      showResult(`パス ${resultText} を使用済みにしました`);
-      sound.currentTime = 0;
-      sound.play().catch(err => console.warn("音声再生エラー:", err));
-    }
-
-    async function startScanner() {
+      const code = res.text;
       try {
-        const videoInputDevices = await ZXing.BrowserQRCodeReader.listVideoInputDevices();
-        const firstDeviceId = videoInputDevices[0]?.deviceId;
+        const q = query(collection(db, "passes"), where("id", "==", code));
+        const snapshot = await getDocs(q);
 
-        if (!firstDeviceId) {
-          showResult("カメラが検出されません", true);
-          return;
-        }
+        if (snapshot.empty) {
+          showResult("該当するプライオリティパスが見つかりません", true);
+          isReading = false;
+        } else {
+          const docSnap = snapshot.docs[0];
+          const data = docSnap.data();
+          const [start, end] = parseTimeRange(data.time);
+          const now = new Date();
 
-        codeReader.decodeFromVideoDevice(firstDeviceId, videoElement, async (result, _) => {
-          if (result) {
-            await processScan(result.text);
+          if (now < start) {
+            // まだ案内時間前
+            pendingDoc = docSnap;
+            pendingCode = code;
+            modalText.textContent = `このパスは案内時間前ですが、使用済みにしますか？（${code}）`;
+            modal.style.display = "flex";
+          } else if (now > end) {
+            showResult(`プライオリティパス ${code} は案内時間を過ぎています`, true);
+            isReading = false;
+          } else if (data.used) {
+            showResult(`プライオリティパス ${code} はすでに使用済みです`, true);
+            isReading = false;
+          } else {
+            await updateDoc(doc(db, "passes", docSnap.id), { used: true });
+            showResult(`プライオリティパス ${code} を使用済みにしました`);
+            sound.currentTime = 0;
+            sound.play().catch(err => console.warn("音声再生エラー:", err));
+            isReading = false;
           }
-        });
-
-      } catch (err) {
-        console.error(err);
-        showResult("カメラの起動に失敗しました", true);
+        }
+      } catch (e) {
+        console.error(e);
+        showResult("エラーが発生しました", true);
+        isReading = false;
       }
-    }
+    });
 
-    startScanner();
+    confirmBtn.onclick = async () => {
+      if (pendingDoc) {
+        await updateDoc(doc(db, "passes", pendingDoc.id), { used: true });
+        showResult(`プライオリティパス ${pendingCode} を使用済みにしました`);
+        sound.currentTime = 0;
+        sound.play().catch(err => console.warn("音声再生エラー:", err));
+      }
+      modal.style.display = "none";
+      isReading = false;
+    };
+
+    cancelBtn.onclick = () => {
+      showResult("スキャンをキャンセルしました", true);
+      modal.style.display = "none";
+      isReading = false;
+    };
   </script>
 </head>
 <body>
   <h1>プライオリティパススキャン</h1>
   <video id="video" autoplay muted playsinline></video>
   <div id="result">QRコードを読み取ってください</div>
+  <div id="modal" style="display: none;">
+    <div class="modal-content">
+      <p id="modalText"></p>
+      <button id="confirmBtn">使用済みにする</button>
+      <button id="cancelBtn">キャンセル</button>
+    </div>
+  </div>
   <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
 </body>
 </html>
