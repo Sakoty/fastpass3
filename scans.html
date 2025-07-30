@@ -107,7 +107,7 @@
 
         if (snapshot.empty) {
           showResult("該当するプライオリティパスが見つかりません", true);
-          isReading = false;
+          setTimeout(() => { isReading = false; }, 3000);
         } else {
           const docSnap = snapshot.docs[0];
           const data = docSnap.data();
@@ -120,24 +120,25 @@
             pendingCode = code;
             modalText.textContent = `このパスは案内時間前ですが、使用済みにしますか？（${code}）`;
             modal.style.display = "flex";
+            // モーダル操作まで読み取り中フラグ維持
           } else if (now > end) {
             showResult(`プライオリティパス ${code} は案内時間を過ぎています`, true);
-            isReading = false;
+            setTimeout(() => { isReading = false; }, 3000);
           } else if (data.used) {
             showResult(`プライオリティパス ${code} はすでに使用済みです`, true);
-            isReading = false;
+            setTimeout(() => { isReading = false; }, 3000);
           } else {
             await updateDoc(doc(db, "passes", docSnap.id), { used: true });
             showResult(`プライオリティパス ${code} を使用済みにしました`);
             sound.currentTime = 0;
             sound.play().catch(err => console.warn("音声再生エラー:", err));
-            isReading = false;
+            setTimeout(() => { isReading = false; }, 3000);
           }
         }
       } catch (e) {
         console.error(e);
         showResult("エラーが発生しました", true);
-        isReading = false;
+        setTimeout(() => { isReading = false; }, 3000);
       }
     });
 
@@ -149,13 +150,13 @@
         sound.play().catch(err => console.warn("音声再生エラー:", err));
       }
       modal.style.display = "none";
-      isReading = false;
+      setTimeout(() => { isReading = false; }, 3000);
     };
 
     cancelBtn.onclick = () => {
       showResult("スキャンをキャンセルしました", true);
       modal.style.display = "none";
-      isReading = false;
+      setTimeout(() => { isReading = false; }, 3000);
     };
   </script>
 </head>
