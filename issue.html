@@ -134,7 +134,7 @@
         form.style.display = "none";
         info.innerHTML = `
           <h2 class="${used ? "used" : expired ? "expired" : ""}">
-            ${used ? "使用済み" : expired ? "無効（時間切れ）" : isBeforeStart ? "案内時刻前です" : "現在案内中です"}です
+            ${used ? "使用済み" : expired ? "無効（時間切れ）" : isBeforeStart ? "案内時刻前" : "現在案内中"}です
           </h2>
           <p>番号：${saved.id}</p>
           <p>名前：${saved.name}</p>
