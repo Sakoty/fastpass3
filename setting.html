@@ -20,7 +20,7 @@
   <div id="currentTimeDisplay" style="font-weight:bold; margin-bottom:15px;">現在時刻：--</div>
 
   <form id="setTimeSlots" class="section">
-    <h2>案内可能時間の範囲設定（最大3枠）</h2>
+    <h2>案内可能時間の範囲設定（最大3枠・10分刻み）</h2>
     <div>
       <label>開始1：</label><input type="time" id="start1" />
       <label>終了1：</label><input type="time" id="end1" />
@@ -75,6 +75,42 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    function generateSlots(start, end) {
+      const slots = [];
+      const [startHour, startMin] = start.split(":".padStart(2, "0")).map(Number);
+      const [endHour, endMin] = end.split(":".padStart(2, "0")).map(Number);
+      let current = new Date();
+      current.setHours(startHour, startMin, 0, 0);
+      const endTime = new Date();
+      endTime.setHours(endHour, endMin, 0, 0);
+
+      while (current < endTime) {
+        const next = new Date(current.getTime() + 10 * 60 * 1000);
+        if (next > endTime) break;
+        const pad = n => n.toString().padStart(2, "0");
+        const s = `${pad(current.getHours())}:${pad(current.getMinutes())}`;
+        const e = `${pad(next.getHours())}:${pad(next.getMinutes())}`;
+        slots.push(`${s}〜${e}`);
+        current = next;
+      }
+      return slots;
+    }
+
+    async function setIssueStatus(enabled) {
+      await setDoc(doc(db, "settings", "issueStatus"), { enabled });
+      updateStatusDisplay(enabled);
+    }
+
+    async function updateStatusDisplay(enabled = null) {
+      const el = document.getElementById("statusArea");
+      if (enabled === null) {
+        const snap = await getDoc(doc(db, "settings", "issueStatus"));
+        enabled = snap.exists() ? snap.data().enabled : false;
+      }
+      el.textContent = enabled ? "発券状態：発券中" : "発券状態：停止中";
+      el.style.color = enabled ? "green" : "red";
+    }
+
     async function updatePassCountDisplay() {
       const dispEl = document.getElementById("passCountDisplay");
       try {
@@ -96,42 +132,29 @@
       }
     }
 
-    async function setIssueStatus(enabled) {
-      await setDoc(doc(db, "settings", "issueStatus"), { enabled });
-      updateStatusDisplay(enabled);
-    }
+    async function loadTimeSlotSettings() {
+      const snap = await getDoc(doc(db, "settings", "timeSlots"));
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (!Array.isArray(data.slots) || !Array.isArray(data.limits)) return;
+      const grouped = {};
+      data.slots.forEach((slot, i) => {
+        const [start, end] = slot.split("〜");
+        const key = `${start}-${end}`;
+        if (!grouped[key]) {
+          grouped[key] = { count: 0, start, end, limit: data.limits[i] };
+        } else {
+          grouped[key].count++;
+        }
+      });
 
-    async function updateStatusDisplay(enabled = null) {
-      if (enabled === null) {
-        const snap = await getDoc(doc(db, "settings", "issueStatus"));
-        enabled = snap.exists() ? snap.data().enabled : false;
-      }
-      const el = document.getElementById("statusArea");
-      el.textContent = enabled ? "発券状態：発券中" : "発券状態：停止中";
-      el.style.color = enabled ? "green" : "red";
-    }
-
-    async function issueSpecialPass(name, numPeople, startTime, endTime) {
-      const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-      const time = `${startTime}〜${endTime}`;
-      try {
-        await addDoc(collection(db, "passes"), {
-          id,
-          number: -1,
-          name,
-          numPeople,
-          time,
-          used: false,
-          createdAt: serverTimestamp(),
-          special: true
-        });
-        alert("特別パスを発行しました: " + id);
-        await updatePassCountDisplay();
-        return true;
-      } catch (e) {
-        alert("発行に失敗しました: " + e.message);
-        return false;
-      }
+      const entries = Object.values(grouped).slice(0, 3);
+      entries.forEach((entry, i) => {
+        const idx = i + 1;
+        document.getElementById(`start${idx}`).value = entry.start;
+        document.getElementById(`end${idx}`).value = entry.end;
+        document.getElementById(`limit${idx}`).value = entry.limit;
+      });
     }
 
     function startClock() {
@@ -141,22 +164,6 @@
         const now = new Date();
         el.textContent = `現在時刻：${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
       }, 1000);
-    }
-
-    async function loadTimeSlotSettings() {
-      const snap = await getDoc(doc(db, "settings", "timeSlots"));
-      if (!snap.exists()) return;
-
-      const data = snap.data();
-      if (!Array.isArray(data.slots) || !Array.isArray(data.limits)) return;
-
-      data.slots.slice(0, 3).forEach((slot, i) => {
-        const [start, end] = slot.split("〜");
-        const idx = i + 1;
-        document.getElementById(`start${idx}`).value = start;
-        document.getElementById(`end${idx}`).value = end;
-        document.getElementById(`limit${idx}`).value = data.limits[i] ?? 10;
-      });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -183,8 +190,9 @@
           const end = document.getElementById(`end${i}`).value;
           const limit = parseInt(document.getElementById(`limit${i}`).value);
           if (start && end && start < end && limit > 0) {
-            slots.push(`${start}〜${end}`);
-            limits.push(limit);
+            const generated = generateSlots(start, end);
+            slots.push(...generated);
+            limits.push(...Array(generated.length).fill(limit));
           }
         }
 
@@ -195,7 +203,7 @@
 
         try {
           await setDoc(doc(db, "settings", "timeSlots"), { slots, limits });
-          alert(`${slots.length}件の時間枠を保存しました。`);
+          alert(`${slots.length}件の案内時間を保存しました。`);
           await updatePassCountDisplay();
         } catch (e) {
           alert("保存に失敗しました: " + e.message);
@@ -214,8 +222,25 @@
           return;
         }
 
-        const ok = await issueSpecialPass(name, num, start, end);
-        if (ok) document.getElementById("specialForm").reset();
+        const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+        const time = `${start}〜${end}`;
+        try {
+          await addDoc(collection(db, "passes"), {
+            id,
+            number: -1,
+            name,
+            numPeople: num,
+            time,
+            used: false,
+            createdAt: serverTimestamp(),
+            special: true
+          });
+          alert("特別パスを発行しました: " + id);
+          await updatePassCountDisplay();
+          document.getElementById("specialForm").reset();
+        } catch (e) {
+          alert("発行に失敗しました: " + e.message);
+        }
       };
     });
   </script>
