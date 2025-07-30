@@ -123,10 +123,18 @@
         saved.used = used;
         if (used) savePassToLocal(saved);
         const expired = isExpired(saved.time);
+
+        // ↓↓↓ 追加: 案内時間前チェック
+        const [startHour, startMin] = saved.time.split("〜")[0].split(":").map(Number);
+        const startDate = new Date();
+        startDate.setHours(startHour, startMin, 0, 0);
+        const isBeforeStart = new Date() < startDate;
+        // ↑↑↑
+
         form.style.display = "none";
         info.innerHTML = `
           <h2 class="${used ? "used" : expired ? "expired" : ""}">
-            ${used ? "使用済み" : expired ? "無効（時間切れ）" : "発券済み"}です
+            ${used ? "使用済み" : expired ? "無効（時間切れ）" : isBeforeStart ? "案内時刻前です" : "発券済み"}です
           </h2>
           <p>番号：${saved.id}</p>
           <p>名前：${saved.name}</p>
@@ -214,8 +222,8 @@
         try {
           await addDoc(passesCol, { ...newPass, createdAt: new Date() });
           savePassToLocal(newPass);
-          latestPasses.push(newPass); // ここで最新データに追加
-          updateUI(latestPasses, slots, issueEnabled); // ここで即UI反映
+          latestPasses.push(newPass);
+          updateUI(latestPasses, slots, issueEnabled);
         } catch (err) {
           alert("発券に失敗しました: " + err.message);
         }
