@@ -70,7 +70,7 @@
 
     async function processScan(resultText) {
       const now = new Date();
-      if (now - lastScanTime < 5000) return; // 5秒以内は無視
+      if (now - lastScanTime < 5000) return; // 5秒以内のスキャンは無視
       lastScanTime = now;
 
       const q = query(collection(db, "passes"), where("id", "==", resultText));
@@ -112,30 +112,22 @@
     async function startScanner() {
       try {
         const videoInputDevices = await ZXing.BrowserQRCodeReader.listVideoInputDevices();
-        const firstDeviceId = videoInputDevices && videoInputDevices.length > 0 ? videoInputDevices[0].deviceId : null;
+        const firstDeviceId = videoInputDevices[0]?.deviceId;
 
         if (!firstDeviceId) {
-          // デバイス取得できなくても null 指定で起動してみる
-          await codeReader.decodeFromVideoDevice(null, videoElement, async (result, err) => {
-            if (result) await processScan(result.text);
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-              console.error(err);
-              showResult("カメラからの読み取り中にエラーが発生しました", true);
-            }
-          });
+          showResult("カメラが検出されません", true);
           return;
         }
 
-        await codeReader.decodeFromVideoDevice(firstDeviceId, videoElement, async (result, err) => {
-          if (result) await processScan(result.text);
-          if (err && !(err instanceof ZXing.NotFoundException)) {
-            console.error(err);
-            showResult("カメラからの読み取り中にエラーが発生しました", true);
+        codeReader.decodeFromVideoDevice(firstDeviceId, videoElement, async (result, _) => {
+          if (result) {
+            await processScan(result.text);
           }
         });
+
       } catch (err) {
         console.error(err);
-        showResult("カメラの起動に失敗しました。カメラの使用許可を確認してください。", true);
+        showResult("カメラの起動に失敗しました", true);
       }
     }
 
