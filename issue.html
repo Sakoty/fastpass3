@@ -83,13 +83,15 @@
 
     function getNextAvailableTime(blocks, issuedCount) {
       const now = new Date();
-      for (let i = issuedCount; i < blocks.length; i++) {
-        const [h, m] = blocks[i].split("〜")[0].split(":").map(Number);
-        const slotTime = new Date();
-        slotTime.setHours(h, m, 0, 0);
-        if (slotTime >= now) return blocks[i];
-      }
-      return null;
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+      const futureBlocks = blocks.filter(slot => {
+        const [start] = slot.split("〜");
+        const [h, m] = start.split(":").map(Number);
+        return h * 60 + m >= nowMinutes;
+      });
+
+      return futureBlocks[issuedCount] || null;
     }
 
     function drawQRCode(id) {
@@ -124,12 +126,10 @@
         if (used) savePassToLocal(saved);
         const expired = isExpired(saved.time);
 
-        // ↓↓↓ 追加: 案内時間前チェック
         const [startHour, startMin] = saved.time.split("〜")[0].split(":").map(Number);
         const startDate = new Date();
         startDate.setHours(startHour, startMin, 0, 0);
         const isBeforeStart = new Date() < startDate;
-        // ↑↑↑
 
         form.style.display = "none";
         info.innerHTML = `
