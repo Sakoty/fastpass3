@@ -79,10 +79,8 @@
       const slots = [];
       const [startHour, startMin] = start.split(":").map(Number);
       const [endHour, endMin] = end.split(":").map(Number);
-
       let current = new Date();
       current.setHours(startHour, startMin, 0, 0);
-
       const endTime = new Date();
       endTime.setHours(endHour, endMin, 0, 0);
 
@@ -103,7 +101,6 @@
       try {
         const passSnap = await getDocs(collection(db, "passes"));
         const issuedCount = passSnap.size;
-
         const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
         let totalLimit = 0;
         if (timeSlotSnap.exists()) {
@@ -112,7 +109,6 @@
             totalLimit = data.limits.reduce((a, b) => a + b, 0);
           }
         }
-
         const remaining = totalLimit - issuedCount;
         dispEl.textContent = `現在発券枚数：${issuedCount}枚　残り発券可能枚数：${remaining >= 0 ? remaining : 0}枚（総発券可能枚数：${totalLimit}枚）`;
         dispEl.classList.toggle("warning", remaining <= 0);
@@ -168,10 +164,34 @@
       }, 1000);
     }
 
+    async function loadTimeSlotSettings() {
+      const snap = await getDoc(doc(db, "settings", "timeSlots"));
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      if (!Array.isArray(data.slots) || !Array.isArray(data.limits)) return;
+
+      const grouped = {};
+      data.slots.forEach((slot, i) => {
+        const [start, end] = slot.split("〜");
+        if (!grouped[start + end]) grouped[start + end] = { count: 0, start, end, limit: data.limits[i] };
+        else grouped[start + end].count++;
+      });
+
+      const entries = Object.values(grouped).slice(0, 3);
+      entries.forEach((entry, i) => {
+        const idx = i + 1;
+        document.getElementById(`start${idx}`).value = entry.start;
+        document.getElementById(`end${idx}`).value = entry.end;
+        document.getElementById(`limit${idx}`).value = entry.limit;
+      });
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       startClock();
       updateStatusDisplay();
       updatePassCountDisplay();
+      loadTimeSlotSettings();
 
       document.getElementById("startBtn").onclick = async () => {
         await setIssueStatus(true);
