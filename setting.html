@@ -75,6 +75,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 入力された3枠の時間帯を10分刻みのスロットに分割
     function generateSlots(start, end) {
       const slots = [];
       const [startHour, startMin] = start.split(":").map(Number);
@@ -132,31 +133,60 @@
       }
     }
 
+    // 10分刻みスロットを元に3枠の大枠を復元して入力欄にセットする
     async function loadTimeSlotSettings() {
       const snap = await getDoc(doc(db, "settings", "timeSlots"));
       if (!snap.exists()) return;
       const data = snap.data();
       if (!Array.isArray(data.slots) || !Array.isArray(data.limits)) return;
-      const grouped = {};
-      data.slots.forEach((slot, i) => {
+
+      // スロット時間をパース
+      const parseTime = (str) => {
+        const [h, m] = str.split(":").map(Number);
+        return { h, m };
+      };
+
+      // slots配列を {start, end} に分割
+      const slotTimes = data.slots.map(slot => {
         const [start, end] = slot.split("〜");
-        const key = `${start}-${end}`;
-        if (!grouped[key]) {
-          grouped[key] = { count: 0, start, end, limit: data.limits[i] };
-        } else {
-          grouped[key].count++;
-        }
+        return { start, end };
       });
 
-      const entries = Object.values(grouped).slice(0, 3);
-      entries.forEach((entry, i) => {
-        const idx = i + 1;
-        document.getElementById(`start${idx}`).value = entry.start;
-        document.getElementById(`end${idx}`).value = entry.end;
-        document.getElementById(`limit${idx}`).value = entry.limit;
-      });
+      // 連続するスロットをまとめる
+      const groups = [];
+      let currentGroup = null;
+
+      for (let i = 0; i < slotTimes.length; i++) {
+        const slot = slotTimes[i];
+        if (!currentGroup) {
+          currentGroup = { start: slot.start, end: slot.end, limits: [data.limits[i]] };
+        } else {
+          if (slot.start === currentGroup.end) {
+            currentGroup.end = slot.end;
+            currentGroup.limits.push(data.limits[i]);
+          } else {
+            groups.push(currentGroup);
+            currentGroup = { start: slot.start, end: slot.end, limits: [data.limits[i]] };
+          }
+        }
+      }
+      if (currentGroup) groups.push(currentGroup);
+
+      // 最大3枠分をセット
+      for (let i = 0; i < 3; i++) {
+        if (groups[i]) {
+          document.getElementById(`start${i+1}`).value = groups[i].start;
+          document.getElementById(`end${i+1}`).value = groups[i].end;
+          document.getElementById(`limit${i+1}`).value = groups[i].limits[0];
+        } else {
+          document.getElementById(`start${i+1}`).value = "";
+          document.getElementById(`end${i+1}`).value = "";
+          document.getElementById(`limit${i+1}`).value = "";
+        }
+      }
     }
 
+    // 現在時刻を1秒ごとに表示
     function startClock() {
       const el = document.getElementById("currentTimeDisplay");
       const pad = n => n.toString().padStart(2, "0");
@@ -190,6 +220,7 @@
           const end = document.getElementById(`end${i}`).value;
           const limit = parseInt(document.getElementById(`limit${i}`).value);
           if (start && end && start < end && limit > 0) {
+            // ここで10分刻みスロットを作成し、それぞれに同じlimitを割り当て
             const generated = generateSlots(start, end);
             slots.push(...generated);
             limits.push(...Array(generated.length).fill(limit));
