@@ -49,6 +49,7 @@
       return data.date === getTodayString() ? data : null;
     }
 
+    // 10分刻みで区切る関数（スロットを10分間隔で細分化）
     function generateTimeBlocks(start, end) {
       const blocks = [];
       const [sh, sm] = start.split(":").map(Number);
@@ -57,6 +58,7 @@
       const endTime = new Date(); endTime.setHours(eh, em, 0, 0);
       while (startTime < endTime) {
         const next = new Date(startTime.getTime() + 10 * 60000);
+        if (next > endTime) break;
         const pad = n => n.toString().padStart(2, "0");
         blocks.push(`${pad(startTime.getHours())}:${pad(startTime.getMinutes())}〜${pad(next.getHours())}:${pad(next.getMinutes())}`);
         startTime.setMinutes(startTime.getMinutes() + 10);
@@ -64,6 +66,7 @@
       return blocks;
     }
 
+    // slots（大枠）から全部の10分刻みスロットを作る
     function generateAllBlocks(slots) {
       let all = [];
       for (const slot of slots) {
@@ -81,17 +84,28 @@
       return new Date() > end;
     }
 
-    function getNextAvailableTime(blocks, issuedCount) {
+    // 上限と発券済みを考慮して次に発券可能なスロットを返す
+    function getNextAvailableSlot(slots, limits, passes) {
       const now = new Date();
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
-      const futureBlocks = blocks.filter(slot => {
-        const [start] = slot.split("〜");
-        const [h, m] = start.split(":").map(Number);
-        return h * 60 + m >= nowMinutes;
-      });
+      // スロットごとの発券済み枚数カウント
+      const counts = slots.map(slot => passes.filter(p => p.time === slot).length);
 
-      return futureBlocks[issuedCount] || null;
+      const availableSlots = [];
+      for(let i = 0; i < slots.length; i++) {
+        if (counts[i] < limits[i]) {
+          const [start] = slots[i].split("〜");
+          const [h, m] = start.split(":").map(Number);
+          const slotMinutes = h * 60 + m;
+          if(slotMinutes >= nowMinutes) {
+            availableSlots.push({ slot: slots[i], slotMinutes, index: i });
+          }
+        }
+      }
+
+      availableSlots.sort((a, b) => a.slotMinutes - b.slotMinutes);
+      return availableSlots.length > 0 ? availableSlots[0].slot : null;
     }
 
     function drawQRCode(id) {
@@ -102,7 +116,7 @@
       });
     }
 
-    function updateUI(latestPasses, slots, issueEnabled) {
+    function updateUI(latestPasses, slots, limits, issueEnabled) {
       const form = document.getElementById("form");
       const info = document.getElementById("info");
 
@@ -112,7 +126,7 @@
         return;
       }
 
-      if (!slots || slots.length === 0) {
+      if (!slots || slots.length === 0 || !limits || limits.length === 0) {
         form.style.display = "none";
         info.innerHTML = `<p class="notset">案内時間が設定されていません</p>`;
         return;
@@ -145,8 +159,8 @@
         return;
       }
 
-      const allBlocks = generateAllBlocks(slots);
-      const nextTime = getNextAvailableTime(allBlocks, latestPasses.length);
+      // 次の発券可能時間を上限考慮で取得
+      const nextTime = getNextAvailableSlot(slots, limits, latestPasses);
       if (!nextTime) {
         form.style.display = "none";
         info.innerHTML = `<p class="ended">本日のプライオリティパスは全て発券終了しました</p>`;
@@ -163,18 +177,20 @@
 
       let latestPasses = [];
       let slots = [];
+      let limits = [];
       let issueEnabled = false;
       let isSubmitting = false;
 
       function tryUpdateUI() {
-        if (slots.length && typeof issueEnabled === "boolean") {
-          updateUI(latestPasses, slots, issueEnabled);
+        if (slots.length && limits.length && typeof issueEnabled === "boolean") {
+          updateUI(latestPasses, slots, limits, issueEnabled);
         }
       }
 
       onSnapshot(timeSlotsDoc, (snap) => {
         const data = snap.data();
         slots = data?.slots || [];
+        limits = data?.limits || [];
         tryUpdateUI();
       });
 
@@ -206,8 +222,14 @@
           return;
         }
 
-        const allBlocks = generateAllBlocks(slots);
-        const nextTime = getNextAvailableTime(allBlocks, latestPasses.length);
+        if (!slots || !limits || slots.length === 0 || limits.length === 0) {
+          alert("案内時間が正しく設定されていません");
+          isSubmitting = false;
+          return;
+        }
+
+        // 上限と発券済み枚数を考慮した次スロット取得
+        const nextTime = getNextAvailableSlot(slots, limits, latestPasses);
         if (!nextTime) {
           alert("本日のプライオリティパスはすべて発券終了しました");
           isSubmitting = false;
@@ -223,7 +245,7 @@
           await addDoc(passesCol, { ...newPass, createdAt: new Date() });
           savePassToLocal(newPass);
           latestPasses.push(newPass);
-          updateUI(latestPasses, slots, issueEnabled);
+          updateUI(latestPasses, slots, limits, issueEnabled);
         } catch (err) {
           alert("発券に失敗しました: " + err.message);
         }
