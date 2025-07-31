@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>プライオリティパススキャン</title>
+  <title>ファストパス利用スキャン</title>
   <style>
     body {
       font-family: sans-serif;
@@ -12,8 +11,8 @@
       background-color: #f0f8ff;
     }
     video {
-      width: 90vw;       /* 画面幅の90%を最大幅に */
-      max-width: 400px;  /* 最大幅を400pxに縮小 */
+      width: 90vw;
+      max-width: 320px;
       height: auto;
       border: 1px solid #ccc;
       border-radius: 8px;
@@ -51,13 +50,29 @@
       cursor: pointer;
     }
   </style>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+</head>
+<body>
+  <h1>ファストパス利用スキャン</h1>
+  <video id="video" autoplay></video>
+  <div id="result"></div>
+
+  <div id="modal" style="display:none;">
+    <div class="modal-content">
+      <p id="modal-text"></p>
+      <button onclick="confirmUse()">使用済みにする</button>
+      <button onclick="cancelModal()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- ライブラリ -->
   <script type="module">
+    import QrScanner from "https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js";
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, query, where, getDocs, updateDoc, doc
+      getFirestore, doc, getDoc, updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
       authDomain: "fastpass-system.firebaseapp.com",
@@ -70,108 +85,59 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const resultEl = document.getElementById("result");
-    const sound = document.getElementById("sound");
+    const video = document.getElementById("video");
+    const resultDiv = document.getElementById("result");
     const modal = document.getElementById("modal");
-    const modalText = document.getElementById("modalText");
-    const confirmBtn = document.getElementById("confirmBtn");
-    const cancelBtn = document.getElementById("cancelBtn");
+    const modalText = document.getElementById("modal-text");
 
-    let isReading = false;
-    let pendingDoc = null;
-    let pendingCode = "";
+    let currentPassId = null;
 
-    function showResult(msg, isError = false) {
-      resultEl.textContent = msg;
-      resultEl.className = isError ? "error" : "";
-    }
+    const scanner = new QrScanner(video, async result => {
+      if (!result.data) return;
+      scanner.stop();
 
-    function parseTimeRange(rangeStr) {
-      const [startStr, endStr] = rangeStr.split("〜");
-      const toDate = (timeStr) => {
-        const [h, m] = timeStr.split(":").map(Number);
-        const d = new Date();
-        d.setHours(h, m, 0, 0);
-        return d;
-      };
-      return [toDate(startStr), toDate(endStr)];
-    }
+      const passId = result.data.trim();
+      currentPassId = passId;
+      const passRef = doc(db, "passes", passId);
+      const passSnap = await getDoc(passRef);
 
-    const codeReader = new ZXing.BrowserQRCodeReader();
-    codeReader.decodeFromVideoDevice(null, "video", async (res, _) => {
-      if (!res || isReading) return;
-      isReading = true;
-
-      const code = res.text;
-      try {
-        const q = query(collection(db, "passes"), where("id", "==", code));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-          showResult("該当するプライオリティパスが見つかりません", true);
-          isReading = false;
+      if (passSnap.exists()) {
+        const passData = passSnap.data();
+        if (passData.used) {
+          resultDiv.innerHTML = `<span class="error">このファストパス（${passId}）はすでに使用済みです。</span>`;
+          setTimeout(() => scanner.start(), 3000);
         } else {
-          const docSnap = snapshot.docs[0];
-          const data = docSnap.data();
-          const [start, end] = parseTimeRange(data.time);
-          const now = new Date();
-
-          if (now < start) {
-            // まだ案内時間前
-            pendingDoc = docSnap;
-            pendingCode = code;
-            modalText.textContent = `このパスは案内時間前ですが、使用済みにしますか？（${code}）`;
-            modal.style.display = "flex";
-          } else if (now > end) {
-            showResult(`プライオリティパス ${code} は案内時間を過ぎています`, true);
-            isReading = false;
-          } else if (data.used) {
-            showResult(`プライオリティパス ${code} はすでに使用済みです`, true);
-            isReading = false;
-          } else {
-            await updateDoc(doc(db, "passes", docSnap.id), { used: true });
-            showResult(`プライオリティパス ${code} を使用済みにしました`);
-            sound.currentTime = 0;
-            sound.play().catch(err => console.warn("音声再生エラー:", err));
-            isReading = false;
-          }
+          modalText.innerText = `ファストパス「${passId}」を使用済みにしますか？`;
+          modal.style.display = "flex";
         }
-      } catch (e) {
-        console.error(e);
-        showResult("エラーが発生しました", true);
-        isReading = false;
+      } else {
+        resultDiv.innerHTML = `<span class="error">ファストパス（${passId}）が見つかりません。</span>`;
+        setTimeout(() => scanner.start(), 3000);
       }
     });
 
-    confirmBtn.onclick = async () => {
-      if (pendingDoc) {
-        await updateDoc(doc(db, "passes", pendingDoc.id), { used: true });
-        showResult(`プライオリティパス ${pendingCode} を使用済みにしました`);
-        sound.currentTime = 0;
-        sound.play().catch(err => console.warn("音声再生エラー:", err));
-      }
-      modal.style.display = "none";
-      isReading = false;
-    };
+    scanner.start();
 
-    cancelBtn.onclick = () => {
-      showResult("スキャンをキャンセルしました", true);
+    function confirmUse() {
+      if (!currentPassId) return;
+      const passRef = doc(db, "passes", currentPassId);
+      updateDoc(passRef, { used: true }).then(() => {
+        resultDiv.innerText = `ファストパス「${currentPassId}」を使用済みにしました。`;
+        currentPassId = null;
+        modal.style.display = "none";
+        scanner.start();
+      }).catch((err) => {
+        resultDiv.innerHTML = `<span class="error">更新に失敗しました。</span>`;
+        modal.style.display = "none";
+        scanner.start();
+      });
+    }
+
+    function cancelModal() {
       modal.style.display = "none";
-      isReading = false;
-    };
+      currentPassId = null;
+      scanner.start();
+    }
   </script>
-</head>
-<body>
-  <h1>プライオリティパススキャン</h1>
-  <video id="video" autoplay muted playsinline></video>
-  <div id="result">QRコードを読み取ってください</div>
-  <div id="modal" style="display: none;">
-    <div class="modal-content">
-      <p id="modalText"></p>
-      <button id="confirmBtn">使用済みにする</button>
-      <button id="cancelBtn">キャンセル</button>
-    </div>
-  </div>
-  <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
 </body>
 </html>
