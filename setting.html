@@ -5,82 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>案内時間と特別プライオリティパス設定</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 20px;
-      background-color: #fefbd8;
-      max-width: 600px;
-      margin: auto;
-    }
-    input, button {
-      margin: 5px;
-      padding: 8px;
-      font-size: 1rem;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-    }
-    button {
-      cursor: pointer;
-      background-color: #0066cc;
-      color: white;
-      border: none;
-      transition: background-color 0.3s ease;
-    }
-    button:hover {
-      background-color: #004999;
-    }
-    .section {
-      margin-top: 30px;
-      text-align: left;
-    }
-    label {
-      display: inline-block;
-      width: 120px;
-      text-align: right;
-      margin-right: 10px;
-      vertical-align: middle;
-    }
-    #statusArea, #passCountDisplay {
-      margin-top: 15px;
-      font-weight: bold;
-      text-align: center;
-    }
-    #passCountDisplay {
-      color: #0066cc;
-    }
-    #passCountDisplay.warning {
-      color: red;
-    }
-    .limit-input {
-      width: 60px;
-    }
-    /* スマホ対応 */
-    @media (max-width: 480px) {
-      label {
-        display: block;
-        width: 100%;
-        text-align: left;
-        margin-bottom: 4px;
-      }
-      input, button {
-        width: 100%;
-        max-width: 100%;
-        font-size: 1.1rem;
-      }
-      .time-slot-row {
-        margin-bottom: 20px;
-        border-bottom: 1px solid #ddd;
-        padding-bottom: 10px;
-      }
-    }
-    .description {
-      font-size: 0.9rem;
-      color: #555;
-      margin-left: 130px;
-      margin-bottom: 15px;
-    }
+    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
+    input, button { margin: 5px; padding: 5px; font-size: 1rem; }
+    .section { margin-top: 30px; }
+    label { display: inline-block; width: 120px; text-align: right; margin-right: 10px; vertical-align: middle; }
+    #statusArea, #passCountDisplay { margin-top: 15px; font-weight: bold; }
+    #passCountDisplay { color: #0066cc; }
+    #passCountDisplay.warning { color: red; }
+    .limit-input { width: 50px; }
+    .desc { font-size: 0.8rem; color: #555; display: block; margin-bottom: 8px; }
+    .time-block { border: 1px solid #ccc; padding: 10px; margin: 10px auto; width: fit-content; border-radius: 8px; background: #fff; }
   </style>
 </head>
 <body>
@@ -89,29 +23,34 @@
 
   <form id="setTimeSlots" class="section">
     <h2>案内可能時間の範囲設定（最大3枠・任意の間隔）</h2>
-    
-    <div class="time-slot-row">
-      <label>開始1：</label><input type="time" id="start1" />
-      <label>終了1：</label><input type="time" id="end1" />
-      <label>間隔1：</label><input type="number" id="interval1" class="limit-input" value="10" min="1" />
-      <label>上限1：</label><input type="number" id="limit1" class="limit-input" min="1" value="10" />
-      <div class="description">例：10分間隔で10人まで</div>
+
+    <div class="time-block">
+      <strong>時間枠 1</strong>
+      <span class="desc">例：10:00〜12:00 の間で案内したい時間と発券間隔・上限を設定</span>
+      <label>開始1：</label><input type="time" id="start1" /><br/>
+      <label>終了1：</label><input type="time" id="end1" /><br/>
+      <label>間隔1：</label><input type="number" id="interval1" class="limit-input" value="10" min="1" /> 分<br/>
+      <label>上限1：</label><input type="number" id="limit1" class="limit-input" min="1" value="10" /> 枚
     </div>
-    <div class="time-slot-row">
-      <label>開始2：</label><input type="time" id="start2" />
-      <label>終了2：</label><input type="time" id="end2" />
-      <label>間隔2：</label><input type="number" id="interval2" class="limit-input" value="10" min="1" />
-      <label>上限2：</label><input type="number" id="limit2" class="limit-input" min="1" value="10" />
-      <div class="description">例：12時からの枠を追加可能</div>
+
+    <div class="time-block">
+      <strong>時間枠 2</strong>
+      <span class="desc">必要に応じて2つ目の案内時間帯を設定（空欄の場合は無効）</span>
+      <label>開始2：</label><input type="time" id="start2" /><br/>
+      <label>終了2：</label><input type="time" id="end2" /><br/>
+      <label>間隔2：</label><input type="number" id="interval2" class="limit-input" value="10" min="1" /> 分<br/>
+      <label>上限2：</label><input type="number" id="limit2" class="limit-input" min="1" value="10" /> 枚
     </div>
-    <div class="time-slot-row">
-      <label>開始3：</label><input type="time" id="start3" />
-      <label>終了3：</label><input type="time" id="end3" />
-      <label>間隔3：</label><input type="number" id="interval3" class="limit-input" value="10" min="1" />
-      <label>上限3：</label><input type="number" id="limit3" class="limit-input" min="1" value="10" />
-      <div class="description">例：午後の追加時間帯</div>
+
+    <div class="time-block">
+      <strong>時間枠 3</strong>
+      <span class="desc">さらに追加の案内時間帯を設定（不要なら空欄）</span>
+      <label>開始3：</label><input type="time" id="start3" /><br/>
+      <label>終了3：</label><input type="time" id="end3" /><br/>
+      <label>間隔3：</label><input type="number" id="interval3" class="limit-input" value="10" min="1" /> 分<br/>
+      <label>上限3：</label><input type="number" id="limit3" class="limit-input" min="1" value="10" /> 枚
     </div>
-    
+
     <button type="submit">時間帯を保存</button>
   </form>
 
@@ -122,13 +61,11 @@
     <div id="statusArea">発券状態：--</div>
   </div>
 
-  <div id="passCountDisplay" class="section">
-    <div>発券枚数情報を取得中...</div>
-    <div>残り発券可能枚数：<span id="remainingCount">--</span> 枚</div>
-  </div>
+  <div id="passCountDisplay" class="section">発券枚数情報を取得中...</div>
 
   <form id="specialForm" class="section">
     <h2>特別プライオリティパス発行</h2>
+    <span class="desc">通常発券とは別に、特別枠としてパスを発行できます</span>
     <input type="text" id="specialName" placeholder="名前" required /><br />
     <input type="number" id="specialPeople" placeholder="人数" required min="1" /><br />
     <label>案内開始時間：</label>
@@ -195,52 +132,21 @@
     async function updatePassCountDisplay() {
       const dispEl = document.getElementById("passCountDisplay");
       try {
-        // 時間枠設定を取得
-        const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
-        if (!timeSlotSnap.exists()) {
-          dispEl.innerHTML = `<div>時間帯設定がありません。</div><div>残り発券可能枚数：<span id="remainingCount">--</span> 枚</div>`;
-          return;
-        }
-        const { slots, limits } = timeSlotSnap.data();
-
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-        // 発券済みパス一覧取得
         const passSnap = await getDocs(collection(db, "passes"));
-
-        // time(案内時間)ごとに未使用パス数をカウント
-        const passCounts = {}; // { "10:00〜10:10": 3, ... }
-        passSnap.forEach(docSnap => {
-          const data = docSnap.data();
-          if (data.time && !data.used) {
-            passCounts[data.time] = (passCounts[data.time] || 0) + 1;
-          }
-        });
-
-        let totalRemaining = 0;
-
-        // 各スロットについて、終了時刻で判定し今後の枠のみ残数に加算
-        for (let i = 0; i < slots.length; i++) {
-          const endStr = slots[i].split("〜")[1];
-          const [eh, em] = endStr.split(":").map(Number);
-          const endMinutes = eh * 60 + em;
-
-          if (endMinutes > nowMinutes) {
-            const issued = passCounts[slots[i]] || 0;
-            const remaining = Math.max(limits[i] - issued, 0);
-            totalRemaining += remaining;
+        const issuedCount = passSnap.size;
+        const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
+        let totalLimit = 0;
+        if (timeSlotSnap.exists()) {
+          const data = timeSlotSnap.data();
+          if (data.limits && Array.isArray(data.limits)) {
+            totalLimit = data.limits.reduce((a, b) => a + b, 0);
           }
         }
-
-        dispEl.innerHTML = `
-          <div>現在発券枚数：${passSnap.size}枚</div>
-          <div>残り発券可能枚数：<span id="remainingCount">${totalRemaining}</span> 枚</div>
-        `;
-        dispEl.classList.toggle("warning", totalRemaining <= 0);
+        const remaining = totalLimit - issuedCount;
+        dispEl.textContent = `現在発券枚数：${issuedCount}枚　残り発券可能枚数：${remaining >= 0 ? remaining : 0}枚（総発券可能枚数：${totalLimit}枚）`;
+        dispEl.classList.toggle("warning", remaining <= 0);
       } catch (e) {
         dispEl.textContent = "発券枚数の取得に失敗しました";
-        console.error(e);
       }
     }
 
@@ -253,10 +159,33 @@
       }, 1000);
     }
 
+    async function loadExistingTimeSlots() {
+      try {
+        const snap = await getDoc(doc(db, "settings", "timeSlots"));
+        if (snap.exists()) {
+          const data = snap.data();
+          let slotIndex = 0;
+          for (let i = 1; i <= 3; i++) {
+            if (slotIndex < data.slots.length) {
+              const firstSlot = data.slots[slotIndex];
+              const lastSlot = data.slots[slotIndex + (data.limits.filter((_, idx) => idx < data.slots.length && data.limits[idx] === data.limits[slotIndex]).length - 1)] || firstSlot;
+              document.getElementById(`start${i}`).value = firstSlot.split("〜")[0];
+              document.getElementById(`end${i}`).value = lastSlot.split("〜")[1];
+              document.getElementById(`limit${i}`).value = data.limits[slotIndex] || 10;
+            }
+            slotIndex++;
+          }
+        }
+      } catch (e) {
+        console.error("既存設定の読み込みに失敗しました", e);
+      }
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       startClock();
       updateStatusDisplay();
       updatePassCountDisplay();
+      loadExistingTimeSlots();
 
       document.getElementById("startBtn").onclick = async () => {
         await setIssueStatus(true);
