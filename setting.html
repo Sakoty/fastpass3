@@ -1,227 +1,286 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>案内時間と特別プライオリティパス設定</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ファストパス設定</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #fefbd8; }
-    input, button { margin: 5px; padding: 5px; font-size: 1rem; }
-    .section { margin-top: 30px; }
-    label { display: inline-block; width: 120px; text-align: right; margin-right: 10px; vertical-align: middle; }
-    #statusArea, #passCountDisplay { margin-top: 15px; font-weight: bold; }
-    #passCountDisplay { color: #0066cc; }
-    #passCountDisplay.warning { color: red; }
-    .limit-input { width: 50px; }
-    .desc { font-size: 0.8rem; color: #555; display: block; margin-bottom: 8px; }
-    .time-block { border: 1px solid #ccc; padding: 10px; margin: 10px auto; width: fit-content; border-radius: 8px; background: #fff; }
+    body {
+      font-family: "Segoe UI", sans-serif;
+      max-width: 600px;
+      margin: auto;
+      padding: 15px;
+      background: #f5f7fa;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 5px;
+    }
+    #clock {
+      text-align: center;
+      font-weight: bold;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 15px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      margin-top: 5px;
+    }
+    .active {
+      background-color: #28a745;
+      color: white;
+    }
+    .inactive {
+      background-color: #dc3545;
+      color: white;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.primary {
+      background-color: #007bff;
+      color: white;
+    }
+    button.danger {
+      background-color: #dc3545;
+      color: white;
+    }
+    button.success {
+      background-color: #28a745;
+      color: white;
+    }
+    .time-slot-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    @media (max-width: 500px) {
+      .time-slot-group {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>プライオリティパス設定</h1>
-  <div id="currentTimeDisplay" style="font-weight:bold; margin-bottom:15px;">現在時刻：--</div>
-
-  <form id="setTimeSlots" class="section">
-    <h2>案内可能時間の範囲設定（最大3枠・任意の間隔）</h2>
-
-    <div class="time-block">
-      <strong>時間枠 1</strong>
-      <span class="desc">例：10:00〜12:00 の間で案内したい時間と発券間隔・上限を設定</span>
-      <label>開始1：</label><input type="time" id="start1" /><br/>
-      <label>終了1：</label><input type="time" id="end1" /><br/>
-      <label>間隔1：</label><input type="number" id="interval1" class="limit-input" value="10" min="1" /> 分<br/>
-      <label>上限1：</label><input type="number" id="limit1" class="limit-input" min="1" value="10" /> 枚
-    </div>
-
-    <div class="time-block">
-      <strong>時間枠 2</strong>
-      <span class="desc">必要に応じて2つ目の案内時間帯を設定（空欄の場合は無効）</span>
-      <label>開始2：</label><input type="time" id="start2" /><br/>
-      <label>終了2：</label><input type="time" id="end2" /><br/>
-      <label>間隔2：</label><input type="number" id="interval2" class="limit-input" value="10" min="1" /> 分<br/>
-      <label>上限2：</label><input type="number" id="limit2" class="limit-input" min="1" value="10" /> 枚
-    </div>
-
-    <div class="time-block">
-      <strong>時間枠 3</strong>
-      <span class="desc">さらに追加の案内時間帯を設定（不要なら空欄）</span>
-      <label>開始3：</label><input type="time" id="start3" /><br/>
-      <label>終了3：</label><input type="time" id="end3" /><br/>
-      <label>間隔3：</label><input type="number" id="interval3" class="limit-input" value="10" min="1" /> 分<br/>
-      <label>上限3：</label><input type="number" id="limit3" class="limit-input" min="1" value="10" /> 枚
-    </div>
-
-    <button type="submit">時間帯を保存</button>
-  </form>
-
-  <div class="section">
-    <h2>発券状態</h2>
-    <button id="startBtn">発券開始</button>
-    <button id="stopBtn">発券中止</button>
-    <div id="statusArea">発券状態：--</div>
+  <h1>ファストパス設定</h1>
+  <div id="clock"></div>
+  <div style="text-align:center;">
+    <span id="statusBadge" class="status-badge inactive">停止中</span>
   </div>
 
-  <div id="passCountDisplay" class="section">発券枚数情報を取得中...</div>
+  <div class="card">
+    <h2>発券制御</h2>
+    <button id="startBtn" class="success">発券開始</button>
+    <button id="stopBtn" class="danger">発券停止</button>
+  </div>
 
-  <form id="specialForm" class="section">
-    <h2>特別プライオリティパス発行</h2>
-    <span class="desc">通常発券とは別に、特別枠としてパスを発行できます</span>
-    <input type="text" id="specialName" placeholder="名前" required /><br />
-    <input type="number" id="specialPeople" placeholder="人数" required min="1" /><br />
-    <label>案内開始時間：</label>
-    <input type="time" id="specialStartTime" required /><br />
-    <label>案内終了時間：</label>
-    <input type="time" id="specialEndTime" required /><br />
-    <button type="submit">特別発行</button>
-  </form>
+  <div class="card">
+    <h2>案内時間帯設定</h2>
+    <form id="setTimeSlots">
+      <div>
+        <label>1枠目</label>
+        <div class="time-slot-group">
+          <input type="time" id="start1" placeholder="開始">
+          <input type="time" id="end1" placeholder="終了">
+        </div>
+        <div class="time-slot-group">
+          <input type="number" id="interval1" value="10" placeholder="間隔(分)">
+          <input type="number" id="limit1" value="1" placeholder="上限人数">
+        </div>
+      </div>
+      <div>
+        <label>2枠目</label>
+        <div class="time-slot-group">
+          <input type="time" id="start2" placeholder="開始">
+          <input type="time" id="end2" placeholder="終了">
+        </div>
+        <div class="time-slot-group">
+          <input type="number" id="interval2" value="10" placeholder="間隔(分)">
+          <input type="number" id="limit2" value="1" placeholder="上限人数">
+        </div>
+      </div>
+      <div>
+        <label>3枠目</label>
+        <div class="time-slot-group">
+          <input type="time" id="start3" placeholder="開始">
+          <input type="time" id="end3" placeholder="終了">
+        </div>
+        <div class="time-slot-group">
+          <input type="number" id="interval3" value="10" placeholder="間隔(分)">
+          <input type="number" id="limit3" value="1" placeholder="上限人数">
+        </div>
+      </div>
+      <button type="submit" class="primary">時間設定を保存</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>特別ファストパス発券</h2>
+    <form id="specialForm">
+      <input type="text" id="specialName" placeholder="名前">
+      <input type="number" id="specialPeople" placeholder="人数">
+      <div class="time-slot-group">
+        <input type="time" id="specialStartTime" placeholder="開始時間">
+        <input type="time" id="specialEndTime" placeholder="終了時間">
+      </div>
+      <button type="submit" class="success">特別パス発行</button>
+    </form>
+  </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, doc, setDoc, getDoc, collection, addDoc, serverTimestamp, getDocs
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-      authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
-      messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
+      // Firebase設定
     };
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    function generateSlots(start, end, intervalMinutes) {
-      const slots = [];
-      const [startHour, startMin] = start.split(":").map(Number);
-      const [endHour, endMin] = end.split(":").map(Number);
-      let current = new Date();
-      current.setHours(startHour, startMin, 0, 0);
-      const endTime = new Date();
-      endTime.setHours(endHour, endMin, 0, 0);
-
-      while (current < endTime) {
-        const next = new Date(current.getTime() + intervalMinutes * 60 * 1000);
-        if (next > endTime) break;
-        const pad = n => n.toString().padStart(2, "0");
-        const s = `${pad(current.getHours())}:${pad(current.getMinutes())}`;
-        const e = `${pad(next.getHours())}:${pad(next.getMinutes())}`;
-        slots.push(`${s}〜${e}`);
-        current = next;
-      }
-      return slots;
-    }
-
-    async function setIssueStatus(enabled) {
-      await setDoc(doc(db, "settings", "issueStatus"), { enabled });
-      updateStatusDisplay(enabled);
-    }
-
-    async function updateStatusDisplay(enabled = null) {
-      const el = document.getElementById("statusArea");
-      if (enabled === null) {
-        const snap = await getDoc(doc(db, "settings", "issueStatus"));
-        enabled = snap.exists() ? snap.data().enabled : false;
-      }
-      el.textContent = enabled ? "発券状態：発券中" : "発券状態：停止中";
-      el.style.color = enabled ? "green" : "red";
-    }
-
-    async function updatePassCountDisplay() {
-      const dispEl = document.getElementById("passCountDisplay");
-      try {
-        const passSnap = await getDocs(collection(db, "passes"));
-        const issuedCount = passSnap.size;
-        const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
-        let totalLimit = 0;
-        if (timeSlotSnap.exists()) {
-          const data = timeSlotSnap.data();
-          if (data.limits && Array.isArray(data.limits)) {
-            totalLimit = data.limits.reduce((a, b) => a + b, 0);
-          }
-        }
-        const remaining = totalLimit - issuedCount;
-        dispEl.textContent = `現在発券枚数：${issuedCount}枚　残り発券可能枚数：${remaining >= 0 ? remaining : 0}枚（総発券可能枚数：${totalLimit}枚）`;
-        dispEl.classList.toggle("warning", remaining <= 0);
-      } catch (e) {
-        dispEl.textContent = "発券枚数の取得に失敗しました";
-      }
-    }
-
     function startClock() {
-      const el = document.getElementById("currentTimeDisplay");
-      const pad = n => n.toString().padStart(2, "0");
       setInterval(() => {
         const now = new Date();
-        el.textContent = `現在時刻：${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        document.getElementById("clock").textContent =
+          now.toLocaleDateString() + " " + now.toLocaleTimeString();
       }, 1000);
     }
 
-    async function loadExistingTimeSlots() {
-      try {
-        const snap = await getDoc(doc(db, "settings", "timeSlots"));
-        if (snap.exists()) {
-          const data = snap.data();
-          let slotIndex = 0;
-          for (let i = 1; i <= 3; i++) {
-            if (slotIndex < data.slots.length) {
-              const firstSlot = data.slots[slotIndex];
-              const lastSlot = data.slots[slotIndex + (data.limits.filter((_, idx) => idx < data.slots.length && data.limits[idx] === data.limits[slotIndex]).length - 1)] || firstSlot;
-              document.getElementById(`start${i}`).value = firstSlot.split("〜")[0];
-              document.getElementById(`end${i}`).value = lastSlot.split("〜")[1];
-              document.getElementById(`limit${i}`).value = data.limits[slotIndex] || 10;
-            }
-            slotIndex++;
-          }
-        }
-      } catch (e) {
-        console.error("既存設定の読み込みに失敗しました", e);
+    async function setIssueStatus(status) {
+      await setDoc(doc(db, "settings", "status"), { issuing: status });
+      const badge = document.getElementById("statusBadge");
+      if (status) {
+        badge.textContent = "発券中";
+        badge.className = "status-badge active";
+      } else {
+        badge.textContent = "停止中";
+        badge.className = "status-badge inactive";
       }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    async function updateStatusDisplay() {
+      const snap = await getDoc(doc(db, "settings", "status"));
+      const badge = document.getElementById("statusBadge");
+      if (snap.exists() && snap.data().issuing) {
+        badge.textContent = "発券中";
+        badge.className = "status-badge active";
+      } else {
+        badge.textContent = "停止中";
+        badge.className = "status-badge inactive";
+      }
+    }
+
+    function generateSlots(start, end, interval) {
+      const result = [];
+      let current = start;
+      while (current < end) {
+        const next = addMinutes(current, interval);
+        if (next > end) break;
+        result.push(current + "〜" + next);
+        current = next;
+      }
+      return result;
+    }
+
+    function addMinutes(time, mins) {
+      const [h, m] = time.split(":").map(Number);
+      const date = new Date();
+      date.setHours(h);
+      date.setMinutes(m + mins);
+      return date.toTimeString().slice(0, 5);
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
       startClock();
       updateStatusDisplay();
-      updatePassCountDisplay();
-      loadExistingTimeSlots();
 
-      document.getElementById("startBtn").onclick = async () => {
-        await setIssueStatus(true);
-        await updatePassCountDisplay();
-      };
-      document.getElementById("stopBtn").onclick = async () => {
-        await setIssueStatus(false);
-      };
+      try {
+        const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
+        if (timeSlotSnap.exists()) {
+          const data = timeSlotSnap.data();
+          const slots = data.slots || [];
+          const limits = data.limits || [];
+          let index = 0;
+          for (let i = 1; i <= 3; i++) {
+            if (index < slots.length) {
+              const firstSlot = slots[index].split("〜")[0];
+              let j = index;
+              while (j < slots.length && limits[j] === limits[index]) j++;
+              const lastSlotEnd = slots[j - 1].split("〜")[1];
+              document.getElementById(`start${i}`).value = firstSlot;
+              document.getElementById(`end${i}`).value = lastSlotEnd;
+              const [h1, m1] = firstSlot.split(":").map(Number);
+              const [h2, m2] = slots[index + 1]
+                ? slots[index + 1].split("〜")[0].split(":").map(Number)
+                : [h1, m1];
+              const intervalMin = (h2 * 60 + m2) - (h1 * 60 + m1);
+              document.getElementById(`interval${i}`).value = intervalMin || 10;
+              document.getElementById(`limit${i}`).value = limits[index] || 10;
+              index = j;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("設定読み込みエラー:", err);
+      }
+
+      document.getElementById("startBtn").onclick = () => setIssueStatus(true);
+      document.getElementById("stopBtn").onclick = () => setIssueStatus(false);
 
       document.getElementById("setTimeSlots").onsubmit = async (e) => {
         e.preventDefault();
         const slots = [];
         const limits = [];
-
         for (let i = 1; i <= 3; i++) {
           const start = document.getElementById(`start${i}`).value;
           const end = document.getElementById(`end${i}`).value;
           const limit = parseInt(document.getElementById(`limit${i}`).value);
           const interval = parseInt(document.getElementById(`interval${i}`).value || "10");
-
           if (start && end && start < end && limit > 0 && interval > 0) {
             const generated = generateSlots(start, end, interval);
             slots.push(...generated);
             limits.push(...Array(generated.length).fill(limit));
           }
         }
-
-        if (slots.length === 0) {
+        if (!slots.length) {
           alert("最低1つの時間枠を入力してください。");
           return;
         }
-
         try {
           await setDoc(doc(db, "settings", "timeSlots"), { slots, limits });
-          alert(`${slots.length}件の案内時間を保存しました。`);
-          await updatePassCountDisplay();
+          alert("時間枠を保存しました。");
         } catch (e) {
           alert("保存に失敗しました: " + e.message);
         }
@@ -233,12 +292,10 @@
         const num = parseInt(document.getElementById("specialPeople").value);
         const start = document.getElementById("specialStartTime").value;
         const end = document.getElementById("specialEndTime").value;
-
         if (!name || isNaN(num) || num < 1 || !start || !end || start >= end) {
           alert("正しく入力してください。");
           return;
         }
-
         const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
         const time = `${start}〜${end}`;
         try {
@@ -253,7 +310,6 @@
             special: true
           });
           alert("特別パスを発行しました: " + id);
-          await updatePassCountDisplay();
           document.getElementById("specialForm").reset();
         } catch (e) {
           alert("発行に失敗しました: " + e.message);
