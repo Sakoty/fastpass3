@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ファストパス設定</title>
   <style>
     body {
@@ -113,34 +113,34 @@
       <div>
         <label>1枠目</label>
         <div class="time-slot-group">
-          <input type="time" id="start1" placeholder="開始">
-          <input type="time" id="end1" placeholder="終了">
+          <input type="time" id="start1" placeholder="開始" />
+          <input type="time" id="end1" placeholder="終了" />
         </div>
         <div class="time-slot-group">
-          <input type="number" id="interval1" value="10" placeholder="間隔(分)">
-          <input type="number" id="limit1" value="1" placeholder="上限人数">
+          <input type="number" id="interval1" value="10" placeholder="間隔(分)" min="1" />
+          <input type="number" id="limit1" value="1" placeholder="上限人数" min="1" />
         </div>
       </div>
       <div>
         <label>2枠目</label>
         <div class="time-slot-group">
-          <input type="time" id="start2" placeholder="開始">
-          <input type="time" id="end2" placeholder="終了">
+          <input type="time" id="start2" placeholder="開始" />
+          <input type="time" id="end2" placeholder="終了" />
         </div>
         <div class="time-slot-group">
-          <input type="number" id="interval2" value="10" placeholder="間隔(分)">
-          <input type="number" id="limit2" value="1" placeholder="上限人数">
+          <input type="number" id="interval2" value="10" placeholder="間隔(分)" min="1" />
+          <input type="number" id="limit2" value="1" placeholder="上限人数" min="1" />
         </div>
       </div>
       <div>
         <label>3枠目</label>
         <div class="time-slot-group">
-          <input type="time" id="start3" placeholder="開始">
-          <input type="time" id="end3" placeholder="終了">
+          <input type="time" id="start3" placeholder="開始" />
+          <input type="time" id="end3" placeholder="終了" />
         </div>
         <div class="time-slot-group">
-          <input type="number" id="interval3" value="10" placeholder="間隔(分)">
-          <input type="number" id="limit3" value="1" placeholder="上限人数">
+          <input type="number" id="interval3" value="10" placeholder="間隔(分)" min="1" />
+          <input type="number" id="limit3" value="1" placeholder="上限人数" min="1" />
         </div>
       </div>
       <button type="submit" class="primary">時間設定を保存</button>
@@ -150,11 +150,11 @@
   <div class="card">
     <h2>特別ファストパス発券</h2>
     <form id="specialForm">
-      <input type="text" id="specialName" placeholder="名前">
-      <input type="number" id="specialPeople" placeholder="人数">
+      <input type="text" id="specialName" placeholder="名前" required />
+      <input type="number" id="specialPeople" placeholder="人数" min="1" required />
       <div class="time-slot-group">
-        <input type="time" id="specialStartTime" placeholder="開始時間">
-        <input type="time" id="specialEndTime" placeholder="終了時間">
+        <input type="time" id="specialStartTime" placeholder="開始時間" required />
+        <input type="time" id="specialEndTime" placeholder="終了時間" required />
       </div>
       <button type="submit" class="success">特別パス発行</button>
     </form>
@@ -162,11 +162,27 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc,
+      addDoc,
+      collection,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
+    // ここにFirebase設定を入れてください
     const firebaseConfig = {
-      // Firebase設定
+     apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.firebasestorage.app",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5",
+  measurementId: "G-SLPKMCNY53"
     };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
@@ -179,9 +195,14 @@
     }
 
     async function setIssueStatus(status) {
-      await setDoc(doc(db, "settings", "status"), { issuing: status });
+      await setDoc(doc(db, "settings", "issueStatus"), { enabled: status });
+      updateStatusDisplay();
+    }
+
+    async function updateStatusDisplay() {
+      const snap = await getDoc(doc(db, "settings", "issueStatus"));
       const badge = document.getElementById("statusBadge");
-      if (status) {
+      if (snap.exists() && snap.data().enabled) {
         badge.textContent = "発券中";
         badge.className = "status-badge active";
       } else {
@@ -190,16 +211,23 @@
       }
     }
 
-    async function updateStatusDisplay() {
-      const snap = await getDoc(doc(db, "settings", "status"));
-      const badge = document.getElementById("statusBadge");
-      if (snap.exists() && snap.data().issuing) {
-        badge.textContent = "発券中";
-        badge.className = "status-badge active";
-      } else {
-        badge.textContent = "停止中";
-        badge.className = "status-badge inactive";
+    // 時刻を "HH:MM" 形式で返すユーティリティ
+    function pad2(num) {
+      return num.toString().padStart(2, "0");
+    }
+
+    // 時刻に分を足す。繰り上がり対応
+    function addMinutes(time, mins) {
+      let [h, m] = time.split(":").map(Number);
+      m += mins;
+      while (m >= 60) {
+        m -= 60;
+        h += 1;
       }
+      while (h >= 24) {
+        h -= 24;
+      }
+      return `${pad2(h)}:${pad2(m)}`;
     }
 
     function generateSlots(start, end, interval) {
@@ -214,18 +242,11 @@
       return result;
     }
 
-    function addMinutes(time, mins) {
-      const [h, m] = time.split(":").map(Number);
-      const date = new Date();
-      date.setHours(h);
-      date.setMinutes(m + mins);
-      return date.toTimeString().slice(0, 5);
-    }
-
     document.addEventListener("DOMContentLoaded", async () => {
       startClock();
-      updateStatusDisplay();
+      await updateStatusDisplay();
 
+      // 時間帯設定の読み込み
       try {
         const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
         if (timeSlotSnap.exists()) {
@@ -236,18 +257,24 @@
           for (let i = 1; i <= 3; i++) {
             if (index < slots.length) {
               const firstSlot = slots[index].split("〜")[0];
-              let j = index;
+              // jをindex以降でlimitが同じ範囲まで進める
+              let j = index + 1;
               while (j < slots.length && limits[j] === limits[index]) j++;
               const lastSlotEnd = slots[j - 1].split("〜")[1];
               document.getElementById(`start${i}`).value = firstSlot;
               document.getElementById(`end${i}`).value = lastSlotEnd;
-              const [h1, m1] = firstSlot.split(":").map(Number);
-              const [h2, m2] = slots[index + 1]
-                ? slots[index + 1].split("〜")[0].split(":").map(Number)
-                : [h1, m1];
-              const intervalMin = (h2 * 60 + m2) - (h1 * 60 + m1);
-              document.getElementById(`interval${i}`).value = intervalMin || 10;
-              document.getElementById(`limit${i}`).value = limits[index] || 10;
+
+              // 間隔は次スロットの開始時間 - 現スロット開始時間で計算
+              if (index + 1 < slots.length) {
+                const [h1, m1] = firstSlot.split(":").map(Number);
+                const [h2, m2] = slots[index + 1].split("〜")[0].split(":").map(Number);
+                const intervalMin = (h2 * 60 + m2) - (h1 * 60 + m1);
+                document.getElementById(`interval${i}`).value = intervalMin > 0 ? intervalMin : 10;
+              } else {
+                document.getElementById(`interval${i}`).value = 10;
+              }
+
+              document.getElementById(`limit${i}`).value = limits[index] || 1;
               index = j;
             }
           }
@@ -256,9 +283,15 @@
         console.error("設定読み込みエラー:", err);
       }
 
-      document.getElementById("startBtn").onclick = () => setIssueStatus(true);
-      document.getElementById("stopBtn").onclick = () => setIssueStatus(false);
+      // 発券開始・停止ボタンイベント
+      document.getElementById("startBtn").onclick = async () => {
+        await setIssueStatus(true);
+      };
+      document.getElementById("stopBtn").onclick = async () => {
+        await setIssueStatus(false);
+      };
 
+      // 時間帯設定フォーム送信
       document.getElementById("setTimeSlots").onsubmit = async (e) => {
         e.preventDefault();
         const slots = [];
@@ -286,6 +319,7 @@
         }
       };
 
+      // 特別パス発券フォーム送信
       document.getElementById("specialForm").onsubmit = async (e) => {
         e.preventDefault();
         const name = document.getElementById("specialName").value.trim();
