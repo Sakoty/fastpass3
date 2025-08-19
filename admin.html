@@ -1,110 +1,40 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>プライオリティパス管理画面</title>
   <style>
-    body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      padding: 15px;
-      background: #fefbd8;
-      max-width: 900px;
-      margin: auto;
-      color: #333;
-    }
-    h1 {
-      text-align: center;
-      color: #444;
-    }
-    .table-container {
-      overflow-x: auto;
-      margin-top: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      background: white;
-      border-radius: 6px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 600px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 10px 8px;
-      text-align: center;
-      vertical-align: middle;
-      font-size: 14px;
-    }
-    th {
-      background-color: #f0e68c;
-      color: #333;
-      font-weight: 600;
-    }
-    tr:nth-child(even) {
-      background-color: #fafafa;
-    }
-    button {
-      padding: 6px 10px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      border: none;
-      border-radius: 4px;
-      transition: background-color 0.3s ease;
-      margin: 2px 0;
-      width: 100%;
-      max-width: 120px;
-    }
-    .btn-delete {
-      background-color: #e74c3c;
-      color: white;
-    }
-    .btn-delete:hover {
-      background-color: #c0392b;
-    }
-    .btn-toggle-used {
-      background-color: #3498db;
-      color: white;
-    }
-    .btn-toggle-used:hover {
-      background-color: #2980b9;
-    }
-    .status-used {
-      color: green;
-      font-weight: bold;
-    }
-    .status-unused {
-      color: red;
-      font-weight: bold;
-    }
-    .status-expired {
-      color: darkorange;
-      font-weight: bold;
-    }
-    #deleteAllBtn {
-      background-color: #d32f2f;
-      color: white;
-      margin: 20px auto 0 auto;
-      display: block;
-      max-width: 180px;
-      font-weight: bold;
-      box-shadow: 0 4px 10px rgba(211, 47, 47, 0.4);
-      transition: background-color 0.3s ease;
-    }
-    #deleteAllBtn:hover {
-      background-color: #9b1d1d;
-    }
-    @media (max-width: 600px) {
-      body { padding: 10px 8px; }
-      th, td { font-size: 12px; padding: 8px 6px; }
-      button { font-size: 0.85rem; max-width: 100px; }
-      #deleteAllBtn { max-width: 100%; margin-top: 15px; }
-    }
+    body { font-family: "Segoe UI", sans-serif; padding: 15px; background: #fefbd8; max-width: 900px; margin: auto; color: #333; }
+    h1 { text-align: center; color: #444; }
+    .table-container { overflow-x: auto; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; min-width: 600px; }
+    th, td { border: 1px solid #ddd; padding: 10px 8px; text-align: center; vertical-align: middle; font-size: 14px; }
+    th { background-color: #f0e68c; color: #333; font-weight: 600; }
+    tr:nth-child(even) { background-color: #fafafa; }
+    button { padding: 6px 10px; font-size: 0.9rem; cursor: pointer; border: none; border-radius: 4px; transition: background-color 0.3s ease; margin: 2px 0; width: 100%; max-width: 120px; }
+    .btn-delete { background-color: #e74c3c; color: white; }
+    .btn-delete:hover { background-color: #c0392b; }
+    .btn-toggle-used { background-color: #3498db; color: white; }
+    .btn-toggle-used:hover { background-color: #2980b9; }
+    .status-used { color: green; font-weight: bold; }
+    .status-unused { color: red; font-weight: bold; }
+    .status-expired { color: darkorange; font-weight: bold; }
+    #deleteAllBtn { background-color: #d32f2f; color: white; margin: 20px auto 0 auto; display: block; max-width: 180px; font-weight: bold; box-shadow: 0 4px 10px rgba(211, 47, 47, 0.4); transition: background-color 0.3s ease; }
+    #deleteAllBtn:hover { background-color: #9b1d1d; }
+    @media (max-width: 600px) { body { padding: 10px 8px; } th, td { font-size: 12px; padding: 8px 6px; } button { font-size: 0.85rem; max-width: 100px; } #deleteAllBtn { max-width: 100%; margin-top: 15px; } }
+
+    /* ログイン画面用 */
+    #loginDiv { max-width: 400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+    #loginDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
+    #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
+    #loginDiv button:hover { background:#0056b3; }
+    #errorMsg { color:red; margin-top:10px; text-align:center; }
+    #mainContent { display:none; }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -117,133 +47,141 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const auth = getAuth(app);
 
-    // 🔑 ログインチェック
-    onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        window.location.href = "login.html"; // 未ログインは login.html にリダイレクト
+    // 管理者IDとパスワード
+    const allowedAdmins = [
+      { id: "Sakoty", password: "3214" },
+      { id: "admin2", password: "1928mickeymouse" }
+    ];
+
+    const loginDiv = document.getElementById("loginDiv");
+    const mainContent = document.getElementById("mainContent");
+    const errorMsg = document.getElementById("errorMsg");
+    const loginForm = document.getElementById("loginForm");
+
+    loginForm.onsubmit = (e) => {
+      e.preventDefault();
+      const inputId = document.getElementById("adminId").value.trim();
+      const inputPass = document.getElementById("adminPass").value;
+      const valid = allowedAdmins.some(a => a.id === inputId && a.password === inputPass);
+      if(valid){
+        loginDiv.style.display = "none";
+        mainContent.style.display = "block";
+        startApp();
+      } else {
+        errorMsg.textContent = "IDまたはパスワードが違います";
       }
-    });
+    };
 
-    // ログアウトボタン追加
-    window.addEventListener("load", () => {
-      const logoutBtn = document.createElement("button");
-      logoutBtn.textContent = "ログアウト";
-      logoutBtn.style.margin = "10px auto";
-      logoutBtn.style.display = "block";
-      logoutBtn.style.width = "120px";
-      logoutBtn.style.padding = "8px";
-      logoutBtn.style.backgroundColor = "#6c757d";
-      logoutBtn.style.color = "white";
-      logoutBtn.style.border = "none";
-      logoutBtn.style.borderRadius = "6px";
-      logoutBtn.style.cursor = "pointer";
-      logoutBtn.onclick = async () => {
-        await signOut(auth);
-        window.location.href = "login.html";
+    function startApp(){
+      // 期限切れ判定
+      function isExpired(timeStr) {
+        if (!timeStr) return false;
+        const parts = timeStr.split("〜");
+        if (parts.length !== 2) return false;
+        const endTimeStr = parts[1];
+        const [eh, em] = endTimeStr.split(":").map(Number);
+        const now = new Date();
+        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em, 0, 0);
+        return now > endDate;
+      }
+
+      const passesRef = collection(db, "passes");
+      const q = query(passesRef, orderBy("createdAt","desc"));
+
+      function renderPasses(docs){
+        const tbody = document.getElementById("passesTableBody");
+        tbody.innerHTML = "";
+        docs.forEach(docSnap => {
+          const data = docSnap.data();
+          const id = docSnap.id;
+          const typeLabel = data.type==="special" ? "特別プライオリティパス" :
+                            data.number===-1 ? "特別プライオリティパス" :
+                            "通常プライオリティパス";
+          const expired = isExpired(data.time);
+          let usedStatusText="", usedStatusClass="";
+          if(expired){ usedStatusText="期限切れ"; usedStatusClass="status-expired"; }
+          else if(data.used){ usedStatusText="使用済み"; usedStatusClass="status-used"; }
+          else { usedStatusText="未使用"; usedStatusClass="status-unused"; }
+
+          const tr = document.createElement("tr");
+          tr.innerHTML=`
+            <td>${data.id||"-"}</td>
+            <td>${data.name||"-"}</td>
+            <td>${data.numPeople||"-"}</td>
+            <td>${data.time||"-"}</td>
+            <td>${typeLabel}</td>
+            <td class="${usedStatusClass}">${usedStatusText}</td>
+            <td>
+              <button class="btn-toggle-used">${data.used ? "未使用に戻す":"使用済みにする"}</button><br>
+              <button class="btn-delete">削除</button>
+            </td>
+          `;
+          tr.querySelector(".btn-toggle-used").addEventListener("click", async ()=>{
+            try{ await updateDoc(doc(db,"passes",id),{used:!data.used}); }
+            catch(err){ alert("状態切替失敗: "+err.message); }
+          });
+          tr.querySelector(".btn-delete").addEventListener("click", async ()=>{
+            if(confirm(`プライオリティパス「${data.id}」を削除しますか？`)){
+              try{ await deleteDoc(doc(db,"passes",id)); alert("削除しました"); }
+              catch(err){ alert("削除失敗: "+err.message); }
+            }
+          });
+          tbody.appendChild(tr);
+        });
+      }
+
+      onSnapshot(q,(snapshot)=>{ renderPasses(snapshot.docs); });
+
+      // 一括削除
+      document.getElementById("deleteAllBtn").onclick = async ()=>{
+        const password = prompt("パスワードを入力してください");
+        if(!allowedAdmins.some(a=>a.password===password)){
+          alert("パスワードが違います");
+          return;
+        }
+        if(!confirm("本当にすべてのプライオリティパスを削除しますか？")) return;
+        try{
+          const snapshot = await getDocs(passesRef);
+          await Promise.all(snapshot.docs.map(d=>deleteDoc(doc(db,"passes",d.id))));
+          alert("全件削除しました");
+        }catch(err){ alert("削除失敗: "+err.message); }
       };
-      document.body.prepend(logoutBtn);
-    });
-
-    function isExpired(timeStr) {
-      if (!timeStr) return false;
-      const parts = timeStr.split("〜");
-      if (parts.length !== 2) return false;
-      const [eh, em] = parts[1].split(":").map(Number);
-      const now = new Date();
-      const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em, 0);
-      return now > endDate;
     }
-
-    const passesRef = collection(db, "passes");
-    const q = query(passesRef, orderBy("createdAt", "desc"));
-
-    function renderPasses(docs) {
-      const tbody = document.getElementById("passesTableBody");
-      tbody.innerHTML = "";
-
-      docs.forEach(docSnap => {
-        const data = docSnap.data();
-        const id = docSnap.id;
-        const typeLabel = data.type === "special" || data.number === -1 ? "特別プライオリティパス" : "通常プライオリティパス";
-        const expired = isExpired(data.time);
-
-        let usedStatusText = "";
-        let usedStatusClass = "";
-        if (expired) { usedStatusText = "期限切れ"; usedStatusClass = "status-expired"; }
-        else if (data.used) { usedStatusText = "使用済み"; usedStatusClass = "status-used"; }
-        else { usedStatusText = "未使用"; usedStatusClass = "status-unused"; }
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${data.id || "-"}</td>
-          <td>${data.name || "-"}</td>
-          <td>${data.numPeople || "-"}</td>
-          <td>${data.time || "-"}</td>
-          <td>${typeLabel}</td>
-          <td class="${usedStatusClass}">${usedStatusText}</td>
-          <td>
-            <button class="btn-toggle-used">${data.used ? "未使用に戻す" : "使用済みにする"}</button><br>
-            <button class="btn-delete">削除</button>
-          </td>
-        `;
-
-        tr.querySelector(".btn-toggle-used").addEventListener("click", async () => {
-          try { await updateDoc(doc(db, "passes", id), { used: !data.used }); }
-          catch (error) { alert("状態の切り替えに失敗しました: " + error.message); }
-        });
-
-        tr.querySelector(".btn-delete").addEventListener("click", async () => {
-          if (confirm(`プライオリティパス「${data.id}」を削除しますか？`)) {
-            try { await deleteDoc(doc(db, "passes", id)); alert("削除しました。"); }
-            catch (error) { alert("削除に失敗しました: " + error.message); }
-          }
-        });
-
-        tbody.appendChild(tr);
-      });
-    }
-
-    onSnapshot(q, (snapshot) => renderPasses(snapshot.docs));
-
-    async function deleteAllPasses() {
-      const password = prompt("パスワードを入力してください");
-      if (password !== "1928mickeymouse") { alert("パスワードが違います。処理を中止します。"); return; }
-      if (!confirm("本当にすべてのプライオリティパスを削除しますか？ この操作は取り消せません。")) return;
-
-      try {
-        const snapshot = await getDocs(passesRef);
-        const deletePromises = [];
-        snapshot.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "passes", docSnap.id))));
-        await Promise.all(deletePromises);
-        alert("すべてのプライオリティパスを削除しました。");
-      } catch (error) { alert("一括削除に失敗しました: " + error.message); }
-    }
-
-    window.addEventListener("load", () => {
-      document.getElementById("deleteAllBtn").addEventListener("click", deleteAllPasses);
-    });
   </script>
 </head>
 <body>
-  <h1>プライオリティパス管理画面</h1>
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th>発券ID</th>
-          <th>名前</th>
-          <th>人数</th>
-          <th>案内時間</th>
-          <th>種別</th>
-          <th>状態</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody id="passesTableBody"></tbody>
-    </table>
+  <!-- ログイン画面 -->
+  <div id="loginDiv">
+    <h1>管理者ログイン</h1>
+    <form id="loginForm">
+      <input type="text" id="adminId" placeholder="管理者ID">
+      <input type="password" id="adminPass" placeholder="パスワード">
+      <button type="submit">ログイン</button>
+      <div id="errorMsg"></div>
+    </form>
   </div>
-  <button id="deleteAllBtn">すべてのプライオリティパスを一括削除</button>
+
+  <!-- 管理画面 -->
+  <div id="mainContent">
+    <h1>プライオリティパス管理画面</h1>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>発券ID</th>
+            <th>名前</th>
+            <th>人数</th>
+            <th>案内時間</th>
+            <th>種別</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="passesTableBody"></tbody>
+      </table>
+    </div>
+    <button id="deleteAllBtn">すべてのプライオリティパスを一括削除</button>
+  </div>
 </body>
 </html>
