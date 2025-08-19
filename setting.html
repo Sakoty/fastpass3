@@ -27,7 +27,13 @@
   #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
   #loginDiv button:hover { background:#0056b3; }
   #errorMsg { color:red; margin-top:10px; text-align:center; }
+
   #mainContent { display:none; }
+  #logPage { display:none; }
+
+  table { width:100%; border-collapse: collapse; margin-top:10px; }
+  th, td { border:1px solid #ccc; padding:6px; font-size:0.9rem; }
+  th { background:#f0f0f0; }
 </style>
 </head>
 <body>
@@ -55,6 +61,7 @@
     <h2>発券制御</h2>
     <button id="startBtn" class="success">発券開始</button>
     <button id="stopBtn" class="danger">発券停止</button>
+    <button id="gotoLog" class="primary" style="margin-top:10px;">アクセスログ</button>
     <button id="logoutBtn" class="danger" style="margin-top:10px;">ログアウト</button>
   </div>
 
@@ -112,10 +119,25 @@
   </div>
 </div>
 
+<!-- アクセスログページ -->
+<div id="logPage">
+  <h1>アクセスログ履歴</h1>
+  <div style="text-align:center; margin-bottom:10px;">
+    <button id="backBtn" class="primary">戻る</button>
+    <button id="logoutBtn2" class="danger">ログアウト</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th>管理者ID</th><th>操作</th><th>時刻</th></tr>
+    </thead>
+    <tbody id="logTable"></tbody>
+  </table>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp
+  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, query, orderBy, getDocs
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
 // Firebase設定
@@ -141,9 +163,18 @@ const allowedAdmins = [
 
 const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
+const logPage = document.getElementById("logPage");
 const errorMsg = document.getElementById("errorMsg");
 const loginForm = document.getElementById("loginForm");
 const logoutBtn = document.getElementById("logoutBtn");
+const logoutBtn2 = document.getElementById("logoutBtn2");
+const gotoLog = document.getElementById("gotoLog");
+const backBtn = document.getElementById("backBtn");
+
+// ログ記録
+async function logAccess(adminId, action){
+  await addDoc(collection(db,"accessLogs"),{adminId,action,timestamp:serverTimestamp()});
+}
 
 // ログイン状態確認
 function checkLogin(){
@@ -167,18 +198,24 @@ loginForm.onsubmit = e => {
     loginDiv.style.display="none";
     mainContent.style.display="block";
     errorMsg.textContent="";
+    logAccess(inputId,"ログイン");
   } else {
     errorMsg.textContent="IDまたはパスワードが違います";
   }
 };
 
 // ログアウト処理
-logoutBtn.onclick = ()=>{
+function logout(){
+  const id=localStorage.getItem("adminId");
+  if(id) logAccess(id,"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
   loginDiv.style.display="block";
   mainContent.style.display="none";
-};
+  logPage.style.display="none";
+}
+logoutBtn.onclick=logout;
+logoutBtn2.onclick=logout;
 
 // 時計
 function startClock() {
@@ -191,7 +228,12 @@ function startClock() {
 startClock();
 
 // 発券ステータス
-async function setIssueStatus(status){ await setDoc(doc(db,"settings","issueStatus"),{enabled:status}); updateStatusDisplay(); }
+async function setIssueStatus(status){
+  await setDoc(doc(db,"settings","issueStatus"),{enabled:status});
+  updateStatusDisplay();
+  const id=localStorage.getItem("adminId");
+  logAccess(id,status?"発券開始":"発券停止");
+}
 async function updateStatusDisplay(){
   const snap = await getDoc(doc(db,"settings","issueStatus"));
   const badge = document.getElementById("statusBadge");
@@ -225,8 +267,12 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
     }
   }
   if(!slots.length){ alert("最低1つの時間枠を入力してください。"); return; }
-  try{ await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); alert("時間枠を保存しました。"); }
-  catch(e){ alert("保存に失敗しました: "+e.message); }
+  try{
+    await setDoc(doc(db,"settings","timeSlots"),{slots,limits});
+    alert("時間枠を保存しました。");
+    const id=localStorage.getItem("adminId");
+    logAccess(id,"時間枠保存");
+  }catch(e){ alert("保存に失敗しました: "+e.message); }
 };
 
 // 特別パス発券
@@ -239,8 +285,13 @@ document.getElementById("specialForm").onsubmit = async e=>{
   if(!name||isNaN(num)||num<1||!start||!end||start>=end){ alert("正しく入力してください。"); return; }
   const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
   const time=`${start}〜${end}`;
-  try{ await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); alert("特別パスを発行しました: "+id); document.getElementById("specialForm").reset(); }
-  catch(e){ alert("発行に失敗しました: "+e.message); }
+  try{
+    await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true});
+    alert("特別パスを発行しました: "+id);
+    document.getElementById("specialForm").reset();
+    const aid=localStorage.getItem("adminId");
+    logAccess(aid,"特別パス発行");
+  }catch(e){ alert("発行に失敗しました: "+e.message); }
 };
 
 // 設定読み込み
@@ -273,6 +324,26 @@ async function loadTimeSlots(){
 }
 loadTimeSlots();
 
+// アクセスログページ表示
+gotoLog.onclick=async()=>{
+  mainContent.style.display="none";
+  logPage.style.display="block";
+  const tbody=document.getElementById("logTable");
+  tbody.innerHTML="";
+  const q=query(collection(db,"accessLogs"),orderBy("timestamp","desc"));
+  const snap=await getDocs(q);
+  snap.forEach(doc=>{
+    const d=doc.data();
+    const tr=document.createElement("tr");
+    const t=new Date(d.timestamp?.toDate?.() || Date.now()).toLocaleString();
+    tr.innerHTML=`<td>${d.adminId}</td><td>${d.action}</td><td>${t}</td>`;
+    tbody.appendChild(tr);
+  });
+};
+backBtn.onclick=()=>{
+  logPage.style.display="none";
+  mainContent.style.display="block";
+};
 </script>
 </body>
 </html>
