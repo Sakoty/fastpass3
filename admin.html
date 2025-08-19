@@ -77,12 +77,10 @@
       color: red;
       font-weight: bold;
     }
-    .status-expired { /* 追加 */
+    .status-expired {
       color: darkorange;
       font-weight: bold;
     }
-
-    /* 一括削除ボタン用 */
     #deleteAllBtn {
       background-color: #d32f2f;
       color: white;
@@ -96,31 +94,17 @@
     #deleteAllBtn:hover {
       background-color: #9b1d1d;
     }
-
-    /* スマホ対応 */
     @media (max-width: 600px) {
-      body {
-        padding: 10px 8px;
-      }
-      th, td {
-        font-size: 12px;
-        padding: 8px 6px;
-      }
-      button {
-        font-size: 0.85rem;
-        max-width: 100px;
-      }
-      #deleteAllBtn {
-        max-width: 100%;
-        margin-top: 15px;
-      }
+      body { padding: 10px 8px; }
+      th, td { font-size: 12px; padding: 8px 6px; }
+      button { font-size: 0.85rem; max-width: 100px; }
+      #deleteAllBtn { max-width: 100%; margin-top: 15px; }
     }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc, getDocs
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -133,16 +117,42 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
-    // 期限切れ判定用関数を追加
+    // 🔑 ログインチェック
+    onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        window.location.href = "login.html"; // 未ログインは login.html にリダイレクト
+      }
+    });
+
+    // ログアウトボタン追加
+    window.addEventListener("load", () => {
+      const logoutBtn = document.createElement("button");
+      logoutBtn.textContent = "ログアウト";
+      logoutBtn.style.margin = "10px auto";
+      logoutBtn.style.display = "block";
+      logoutBtn.style.width = "120px";
+      logoutBtn.style.padding = "8px";
+      logoutBtn.style.backgroundColor = "#6c757d";
+      logoutBtn.style.color = "white";
+      logoutBtn.style.border = "none";
+      logoutBtn.style.borderRadius = "6px";
+      logoutBtn.style.cursor = "pointer";
+      logoutBtn.onclick = async () => {
+        await signOut(auth);
+        window.location.href = "login.html";
+      };
+      document.body.prepend(logoutBtn);
+    });
+
     function isExpired(timeStr) {
       if (!timeStr) return false;
       const parts = timeStr.split("〜");
       if (parts.length !== 2) return false;
-      const endTimeStr = parts[1];
-      const [eh, em] = endTimeStr.split(":").map(Number);
+      const [eh, em] = parts[1].split(":").map(Number);
       const now = new Date();
-      const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em, 0, 0);
+      const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em, 0);
       return now > endDate;
     }
 
@@ -156,28 +166,14 @@
       docs.forEach(docSnap => {
         const data = docSnap.data();
         const id = docSnap.id;
-
-        const typeLabel = data.type === "special" ? "特別プライオリティパス" :
-                          data.number === -1 ? "特別プライオリティパス" : 
-                          "通常プライオリティパス";
-
-        // 期限切れ判定
+        const typeLabel = data.type === "special" || data.number === -1 ? "特別プライオリティパス" : "通常プライオリティパス";
         const expired = isExpired(data.time);
 
-        // 状態表示
         let usedStatusText = "";
         let usedStatusClass = "";
-
-        if (expired) {
-          usedStatusText = "期限切れ";
-          usedStatusClass = "status-expired";
-        } else if (data.used) {
-          usedStatusText = "使用済み";
-          usedStatusClass = "status-used";
-        } else {
-          usedStatusText = "未使用";
-          usedStatusClass = "status-unused";
-        }
+        if (expired) { usedStatusText = "期限切れ"; usedStatusClass = "status-expired"; }
+        else if (data.used) { usedStatusText = "使用済み"; usedStatusClass = "status-used"; }
+        else { usedStatusText = "未使用"; usedStatusClass = "status-unused"; }
 
         const tr = document.createElement("tr");
         tr.innerHTML = `
@@ -194,21 +190,14 @@
         `;
 
         tr.querySelector(".btn-toggle-used").addEventListener("click", async () => {
-          try {
-            await updateDoc(doc(db, "passes", id), { used: !data.used });
-          } catch (error) {
-            alert("状態の切り替えに失敗しました: " + error.message);
-          }
+          try { await updateDoc(doc(db, "passes", id), { used: !data.used }); }
+          catch (error) { alert("状態の切り替えに失敗しました: " + error.message); }
         });
 
         tr.querySelector(".btn-delete").addEventListener("click", async () => {
           if (confirm(`プライオリティパス「${data.id}」を削除しますか？`)) {
-            try {
-              await deleteDoc(doc(db, "passes", id));
-              alert("削除しました。");
-            } catch (error) {
-              alert("削除に失敗しました: " + error.message);
-            }
+            try { await deleteDoc(doc(db, "passes", id)); alert("削除しました。"); }
+            catch (error) { alert("削除に失敗しました: " + error.message); }
           }
         });
 
@@ -216,39 +205,24 @@
       });
     }
 
-    onSnapshot(q, (snapshot) => {
-      renderPasses(snapshot.docs);
-    });
+    onSnapshot(q, (snapshot) => renderPasses(snapshot.docs));
 
-    // 一括削除処理
     async function deleteAllPasses() {
       const password = prompt("パスワードを入力してください");
-      if (password !== "1928mickeymouse") {
-        alert("パスワードが違います。処理を中止します。");
-        return;
-      }
-
-      if (!confirm("本当にすべてのプライオリティパスを削除しますか？ この操作は取り消せません。")) {
-        return;
-      }
+      if (password !== "1928mickeymouse") { alert("パスワードが違います。処理を中止します。"); return; }
+      if (!confirm("本当にすべてのプライオリティパスを削除しますか？ この操作は取り消せません。")) return;
 
       try {
-        // Firestoreのドキュメントをすべて取得して順に削除
         const snapshot = await getDocs(passesRef);
         const deletePromises = [];
-        snapshot.forEach(docSnap => {
-          deletePromises.push(deleteDoc(doc(db, "passes", docSnap.id)));
-        });
+        snapshot.forEach(docSnap => deletePromises.push(deleteDoc(doc(db, "passes", docSnap.id))));
         await Promise.all(deletePromises);
         alert("すべてのプライオリティパスを削除しました。");
-      } catch (error) {
-        alert("一括削除に失敗しました: " + error.message);
-      }
+      } catch (error) { alert("一括削除に失敗しました: " + error.message); }
     }
 
     window.addEventListener("load", () => {
-      const btn = document.getElementById("deleteAllBtn");
-      btn.addEventListener("click", deleteAllPasses);
+      document.getElementById("deleteAllBtn").addEventListener("click", deleteAllPasses);
     });
   </script>
 </head>
@@ -267,13 +241,9 @@
           <th>操作</th>
         </tr>
       </thead>
-      <tbody id="passesTableBody">
-        <!-- Firestoreデータ -->
-      </tbody>
+      <tbody id="passesTableBody"></tbody>
     </table>
   </div>
-
-  <!-- 一括削除ボタン -->
   <button id="deleteAllBtn">すべてのプライオリティパスを一括削除</button>
 </body>
 </html>
