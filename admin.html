@@ -51,9 +51,9 @@
     // 管理者IDとパスワード
     const allowedAdmins = [
       { id: "Sakoty", password: "3214" },
-      { id: "1", password: "1928mickeymouse" }
-      { id: "2", password: "1928mickeymouse" }
-      { id: "3", password: "1928mickeymouse" }
+      { id: "1", password: "1928mickeymouse" },
+      { id: "2", password: "1928mickeymouse" },
+      { id: "3", password: "1928mickeymouse" },
       { id: "4", password: "1928mickeymouse" }
     ];
 
@@ -62,14 +62,28 @@
     const errorMsg = document.getElementById("errorMsg");
     const loginForm = document.getElementById("loginForm");
 
+    // ページ読み込み時にログイン状態をチェック
+    window.addEventListener("DOMContentLoaded", ()=>{
+      const storedId = localStorage.getItem("adminId");
+      const storedPass = localStorage.getItem("adminPass");
+      if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
+        loginDiv.style.display = "none";
+        mainContent.style.display = "block";
+        startApp();
+      }
+    });
+
     loginForm.onsubmit = (e) => {
       e.preventDefault();
       const inputId = document.getElementById("adminId").value.trim();
       const inputPass = document.getElementById("adminPass").value;
       const valid = allowedAdmins.some(a => a.id === inputId && a.password === inputPass);
       if(valid){
+        localStorage.setItem("adminId", inputId);
+        localStorage.setItem("adminPass", inputPass);
         loginDiv.style.display = "none";
         mainContent.style.display = "block";
+        errorMsg.textContent = "";
         startApp();
       } else {
         errorMsg.textContent = "IDまたはパスワードが違います";
@@ -77,7 +91,20 @@
     };
 
     function startApp(){
-      // 期限切れ判定
+      // ログアウトボタン
+      if(!document.getElementById("logoutBtn")){
+        const logoutBtn = document.createElement("button");
+        logoutBtn.textContent = "ログアウト";
+        logoutBtn.style.marginTop = "15px";
+        logoutBtn.onclick = ()=>{
+          localStorage.removeItem("adminId");
+          localStorage.removeItem("adminPass");
+          loginDiv.style.display = "block";
+          mainContent.style.display = "none";
+        };
+        mainContent.appendChild(logoutBtn);
+      }
+
       function isExpired(timeStr) {
         if (!timeStr) return false;
         const parts = timeStr.split("〜");
@@ -108,18 +135,16 @@
           else { usedStatusText="未使用"; usedStatusClass="status-unused"; }
 
           const tr = document.createElement("tr");
-          tr.innerHTML=`
-            <td>${data.id||"-"}</td>
-            <td>${data.name||"-"}</td>
-            <td>${data.numPeople||"-"}</td>
-            <td>${data.time||"-"}</td>
-            <td>${typeLabel}</td>
-            <td class="${usedStatusClass}">${usedStatusText}</td>
-            <td>
-              <button class="btn-toggle-used">${data.used ? "未使用に戻す":"使用済みにする"}</button><br>
-              <button class="btn-delete">削除</button>
-            </td>
-          `;
+          tr.innerHTML=`<td>${data.id||"-"}</td>
+                        <td>${data.name||"-"}</td>
+                        <td>${data.numPeople||"-"}</td>
+                        <td>${data.time||"-"}</td>
+                        <td>${typeLabel}</td>
+                        <td class="${usedStatusClass}">${usedStatusText}</td>
+                        <td>
+                          <button class="btn-toggle-used">${data.used ? "未使用に戻す":"使用済みにする"}</button><br>
+                          <button class="btn-delete">削除</button>
+                        </td>`;
           tr.querySelector(".btn-toggle-used").addEventListener("click", async ()=>{
             try{ await updateDoc(doc(db,"passes",id),{used:!data.used}); }
             catch(err){ alert("状態切替失敗: "+err.message); }
@@ -188,4 +213,3 @@
   </div>
 </body>
 </html>
-
