@@ -1,100 +1,50 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ファストパス設定</title>
-  <style>
-    body {
-      font-family: "Segoe UI", sans-serif;
-      max-width: 600px;
-      margin: auto;
-      padding: 15px;
-      background: #f5f7fa;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 5px;
-    }
-    #clock {
-      text-align: center;
-      font-weight: bold;
-      color: #555;
-      margin-bottom: 10px;
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 5px 12px;
-      border-radius: 15px;
-      font-weight: bold;
-      font-size: 0.9rem;
-      margin-top: 5px;
-    }
-    .active {
-      background-color: #28a745;
-      color: white;
-    }
-    .inactive {
-      background-color: #dc3545;
-      color: white;
-    }
-    .card {
-      background: white;
-      border-radius: 10px;
-      padding: 15px;
-      margin-top: 15px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 10px;
-      font-size: 0.9rem;
-    }
-    input {
-      width: 100%;
-      padding: 8px;
-      margin-top: 4px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-      font-size: 1rem;
-      box-sizing: border-box;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    button.primary {
-      background-color: #007bff;
-      color: white;
-    }
-    button.danger {
-      background-color: #dc3545;
-      color: white;
-    }
-    button.success {
-      background-color: #28a745;
-      color: white;
-    }
-    .time-slot-group {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    @media (max-width: 500px) {
-      .time-slot-group {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ファストパス設定</title>
+<style>
+  body { font-family: "Segoe UI", sans-serif; max-width: 600px; margin: auto; padding: 15px; background: #f5f7fa; }
+  h1 { text-align: center; margin-bottom: 5px; }
+  #clock { text-align: center; font-weight: bold; color: #555; margin-bottom: 10px; }
+  .status-badge { display: inline-block; padding: 5px 12px; border-radius: 15px; font-weight: bold; font-size: 0.9rem; margin-top: 5px; }
+  .active { background-color: #28a745; color: white; }
+  .inactive { background-color: #dc3545; color: white; }
+  .card { background: white; border-radius: 10px; padding: 15px; margin-top: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+  label { font-weight: bold; display: block; margin-top: 10px; font-size: 0.9rem; }
+  input { width: 100%; padding: 8px; margin-top: 4px; border-radius: 5px; border: 1px solid #ccc; font-size: 1rem; box-sizing: border-box; }
+  button { width: 100%; padding: 12px; margin-top: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+  button.primary { background-color: #007bff; color: white; }
+  button.danger { background-color: #dc3545; color: white; }
+  button.success { background-color: #28a745; color: white; }
+  .time-slot-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (max-width: 500px) { .time-slot-group { grid-template-columns: 1fr; } }
+
+  /* ログイン用 */
+  #loginDiv { max-width: 400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+  #loginDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
+  #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
+  #loginDiv button:hover { background:#0056b3; }
+  #errorMsg { color:red; margin-top:10px; text-align:center; }
+  #mainContent { display:none; }
+</style>
 </head>
 <body>
+
+<!-- ログイン画面 -->
+<div id="loginDiv">
+  <h1>管理者ログイン</h1>
+  <form id="loginForm">
+    <input type="text" id="adminId" placeholder="管理者ID" required />
+    <input type="password" id="adminPass" placeholder="パスワード" required />
+    <button type="submit">ログイン</button>
+    <div id="errorMsg"></div>
+  </form>
+</div>
+
+<!-- 設定画面 -->
+<div id="mainContent">
   <h1>ファストパス設定</h1>
   <div id="clock"></div>
   <div style="text-align:center;">
@@ -105,6 +55,7 @@
     <h2>発券制御</h2>
     <button id="startBtn" class="success">発券開始</button>
     <button id="stopBtn" class="danger">発券停止</button>
+    <button id="logoutBtn" class="danger" style="margin-top:10px;">ログアウト</button>
   </div>
 
   <div class="card">
@@ -159,197 +110,169 @@
       <button type="submit" class="success">特別パス発行</button>
     </form>
   </div>
+</div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import {
-      getFirestore,
-      doc,
-      getDoc,
-      setDoc,
-      addDoc,
-      collection,
-      serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+import {
+  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
-    // ここにFirebase設定を入れてください
-    const firebaseConfig = {
-     apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain: "fastpass-system.firebaseapp.com",
-  projectId: "fastpass-system",
-  storageBucket: "fastpass-system.firebasestorage.app",
-  messagingSenderId: "858745521872",
-  appId: "1:858745521872:web:29289b673855097e1200d5",
-  measurementId: "G-SLPKMCNY53"
-    };
+// Firebase設定
+const firebaseConfig = {
+ apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+ authDomain: "fastpass-system.firebaseapp.com",
+ projectId: "fastpass-system",
+ storageBucket: "fastpass-system.appspot.com",
+ messagingSenderId: "858745521872",
+ appId: "1:858745521872:web:29289b673855097e1200d5"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+// 管理者ID・パスワード
+const allowedAdmins = [
+  { id: "Sakoty", password: "3214" },
+  { id: "seseguchi914", password: "0914" },
+  { id: "2", password: "1928mickeymouse" },
+  { id: "3", password: "1928mickeymouse" },
+  { id: "4", password: "1928mickeymouse" }
+];
 
-    function startClock() {
-      setInterval(() => {
-        const now = new Date();
-        document.getElementById("clock").textContent =
-          now.toLocaleDateString() + " " + now.toLocaleTimeString();
-      }, 1000);
+const loginDiv = document.getElementById("loginDiv");
+const mainContent = document.getElementById("mainContent");
+const errorMsg = document.getElementById("errorMsg");
+const loginForm = document.getElementById("loginForm");
+const logoutBtn = document.getElementById("logoutBtn");
+
+// ログイン状態確認
+function checkLogin(){
+  const storedId = localStorage.getItem("adminId");
+  const storedPass = localStorage.getItem("adminPass");
+  if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
+    loginDiv.style.display="none";
+    mainContent.style.display="block";
+  }
+}
+checkLogin();
+
+// ログイン処理
+loginForm.onsubmit = e => {
+  e.preventDefault();
+  const inputId = document.getElementById("adminId").value.trim();
+  const inputPass = document.getElementById("adminPass").value;
+  if(allowedAdmins.some(a=>a.id===inputId && a.password===inputPass)){
+    localStorage.setItem("adminId", inputId);
+    localStorage.setItem("adminPass", inputPass);
+    loginDiv.style.display="none";
+    mainContent.style.display="block";
+    errorMsg.textContent="";
+  } else {
+    errorMsg.textContent="IDまたはパスワードが違います";
+  }
+};
+
+// ログアウト処理
+logoutBtn.onclick = ()=>{
+  localStorage.removeItem("adminId");
+  localStorage.removeItem("adminPass");
+  loginDiv.style.display="block";
+  mainContent.style.display="none";
+};
+
+// 時計
+function startClock() {
+  setInterval(() => {
+    const now = new Date();
+    document.getElementById("clock").textContent =
+      now.toLocaleDateString() + " " + now.toLocaleTimeString();
+  }, 1000);
+}
+startClock();
+
+// 発券ステータス
+async function setIssueStatus(status){ await setDoc(doc(db,"settings","issueStatus"),{enabled:status}); updateStatusDisplay(); }
+async function updateStatusDisplay(){
+  const snap = await getDoc(doc(db,"settings","issueStatus"));
+  const badge = document.getElementById("statusBadge");
+  if(snap.exists() && snap.data().enabled){
+    badge.textContent="発券中"; badge.className="status-badge active";
+  } else { badge.textContent="停止中"; badge.className="status-badge inactive"; }
+}
+updateStatusDisplay();
+
+document.getElementById("startBtn").onclick = async ()=>{ await setIssueStatus(true); };
+document.getElementById("stopBtn").onclick = async ()=>{ await setIssueStatus(false); };
+
+// 時刻操作ユーティリティ
+function pad2(num){return num.toString().padStart(2,"0");}
+function addMinutes(time, mins){let [h,m]=time.split(":").map(Number); m+=mins; while(m>=60){m-=60; h+=1;} while(h>=24){h-=24;} return `${pad2(h)}:${pad2(m)}`;}
+function generateSlots(start,end,interval){const result=[];let current=start; while(current<end){const next=addMinutes(current,interval); if(next>end) break; result.push(current+"〜"+next); current=next;} return result;}
+
+// 時間帯設定
+document.getElementById("setTimeSlots").onsubmit = async e=>{
+  e.preventDefault();
+  const slots=[]; const limits=[];
+  for(let i=1;i<=3;i++){
+    const start=document.getElementById(`start${i}`).value;
+    const end=document.getElementById(`end${i}`).value;
+    const limit=parseInt(document.getElementById(`limit${i}`).value);
+    const interval=parseInt(document.getElementById(`interval${i}`).value||"10");
+    if(start && end && start<end && limit>0 && interval>0){
+      const generated=generateSlots(start,end,interval);
+      slots.push(...generated);
+      limits.push(...Array(generated.length).fill(limit));
     }
+  }
+  if(!slots.length){ alert("最低1つの時間枠を入力してください。"); return; }
+  try{ await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); alert("時間枠を保存しました。"); }
+  catch(e){ alert("保存に失敗しました: "+e.message); }
+};
 
-    async function setIssueStatus(status) {
-      await setDoc(doc(db, "settings", "issueStatus"), { enabled: status });
-      updateStatusDisplay();
-    }
+// 特別パス発券
+document.getElementById("specialForm").onsubmit = async e=>{
+  e.preventDefault();
+  const name=document.getElementById("specialName").value.trim();
+  const num=parseInt(document.getElementById("specialPeople").value);
+  const start=document.getElementById("specialStartTime").value;
+  const end=document.getElementById("specialEndTime").value;
+  if(!name||isNaN(num)||num<1||!start||!end||start>=end){ alert("正しく入力してください。"); return; }
+  const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
+  const time=`${start}〜${end}`;
+  try{ await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); alert("特別パスを発行しました: "+id); document.getElementById("specialForm").reset(); }
+  catch(e){ alert("発行に失敗しました: "+e.message); }
+};
 
-    async function updateStatusDisplay() {
-      const snap = await getDoc(doc(db, "settings", "issueStatus"));
-      const badge = document.getElementById("statusBadge");
-      if (snap.exists() && snap.data().enabled) {
-        badge.textContent = "発券中";
-        badge.className = "status-badge active";
-      } else {
-        badge.textContent = "停止中";
-        badge.className = "status-badge inactive";
+// 設定読み込み
+async function loadTimeSlots(){
+  try{
+    const timeSlotSnap=await getDoc(doc(db,"settings","timeSlots"));
+    if(timeSlotSnap.exists()){
+      const data=timeSlotSnap.data();
+      const slots=data.slots||[]; const limits=data.limits||[];
+      let index=0;
+      for(let i=1;i<=3;i++){
+        if(index<slots.length){
+          const firstSlot=slots[index].split("〜")[0];
+          let j=index+1; while(j<slots.length && limits[j]===limits[index]) j++;
+          const lastSlotEnd=slots[j-1].split("〜")[1];
+          document.getElementById(`start${i}`).value=firstSlot;
+          document.getElementById(`end${i}`).value=lastSlotEnd;
+          if(index+1<slots.length){
+            const [h1,m1]=firstSlot.split(":").map(Number);
+            const [h2,m2]=slots[index+1].split("〜")[0].split(":").map(Number);
+            const intervalMin=(h2*60+m2)-(h1*60+m1);
+            document.getElementById(`interval${i}`).value=intervalMin>0?intervalMin:10;
+          } else { document.getElementById(`interval${i}`).value=10; }
+          document.getElementById(`limit${i}`).value=limits[index]||1;
+          index=j;
+        }
       }
     }
+  } catch(err){ console.error("設定読み込みエラー:", err); }
+}
+loadTimeSlots();
 
-    // 時刻を "HH:MM" 形式で返すユーティリティ
-    function pad2(num) {
-      return num.toString().padStart(2, "0");
-    }
-
-    // 時刻に分を足す。繰り上がり対応
-    function addMinutes(time, mins) {
-      let [h, m] = time.split(":").map(Number);
-      m += mins;
-      while (m >= 60) {
-        m -= 60;
-        h += 1;
-      }
-      while (h >= 24) {
-        h -= 24;
-      }
-      return `${pad2(h)}:${pad2(m)}`;
-    }
-
-    function generateSlots(start, end, interval) {
-      const result = [];
-      let current = start;
-      while (current < end) {
-        const next = addMinutes(current, interval);
-        if (next > end) break;
-        result.push(current + "〜" + next);
-        current = next;
-      }
-      return result;
-    }
-
-    document.addEventListener("DOMContentLoaded", async () => {
-      startClock();
-      await updateStatusDisplay();
-
-      // 時間帯設定の読み込み
-      try {
-        const timeSlotSnap = await getDoc(doc(db, "settings", "timeSlots"));
-        if (timeSlotSnap.exists()) {
-          const data = timeSlotSnap.data();
-          const slots = data.slots || [];
-          const limits = data.limits || [];
-          let index = 0;
-          for (let i = 1; i <= 3; i++) {
-            if (index < slots.length) {
-              const firstSlot = slots[index].split("〜")[0];
-              // jをindex以降でlimitが同じ範囲まで進める
-              let j = index + 1;
-              while (j < slots.length && limits[j] === limits[index]) j++;
-              const lastSlotEnd = slots[j - 1].split("〜")[1];
-              document.getElementById(`start${i}`).value = firstSlot;
-              document.getElementById(`end${i}`).value = lastSlotEnd;
-
-              // 間隔は次スロットの開始時間 - 現スロット開始時間で計算
-              if (index + 1 < slots.length) {
-                const [h1, m1] = firstSlot.split(":").map(Number);
-                const [h2, m2] = slots[index + 1].split("〜")[0].split(":").map(Number);
-                const intervalMin = (h2 * 60 + m2) - (h1 * 60 + m1);
-                document.getElementById(`interval${i}`).value = intervalMin > 0 ? intervalMin : 10;
-              } else {
-                document.getElementById(`interval${i}`).value = 10;
-              }
-
-              document.getElementById(`limit${i}`).value = limits[index] || 1;
-              index = j;
-            }
-          }
-        }
-      } catch (err) {
-        console.error("設定読み込みエラー:", err);
-      }
-
-      // 発券開始・停止ボタンイベント
-      document.getElementById("startBtn").onclick = async () => {
-        await setIssueStatus(true);
-      };
-      document.getElementById("stopBtn").onclick = async () => {
-        await setIssueStatus(false);
-      };
-
-      // 時間帯設定フォーム送信
-      document.getElementById("setTimeSlots").onsubmit = async (e) => {
-        e.preventDefault();
-        const slots = [];
-        const limits = [];
-        for (let i = 1; i <= 3; i++) {
-          const start = document.getElementById(`start${i}`).value;
-          const end = document.getElementById(`end${i}`).value;
-          const limit = parseInt(document.getElementById(`limit${i}`).value);
-          const interval = parseInt(document.getElementById(`interval${i}`).value || "10");
-          if (start && end && start < end && limit > 0 && interval > 0) {
-            const generated = generateSlots(start, end, interval);
-            slots.push(...generated);
-            limits.push(...Array(generated.length).fill(limit));
-          }
-        }
-        if (!slots.length) {
-          alert("最低1つの時間枠を入力してください。");
-          return;
-        }
-        try {
-          await setDoc(doc(db, "settings", "timeSlots"), { slots, limits });
-          alert("時間枠を保存しました。");
-        } catch (e) {
-          alert("保存に失敗しました: " + e.message);
-        }
-      };
-
-      // 特別パス発券フォーム送信
-      document.getElementById("specialForm").onsubmit = async (e) => {
-        e.preventDefault();
-        const name = document.getElementById("specialName").value.trim();
-        const num = parseInt(document.getElementById("specialPeople").value);
-        const start = document.getElementById("specialStartTime").value;
-        const end = document.getElementById("specialEndTime").value;
-        if (!name || isNaN(num) || num < 1 || !start || !end || start >= end) {
-          alert("正しく入力してください。");
-          return;
-        }
-        const id = "FP" + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-        const time = `${start}〜${end}`;
-        try {
-          await addDoc(collection(db, "passes"), {
-            id,
-            number: -1,
-            name,
-            numPeople: num,
-            time,
-            used: false,
-            createdAt: serverTimestamp(),
-            special: true
-          });
-          alert("特別パスを発行しました: " + id);
-          document.getElementById("specialForm").reset();
-        } catch (e) {
-          alert("発行に失敗しました: " + e.message);
-        }
-      };
-    });
-  </script>
+</script>
 </body>
 </html>
