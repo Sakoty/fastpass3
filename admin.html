@@ -48,9 +48,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 管理者IDとパスワード
     const allowedAdmins = [
-      { id: "Sakoty", password: "3214" },
+      { id: "admin1", password: "pass123" },
       { id: "admin2", password: "1928mickeymouse" }
     ];
 
@@ -59,12 +58,30 @@
     const errorMsg = document.getElementById("errorMsg");
     const loginForm = document.getElementById("loginForm");
 
+    // ページ読み込み時にログイン状態を確認
+    window.addEventListener("load", () => {
+      const storedId = localStorage.getItem("adminId");
+      const storedPass = localStorage.getItem("adminPass");
+      if(storedId && storedPass){
+        const valid = allowedAdmins.some(a => a.id === storedId && a.password === storedPass);
+        if(valid){
+          loginDiv.style.display="none";
+          mainContent.style.display="block";
+          startApp();
+        }
+      }
+    });
+
     loginForm.onsubmit = (e) => {
       e.preventDefault();
       const inputId = document.getElementById("adminId").value.trim();
       const inputPass = document.getElementById("adminPass").value;
       const valid = allowedAdmins.some(a => a.id === inputId && a.password === inputPass);
       if(valid){
+        // ログイン状態を保存
+        localStorage.setItem("adminId", inputId);
+        localStorage.setItem("adminPass", inputPass);
+
         loginDiv.style.display = "none";
         mainContent.style.display = "block";
         startApp();
@@ -74,15 +91,14 @@
     };
 
     function startApp(){
-      // 期限切れ判定
       function isExpired(timeStr) {
-        if (!timeStr) return false;
+        if(!timeStr) return false;
         const parts = timeStr.split("〜");
-        if (parts.length !== 2) return false;
+        if(parts.length!==2) return false;
         const endTimeStr = parts[1];
         const [eh, em] = endTimeStr.split(":").map(Number);
         const now = new Date();
-        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em, 0, 0);
+        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eh, em,0,0);
         return now > endDate;
       }
 
@@ -91,20 +107,20 @@
 
       function renderPasses(docs){
         const tbody = document.getElementById("passesTableBody");
-        tbody.innerHTML = "";
-        docs.forEach(docSnap => {
+        tbody.innerHTML="";
+        docs.forEach(docSnap=>{
           const data = docSnap.data();
           const id = docSnap.id;
-          const typeLabel = data.type==="special" ? "特別プライオリティパス" :
-                            data.number===-1 ? "特別プライオリティパス" :
+          const typeLabel = data.type==="special"?"特別プライオリティパス":
+                            data.number===-1?"特別プライオリティパス":
                             "通常プライオリティパス";
           const expired = isExpired(data.time);
           let usedStatusText="", usedStatusClass="";
           if(expired){ usedStatusText="期限切れ"; usedStatusClass="status-expired"; }
           else if(data.used){ usedStatusText="使用済み"; usedStatusClass="status-used"; }
-          else { usedStatusText="未使用"; usedStatusClass="status-unused"; }
+          else{ usedStatusText="未使用"; usedStatusClass="status-unused"; }
 
-          const tr = document.createElement("tr");
+          const tr=document.createElement("tr");
           tr.innerHTML=`
             <td>${data.id||"-"}</td>
             <td>${data.name||"-"}</td>
@@ -113,7 +129,7 @@
             <td>${typeLabel}</td>
             <td class="${usedStatusClass}">${usedStatusText}</td>
             <td>
-              <button class="btn-toggle-used">${data.used ? "未使用に戻す":"使用済みにする"}</button><br>
+              <button class="btn-toggle-used">${data.used?"未使用に戻す":"使用済みにする"}</button><br>
               <button class="btn-delete">削除</button>
             </td>
           `;
@@ -133,10 +149,10 @@
 
       onSnapshot(q,(snapshot)=>{ renderPasses(snapshot.docs); });
 
-      // 一括削除
       document.getElementById("deleteAllBtn").onclick = async ()=>{
-        const password = prompt("パスワードを入力してください");
-        if(!allowedAdmins.some(a=>a.password===password)){
+        const storedId = localStorage.getItem("adminId");
+        const storedPass = localStorage.getItem("adminPass");
+        if(!allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
           alert("パスワードが違います");
           return;
         }
@@ -149,39 +165,3 @@
       };
     }
   </script>
-</head>
-<body>
-  <!-- ログイン画面 -->
-  <div id="loginDiv">
-    <h1>管理者ログイン</h1>
-    <form id="loginForm">
-      <input type="text" id="adminId" placeholder="管理者ID">
-      <input type="password" id="adminPass" placeholder="パスワード">
-      <button type="submit">ログイン</button>
-      <div id="errorMsg"></div>
-    </form>
-  </div>
-
-  <!-- 管理画面 -->
-  <div id="mainContent">
-    <h1>プライオリティパス管理画面</h1>
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>発券ID</th>
-            <th>名前</th>
-            <th>人数</th>
-            <th>案内時間</th>
-            <th>種別</th>
-            <th>状態</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="passesTableBody"></tbody>
-      </table>
-    </div>
-    <button id="deleteAllBtn">すべてのプライオリティパスを一括削除</button>
-  </div>
-</body>
-</html>
