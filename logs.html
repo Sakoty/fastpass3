@@ -54,11 +54,25 @@
       background: #aaa;
       cursor: not-allowed;
     }
+    #loginForm {
+      max-width: 400px;
+      margin: 100px auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    #loginForm input {
+      display: block;
+      margin: 10px auto;
+      padding: 8px;
+      width: 90%;
+    }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
     import {
-      getFirestore, collection, query, orderBy, where, getDocs
+      getFirestore, collection, query, orderBy, getDocs
     } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
     // ==== Firebase 初期化 ====
@@ -73,23 +87,53 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // ==== 認証チェック ====
-    const adminId = localStorage.getItem("adminId");
-    const adminPass = localStorage.getItem("adminPass");
+    // ==== 管理者アカウント ====
     const allowedAdmins = [
-      { id: "admin1", password: "pass1" },
+      { id: "Sakoty", password: "3214" },
       { id: "admin2", password: "pass2" }
     ];
 
-    if (!allowedAdmins.some(a => a.id === adminId && a.password === adminPass)) {
-      alert("ログインしてください");
-      window.location.href = "login.html";
-    }
-
-    // ==== ログ取得 ====
+    // ==== 要素 ====
+    const loginForm = document.getElementById("loginForm");
+    const mainContent = document.getElementById("mainContent");
     const logList = document.getElementById("logList");
     const exportBtn = document.getElementById("exportBtn");
 
+    // ==== ログイン状態確認 ====
+    function checkLogin() {
+      const adminId = localStorage.getItem("adminId");
+      const adminPass = localStorage.getItem("adminPass");
+      if (allowedAdmins.some(a => a.id === adminId && a.password === adminPass)) {
+        loginForm.style.display = "none";
+        mainContent.style.display = "block";
+        loadLogs();
+      } else {
+        loginForm.style.display = "block";
+        mainContent.style.display = "none";
+      }
+    }
+
+    // ==== ログイン処理 ====
+    document.getElementById("loginBtn").onclick = ()=>{
+      const id = document.getElementById("adminId").value;
+      const pass = document.getElementById("adminPass").value;
+      if (allowedAdmins.some(a => a.id === id && a.password === pass)) {
+        localStorage.setItem("adminId", id);
+        localStorage.setItem("adminPass", pass);
+        checkLogin();
+      } else {
+        alert("IDまたはパスワードが違います");
+      }
+    };
+
+    // ==== ログアウト ====
+    document.getElementById("logoutBtn").onclick = ()=>{
+      localStorage.removeItem("adminId");
+      localStorage.removeItem("adminPass");
+      checkLogin();
+    };
+
+    // ==== ログ表示 ====
     function renderLogs(logs) {
       logList.innerHTML = "";
       logs.forEach(docSnap=>{
@@ -151,29 +195,33 @@
       URL.revokeObjectURL(url);
     };
 
-    // ==== ログアウト ====
-    document.getElementById("logoutBtn").onclick = ()=>{
-      localStorage.removeItem("adminId");
-      localStorage.removeItem("adminPass");
-      window.location.href = "login.html";
-    };
-
-    // 初期表示（全件）
-    loadLogs();
+    // 初期チェック
+    checkLogin();
   </script>
 </head>
 <body>
-  <h1>アクセスログ履歴</h1>
-
-  <div class="controls">
-    <label>開始日: <input type="date" id="startDate"></label>
-    <label>終了日: <input type="date" id="endDate"></label>
-    <button id="filterBtn" class="btn">絞り込み</button>
-    <button id="exportBtn" class="btn" disabled>CSV出力</button>
+  <!-- ログインフォーム -->
+  <div id="loginForm" style="display:none;">
+    <h2>ログイン</h2>
+    <input type="text" id="adminId" placeholder="管理者ID"/>
+    <input type="password" id="adminPass" placeholder="パスワード"/>
+    <button id="loginBtn" class="btn">ログイン</button>
   </div>
 
-  <ul id="logList"></ul>
+  <!-- メイン内容 -->
+  <div id="mainContent" style="display:none;">
+    <h1>アクセスログ履歴</h1>
 
-  <button id="logoutBtn" class="btn">ログアウト</button>
+    <div class="controls">
+      <label>開始日: <input type="date" id="startDate"></label>
+      <label>終了日: <input type="date" id="endDate"></label>
+      <button id="filterBtn" class="btn">絞り込み</button>
+      <button id="exportBtn" class="btn" disabled>CSV出力</button>
+    </div>
+
+    <ul id="logList"></ul>
+
+    <button id="logoutBtn" class="btn">ログアウト</button>
+  </div>
 </body>
 </html>
