@@ -3,52 +3,42 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>プライオリティパス設定＋ログ（タブUI版）</title>
+<title>ファストパス設定＋ログ（タブUI版）</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007bff">
 <style>
-  body { font-family: "Segoe UI", sans-serif; background: #f5f7fa; margin:0; padding:0; }
-  .container { max-width: 600px; margin:auto; padding:10px; }
-
-  h1 { text-align: center; margin-bottom:5px; }
-  #clock { text-align: center; font-weight: bold; color: #555; margin-bottom: 10px; }
-
-  .status-badge { display: inline-block; padding: 5px 12px; border-radius: 15px; font-weight: bold; font-size: 0.9rem; margin-top: 5px; }
-  .active { background-color: #28a745; color: white; }
-  .inactive { background-color: #dc3545; color: white; }
-
-  .card { background: white; border-radius: 10px; padding: 15px; margin-top: 10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
-
-  label { font-weight: bold; display:block; margin-top:10px; font-size:0.9rem; }
-  input { width: 100%; padding:8px; margin-top:4px; border-radius:5px; border:1px solid #ccc; font-size:1rem; box-sizing:border-box; }
-
-  button { padding:10px; margin:5px 0; border:none; border-radius:8px; font-weight:bold; cursor:pointer; }
+  body { font-family:"Segoe UI",sans-serif; background:#f5f7fa; margin:0; padding:0; }
+  .container { max-width:600px; margin:auto; padding:10px; }
+  h1 { text-align:center; margin-bottom:5px; }
+  #clock { text-align:center; font-weight:bold; color:#555; margin-bottom:10px; }
+  .status-badge { display:inline-block; padding:5px 12px; border-radius:15px; font-weight:bold; font-size:0.9rem; margin-top:5px; }
+  .active { background-color:#28a745; color:white; }
+  .inactive { background-color:#dc3545; color:white; }
+  .card { background:white; border-radius:10px; padding:15px; margin-top:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+  label { font-weight:bold; display:block; margin-top:10px; font-size:0.9rem; }
+  input { width:100%; padding:8px; margin-top:4px; border-radius:5px; border:1px solid #ccc; font-size:1rem; box-sizing:border-box; }
+  button { padding:14px; margin:5px 0; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size:1rem; }
   button.primary { background:#007bff; color:white; }
   button.success { background:#28a745; color:white; }
   button.danger { background:#dc3545; color:white; }
-
   .time-slot-group { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   @media(max-width:500px){ .time-slot-group { grid-template-columns:1fr; } }
-
-  /* タブ */
-  .tabs { display:flex; justify-content:space-around; margin-bottom:10px; }
-  .tab { flex:1; padding:10px; text-align:center; cursor:pointer; background:#ddd; border-radius:8px 8px 0 0; font-weight:bold; }
+  .tabs { display:flex; justify-content:space-around; margin-bottom:10px; flex-wrap:wrap; }
+  .tab { flex:1; padding:14px; text-align:center; cursor:pointer; background:#ddd; border-radius:8px 8px 0 0; font-weight:bold; margin-bottom:2px; }
   .tab.active { background:#007bff; color:white; }
-
   .tab-content { display:none; }
   .tab-content.active { display:block; }
-
-  /* ログ */
   table { width:100%; border-collapse: collapse; margin-top:10px; }
-  th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; color: black;}
-
-  /* ログイン */
-  #loginDiv { max-width: 400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
-  #loginDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
-  #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
-  #errorMsg { color:red; margin-top:10px; text-align:center; }
+  th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
+  #loginDiv, #logAuthDiv { max-width:400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+  #loginDiv input, #logAuthDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
+  #loginDiv button, #logAuthDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
+  #errorMsg, #logAuthMsg { color:red; margin-top:10px; text-align:center; }
 </style>
 </head>
 <body>
 
+<!-- 管理者ログイン -->
 <div id="loginDiv">
   <h1>管理者ログイン</h1>
   <form id="loginForm">
@@ -59,8 +49,9 @@
   </form>
 </div>
 
+<!-- メインコンテンツ -->
 <div class="container" id="mainContent" style="display:none;">
-  <h1>プライオリティパス設定</h1>
+  <h1>ファストパス設定</h1>
   <div id="clock"></div>
 
   <div class="tabs">
@@ -70,7 +61,7 @@
     <div class="tab" data-tab="logTab">アクセスログ</div>
   </div>
 
-  <!-- 発券制御タブ -->
+  <!-- 発券制御 -->
   <div class="tab-content active" id="controlTab">
     <div style="text-align:center;">
       <span id="statusBadge" class="status-badge inactive">停止中</span>
@@ -82,66 +73,54 @@
     </div>
   </div>
 
-  <!-- 時間帯設定タブ -->
+  <!-- 時間帯設定 -->
   <div class="tab-content" id="timeTab">
     <div class="card">
       <form id="setTimeSlots">
+        <!-- 3枠の時間帯入力 -->
         <div>
           <label>1枠目</label>
-          <div class="time-slot-group">
-            <input type="time" id="start1" />
-            <input type="time" id="end1" />
-          </div>
-          <div class="time-slot-group">
-            <input type="number" id="interval1" value="10" min="1" placeholder="間隔(分)" />
-            <input type="number" id="limit1" value="1" min="1" placeholder="上限人数" />
-          </div>
+          <div class="time-slot-group"><input type="time" id="start1" /><input type="time" id="end1" /></div>
+          <div class="time-slot-group"><input type="number" id="interval1" value="10" min="1" placeholder="間隔(分)" /><input type="number" id="limit1" value="1" min="1" placeholder="上限人数" /></div>
         </div>
         <div>
           <label>2枠目</label>
-          <div class="time-slot-group">
-            <input type="time" id="start2" />
-            <input type="time" id="end2" />
-          </div>
-          <div class="time-slot-group">
-            <input type="number" id="interval2" value="10" min="1" placeholder="間隔(分)" />
-            <input type="number" id="limit2" value="1" min="1" placeholder="上限人数" />
-          </div>
+          <div class="time-slot-group"><input type="time" id="start2" /><input type="time" id="end2" /></div>
+          <div class="time-slot-group"><input type="number" id="interval2" value="10" min="1" placeholder="間隔(分)" /><input type="number" id="limit2" value="1" min="1" placeholder="上限人数" /></div>
         </div>
         <div>
           <label>3枠目</label>
-          <div class="time-slot-group">
-            <input type="time" id="start3" />
-            <input type="time" id="end3" />
-          </div>
-          <div class="time-slot-group">
-            <input type="number" id="interval3" value="10" min="1" placeholder="間隔(分)" />
-            <input type="number" id="limit3" value="1" min="1" placeholder="上限人数" />
-          </div>
+          <div class="time-slot-group"><input type="time" id="start3" /><input type="time" id="end3" /></div>
+          <div class="time-slot-group"><input type="number" id="interval3" value="10" min="1" placeholder="間隔(分)" /><input type="number" id="limit3" value="1" min="1" placeholder="上限人数" /></div>
         </div>
         <button type="submit" class="primary">時間設定を保存</button>
       </form>
     </div>
   </div>
 
-  <!-- 特別パス発券タブ -->
+  <!-- 特別パス発券 -->
   <div class="tab-content" id="specialTab">
     <div class="card">
       <form id="specialForm">
         <input type="text" id="specialName" placeholder="名前" required />
         <input type="number" id="specialPeople" placeholder="人数" min="1" required />
-        <div class="time-slot-group">
-          <input type="time" id="specialStartTime" required />
-          <input type="time" id="specialEndTime" required />
-        </div>
+        <div class="time-slot-group"><input type="time" id="specialStartTime" required /><input type="time" id="specialEndTime" required /></div>
         <button type="submit" class="success">特別パス発行</button>
       </form>
     </div>
   </div>
 
-  <!-- アクセスログタブ -->
+  <!-- アクセスログ -->
   <div class="tab-content" id="logTab">
-    <div class="card">
+    <div id="logAuthDiv">
+      <h2>アクセスログ閲覧認証</h2>
+      <form id="logAuthForm">
+        <input type="password" id="logPass" placeholder="パスワードを入力" required />
+        <button type="submit">認証</button>
+        <div id="logAuthMsg"></div>
+      </form>
+    </div>
+    <div class="card" id="logContent" style="display:none;">
       <button id="clearLogsBtn" class="danger">全削除</button>
       <table>
         <thead><tr><th>管理者ID/ユーザー</th><th>操作</th><th>日時</th></tr></thead>
@@ -155,6 +134,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
+// Firebase設定
 const firebaseConfig = {
  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
  authDomain: "fastpass-system.firebaseapp.com",
@@ -166,68 +146,58 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// --- 管理者 ---
 const allowedAdmins = [
-  { id: "Sakoty", password: "3214" },
-  { id: "seseguchi914", password: "0914" },
-  { id: "2", password: "1928mickeymouse" },
-  { id: "3", password: "1928mickeymouse" },
-  { id: "4", password: "1928mickeymouse" }
+  { id:"Sakoty", password:"3214" },
+  { id:"seseguchi914", password:"0914" },
+  { id:"2", password:"1928mickeymouse" },
+  { id:"3", password:"1928mickeymouse" },
+  { id:"4", password:"1928mickeymouse" }
 ];
 
-const loginDiv = document.getElementById("loginDiv");
-const mainContent = document.getElementById("mainContent");
-const errorMsg = document.getElementById("errorMsg");
+const loginDiv=document.getElementById("loginDiv");
+const mainContent=document.getElementById("mainContent");
+const errorMsg=document.getElementById("errorMsg");
 
-// セッション中ログイン確認
 function checkLogin(){
-  const storedId = localStorage.getItem("adminId");
-  const storedPass = localStorage.getItem("adminPass");
+  const storedId=localStorage.getItem("adminId");
+  const storedPass=localStorage.getItem("adminPass");
   if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
-    loginDiv.style.display="none";
-    mainContent.style.display="block";
-    initTabs();
+    loginDiv.style.display="none"; mainContent.style.display="block"; initTabs();
   }
 }
 checkLogin();
 
-document.getElementById("loginForm").onsubmit = e=>{
+document.getElementById("loginForm").onsubmit=e=>{
   e.preventDefault();
   const id=document.getElementById("adminId").value.trim();
   const pass=document.getElementById("adminPass").value;
   if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
     localStorage.setItem("adminId", id);
     localStorage.setItem("adminPass", pass);
-    loginDiv.style.display="none";
-    mainContent.style.display="block";
+    loginDiv.style.display="none"; mainContent.style.display="block";
     errorMsg.textContent="";
     initTabs();
     logAccess(id,"ログイン成功");
   } else { errorMsg.textContent="IDまたはパスワードが違います"; logAccess(id,"ログイン失敗"); }
 };
 
-document.getElementById("logoutBtn").onclick = ()=>{
+document.getElementById("logoutBtn").onclick=()=>{
   logAccess(localStorage.getItem("adminId"),"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
-  sessionStorage.removeItem("logTabUnlocked"); // ログイン解除でログタブもリセット
-  loginDiv.style.display="block";
-  mainContent.style.display="none";
+  loginDiv.style.display="block"; mainContent.style.display="none";
 };
 
 // 時計
 setInterval(()=>{ const now=new Date(); document.getElementById("clock").textContent=now.toLocaleDateString()+" "+now.toLocaleTimeString(); },1000);
 
-// タブ切替（アクセスログは一度のみパスワード）
+// タブ切替
 function initTabs(){
   const tabs=document.querySelectorAll(".tab");
   const contents=document.querySelectorAll(".tab-content");
   tabs.forEach(tab=>{
-    tab.onclick = ()=>{
-      if(tab.dataset.tab === "logTab" && !sessionStorage.getItem("logTabUnlocked")){
-        const pass = prompt("アクセスログを見るにはパスワードが必要です");
-        if(pass !== "3214kouhei"){ alert("アクセス権限がありません"); return; }
-        sessionStorage.setItem("logTabUnlocked","true"); // 一度入力すればOK
-      }
+    tab.onclick=()=>{
       tabs.forEach(t=>t.classList.remove("active"));
       contents.forEach(c=>c.classList.remove("active"));
       tab.classList.add("active");
@@ -236,19 +206,20 @@ function initTabs(){
   });
 }
 
-// --- 発券ステータス ---
+// 発券ステータス
 async function setIssueStatus(status){ await setDoc(doc(db,"settings","issueStatus"),{enabled:status}); updateStatusDisplay(); }
 async function updateStatusDisplay(){ const snap=await getDoc(doc(db,"settings","issueStatus")); const badge=document.getElementById("statusBadge"); if(snap.exists() && snap.data().enabled){ badge.textContent="発券中"; badge.className="status-badge active"; } else{ badge.textContent="停止中"; badge.className="status-badge inactive"; } }
 updateStatusDisplay();
-document.getElementById("startBtn").onclick = async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
-document.getElementById("stopBtn").onclick = async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
 
-// --- 時間帯設定 ---
+document.getElementById("startBtn").onclick=async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
+document.getElementById("stopBtn").onclick=async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
+
+// 時間帯設定
 function pad2(n){return n.toString().padStart(2,"0");}
 function addMinutes(time,min){let [h,m]=time.split(":").map(Number); m+=min; while(m>=60){m-=60; h+=1;} while(h>=24){h-=24;} return `${pad2(h)}:${pad2(m)}`; }
 function generateSlots(start,end,interval){const arr=[];let curr=start; while(curr<end){const next=addMinutes(curr,interval); if(next>end) break; arr.push(curr+"〜"+next); curr=next;} return arr; }
 
-document.getElementById("setTimeSlots").onsubmit = async e=>{
+document.getElementById("setTimeSlots").onsubmit=async e=>{
   e.preventDefault();
   const allSlots=[]; const allLimits=[];
   for(let i=1;i<=3;i++){
@@ -266,8 +237,8 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
   catch(e){ alert("保存失敗: "+e.message); }
 };
 
-// --- 特別パス ---
-document.getElementById("specialForm").onsubmit = async e=>{
+// 特別パス
+document.getElementById("specialForm").onsubmit=async e=>{
   e.preventDefault();
   const name=document.getElementById("specialName").value.trim();
   const num=parseInt(document.getElementById("specialPeople").value);
@@ -279,15 +250,15 @@ document.getElementById("specialForm").onsubmit = async e=>{
   catch(e){ alert("発行失敗: "+e.message); }
 };
 
-// --- 設定読み込み ---
+// 設定読み込み
 async function loadTimeSlots(){
   const snap=await getDoc(doc(db,"settings","timeSlots"));
   if(snap.exists()){
     const data=snap.data();
     const slotsData=data.slots||[], limitsData=data.limits||[];
     for(let i=1;i<=3;i++){
-      const frameSlot = slotsData.find(s=>s.frame===i);
-      const frameLimit = limitsData.find(l=>l.frame===i);
+      const frameSlot=slotsData.find(s=>s.frame===i);
+      const frameLimit=limitsData.find(l=>l.frame===i);
       if(frameSlot){ document.getElementById(`start${i}`).value=frameSlot.slots[0]?.split("〜")[0]||""; document.getElementById(`end${i}`).value=frameSlot.slots[frameSlot.slots.length-1]?.split("〜")[1]||""; }
       if(frameLimit) document.getElementById(`limit${i}`).value=frameLimit.limits[0]||1;
       if(frameSlot && frameSlot.slots.length>=2){
@@ -300,13 +271,13 @@ async function loadTimeSlots(){
 }
 loadTimeSlots();
 
-// --- アクセスログ ---
+// アクセスログ
 async function logAccess(adminId,action){ await addDoc(collection(db,"accessLogs"),{adminId, action, timestamp:serverTimestamp()}); }
 const logTable=document.getElementById("logTable");
 const clearLogsBtn=document.getElementById("clearLogsBtn");
 let unsubscribeLogs=null;
 
-// リアルタイムログ監視
+// リアルタイム監視
 const q=query(collection(db,"accessLogs"),orderBy("timestamp","desc"));
 unsubscribeLogs=onSnapshot(q, snap=>{
   logTable.innerHTML="";
@@ -319,10 +290,22 @@ unsubscribeLogs=onSnapshot(q, snap=>{
   });
 });
 
+// ログ削除
 clearLogsBtn.onclick=async()=>{
   if(!confirm("すべてのログを削除しますか？")) return;
   const snap=await getDocs(collection(db,"accessLogs"));
-  for(const d of snap.docs) await deleteDoc(doc(db,"accessLogs",d.id));
+  for(const d of snap.docs) await deleteDoc(d.ref);
+  alert("削除完了"); logAccess(localStorage.getItem("adminId"),"全ログ削除");
+};
+
+// アクセスログタブ認証
+const logAuthDiv=document.getElementById("logAuthDiv");
+const logContent=document.getElementById("logContent");
+document.getElementById("logAuthForm").onsubmit=e=>{
+  e.preventDefault();
+  const pass=document.getElementById("logPass").value;
+  if(pass==="1118")(pass==="3214"){ logAuthDiv.style.display="none"; logContent.style.display="block"; document.getElementById("logPass").value=""; document.getElementById("logAuthMsg").textContent=""; }
+  else{ document.getElementById("logAuthMsg").textContent="パスワードが違います"; }
 };
 </script>
 
