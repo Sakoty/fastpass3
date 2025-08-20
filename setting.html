@@ -218,14 +218,8 @@ async function updateStatusDisplay(){
 }
 updateStatusDisplay();
 
-document.getElementById("startBtn").onclick = async ()=>{
-  await setIssueStatus(true); 
-  await logAccess(localStorage.getItem("adminId"),"発券開始");
-};
-document.getElementById("stopBtn").onclick = async ()=>{
-  await setIssueStatus(false); 
-  await logAccess(localStorage.getItem("adminId"),"発券停止");
-};
+document.getElementById("startBtn").onclick = async ()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
+document.getElementById("stopBtn").onclick = async ()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
 
 // --- 時間帯設定 ---
 function pad2(num){return num.toString().padStart(2,"0");}
@@ -234,7 +228,8 @@ function generateSlots(start,end,interval){const result=[];let current=start; wh
 
 document.getElementById("setTimeSlots").onsubmit = async e=>{
   e.preventDefault();
-  const slots=[]; const limits=[];
+  const allSlots = [];
+  const allLimits = [];
   for(let i=1;i<=3;i++){
     const start=document.getElementById(`start${i}`).value;
     const end=document.getElementById(`end${i}`).value;
@@ -242,14 +237,14 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
     const interval=parseInt(document.getElementById(`interval${i}`).value||"10");
     if(start && end && start<end && limit>0 && interval>0){
       const generated=generateSlots(start,end,interval);
-      slots.push(...generated);
-      limits.push(...Array(generated.length).fill(limit));
+      allSlots.push({frame:i, slots:generated});
+      allLimits.push({frame:i, limits:Array(generated.length).fill(limit)});
     }
   }
-  if(!slots.length){ alert("最低1つの時間枠を入力してください。"); return; }
-  try{ 
-    await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); 
-    alert("時間枠を保存しました。"); 
+  if(!allSlots.length){ alert("最低1つの時間枠を入力してください。"); return; }
+  try{
+    await setDoc(doc(db,"settings","timeSlots"),{slots:allSlots, limits:allLimits});
+    alert("時間枠を保存しました。");
     await logAccess(localStorage.getItem("adminId"),"時間枠設定保存");
   }catch(e){ alert("保存に失敗しました: "+e.message); }
 };
@@ -264,10 +259,10 @@ document.getElementById("specialForm").onsubmit = async e=>{
   if(!name||isNaN(num)||num<1||!start||!end||start>=end){ alert("正しく入力してください。"); return; }
   const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
   const time=`${start}〜${end}`;
-  try{ 
-    await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); 
-    alert("特別パスを発行しました: "+id); 
-    document.getElementById("specialForm").reset(); 
+  try{
+    await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true});
+    alert("特別パスを発行しました: "+id);
+    document.getElementById("specialForm").reset();
     await logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`);
   }catch(e){ alert("発行に失敗しました: "+e.message); }
 };
@@ -275,26 +270,27 @@ document.getElementById("specialForm").onsubmit = async e=>{
 // --- 設定読み込み ---
 async function loadTimeSlots(){
   try{
-    const timeSlotSnap=await getDoc(doc(db,"settings","timeSlots"));
-    if(timeSlotSnap.exists()){
-      const data=timeSlotSnap.data();
-      const slots=data.slots||[]; const limits=data.limits||[];
-      let index=0;
+    const snap = await getDoc(doc(db,"settings","timeSlots"));
+    if(snap.exists()){
+      const data = snap.data();
+      const slotsData = data.slots || [];
+      const limitsData = data.limits || [];
       for(let i=1;i<=3;i++){
-        if(index<slots.length){
-          const firstSlot=slots[index].split("〜")[0];
-          let j=index+1; while(j<slots.length && limits[j]===limits[index]) j++;
-          const lastSlotEnd=slots[j-1].split("〜")[1];
-          document.getElementById(`start${i}`).value=firstSlot;
-          document.getElementById(`end${i}`).value=lastSlotEnd;
-          if(index+1<slots.length){
-            const [h1,m1]=firstSlot.split(":").map(Number);
-            const [h2,m2]=slots[index+1].split("〜")[0].split(":").map(Number);
-            const intervalMin=(h2*60+m2)-(h1*60+m1);
-            document.getElementById(`interval${i}`).value=intervalMin>0?intervalMin:10;
-          } else { document.getElementById(`interval${i}`).value=10; }
-          document.getElementById(`limit${i}`).value=limits[index]||1;
-          index=j;
+        const frameSlot = slotsData.find(s=>s.frame===i);
+        const frameLimit = limitsData.find(l=>l.frame===i);
+        if(frameSlot){
+          const slotsArr = frameSlot.slots;
+          document.getElementById(`start${i}`).value = slotsArr[0]?.split("〜")[0] || "";
+          document.getElementById(`end${i}`).value = slotsArr[slotsArr.length-1]?.split("〜")[1] || "";
+        }
+        if(frameLimit){
+          document.getElementById(`limit${i}`).value = frameLimit.limits[0] || 1;
+        }
+        if(frameSlot && frameSlot.slots.length>=2){
+          const first = frameSlot.slots[0].split("〜")[0].split(":").map(Number);
+          const second = frameSlot.slots[1].split("〜")[0].split(":").map(Number);
+          const intervalMin = (second[0]*60+second[1])-(first[0]*60+first[1]);
+          document.getElementById(`interval${i}`).value = intervalMin>0?intervalMin:10;
         }
       }
     }
@@ -339,12 +335,10 @@ clearLogsBtn.onclick = async()=>{
   if(!confirm("本当にすべてのログを消去しますか？")) return;
   try{
     const snap=await getDocs(collection(db,"accessLogs"));
-    for(const docItem of snap.docs){
-      await deleteDoc(doc(db,"accessLogs",docItem.id));
-    }
-    await logAccess(localStorage.getItem("adminId"),"ログ消去");
+    for(const d of snap.docs) await deleteDoc(doc(db,"accessLogs",d.id));
   }catch(e){ alert("削除に失敗しました: "+e.message); }
 };
 </script>
+
 </body>
 </html>
