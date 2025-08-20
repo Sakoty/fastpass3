@@ -27,10 +27,12 @@
   #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
   #loginDiv button:hover { background:#0056b3; }
   #errorMsg { color:red; margin-top:10px; text-align:center; }
-  #mainContent, #logPage { display:none; }
+  #mainContent { display:none; }
 
-  table { width: 100%; border-collapse: collapse; margin-top:10px; }
-  th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
+  /* ログ表示 */
+  #logCard { display:none; margin-top:15px; }
+  #logList { max-height:200px; overflow:auto; border:1px solid #ccc; padding:8px; border-radius:5px; background:white; }
+  #logList div { border-bottom:1px solid #eee; padding:4px 0; font-size:0.9rem; }
 </style>
 </head>
 <body>
@@ -58,7 +60,6 @@
     <h2>発券制御</h2>
     <button id="startBtn" class="success">発券開始</button>
     <button id="stopBtn" class="danger">発券停止</button>
-    <button id="gotoLog" class="primary">アクセスログ</button>
     <button id="logoutBtn" class="danger" style="margin-top:10px;">ログアウト</button>
   </div>
 
@@ -114,24 +115,20 @@
       <button type="submit" class="success">特別パス発行</button>
     </form>
   </div>
-</div>
 
-<!-- アクセスログページ -->
-<div id="logPage">
-  <h1>アクセスログ</h1>
-  <button id="backBtn" class="primary">戻る</button>
-  <button id="clearLogsBtn" class="danger">全削除</button>
-  <table>
-    <thead><tr><th>管理者ID</th><th>操作</th><th>日時</th></tr></thead>
-    <tbody id="logTable"></tbody>
-  </table>
+  <!-- ログ表示 -->
+  <div class="card" id="logCard">
+    <h2>ログイン履歴</h2>
+    <button id="refreshLogs" class="primary">更新</button>
+    <button id="clearLogs" class="danger">消去</button>
+    <div id="logList"></div>
+  </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp,
-  onSnapshot, query, orderBy, getDocs, deleteDoc
+  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
 // Firebase設定
@@ -157,14 +154,13 @@ const allowedAdmins = [
 
 const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
-const logPage = document.getElementById("logPage");
 const errorMsg = document.getElementById("errorMsg");
 const loginForm = document.getElementById("loginForm");
 const logoutBtn = document.getElementById("logoutBtn");
-const gotoLog = document.getElementById("gotoLog");
-const backBtn = document.getElementById("backBtn");
-const clearLogsBtn = document.getElementById("clearLogsBtn");
-const logTable = document.getElementById("logTable");
+const logCard = document.getElementById("logCard");
+const logList = document.getElementById("logList");
+const refreshLogs = document.getElementById("refreshLogs");
+const clearLogs = document.getElementById("clearLogs");
 
 // ログイン状態確認
 function checkLogin(){
@@ -173,12 +169,22 @@ function checkLogin(){
   if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
     loginDiv.style.display="none";
     mainContent.style.display="block";
+    logCard.style.display="block";
   }
 }
 checkLogin();
 
+// ログ記録
+async function recordLog(id,status){
+  await addDoc(collection(db,"logs"),{
+    adminId:id,
+    status:status,
+    timestamp:serverTimestamp()
+  });
+}
+
 // ログイン処理
-loginForm.onsubmit = e => {
+loginForm.onsubmit = async e => {
   e.preventDefault();
   const inputId = document.getElementById("adminId").value.trim();
   const inputPass = document.getElementById("adminPass").value;
@@ -187,18 +193,22 @@ loginForm.onsubmit = e => {
     localStorage.setItem("adminPass", inputPass);
     loginDiv.style.display="none";
     mainContent.style.display="block";
+    logCard.style.display="block";
     errorMsg.textContent="";
+    await recordLog(inputId,"success");
   } else {
     errorMsg.textContent="IDまたはパスワードが違います";
+    await recordLog(inputId,"failure");
   }
 };
 
 // ログアウト処理
-logoutBtn.onclick = ()=>{
+logoutBtn.onclick = ()=> {
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
   loginDiv.style.display="block";
   mainContent.style.display="none";
+  logCard.style.display="none";
 };
 
 // 時計
@@ -221,9 +231,8 @@ async function updateStatusDisplay(){
   } else { badge.textContent="停止中"; badge.className="status-badge inactive"; }
 }
 updateStatusDisplay();
-
-document.getElementById("startBtn").onclick = async ()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
-document.getElementById("stopBtn").onclick = async ()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
+document.getElementById("startBtn").onclick = async ()=>{ await setIssueStatus(true); };
+document.getElementById("stopBtn").onclick = async ()=>{ await setIssueStatus(false); };
 
 // 時刻操作ユーティリティ
 function pad2(num){return num.toString().padStart(2,"0");}
@@ -246,7 +255,7 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
     }
   }
   if(!slots.length){ alert("最低1つの時間枠を入力してください。"); return; }
-  try{ await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); alert("時間枠を保存しました。"); await logAccess(localStorage.getItem("adminId"),"時間枠設定保存"); }
+  try{ await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); alert("時間枠を保存しました。"); }
   catch(e){ alert("保存に失敗しました: "+e.message); }
 };
 
@@ -260,7 +269,7 @@ document.getElementById("specialForm").onsubmit = async e=>{
   if(!name||isNaN(num)||num<1||!start||!end||start>=end){ alert("正しく入力してください。"); return; }
   const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
   const time=`${start}〜${end}`;
-  try{ await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); alert("特別パスを発行しました: "+id); document.getElementById("specialForm").reset(); await logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`); }
+  try{ await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); alert("特別パスを発行しました: "+id); document.getElementById("specialForm").reset(); }
   catch(e){ alert("発行に失敗しました: "+e.message); }
 };
 
@@ -294,49 +303,34 @@ async function loadTimeSlots(){
 }
 loadTimeSlots();
 
-// --- アクセスログ ---
-async function logAccess(adminId, action){
-  await addDoc(collection(db,"accessLogs"),{adminId, action, timestamp:serverTimestamp()});
+// ログ操作
+async function loadLogs(){
+  logList.innerHTML="読み込み中...";
+  try{
+    const snap = await getDocs(collection(db,"logs"));
+    if(snap.empty){ logList.innerHTML="ログなし"; return; }
+    logList.innerHTML="";
+    snap.forEach(docSnap=>{
+      const data = docSnap.data();
+      const time = data.timestamp?.toDate().toLocaleString() || "";
+      const status = data.status==="success"?"✅ 成功":"❌ 失敗";
+      logList.innerHTML += `<div>${time} - ID: ${data.adminId} - ${status}</div>`;
+    });
+  } catch(e){ logList.innerHTML="読み込み失敗"; console.error(e); }
 }
 
-let unsubscribeLogs = null;
+refreshLogs.onclick = loadLogs;
 
-gotoLog.onclick = ()=>{
-  const adminId = localStorage.getItem("adminId");
-  if(!adminId){ alert("ログインが必要です"); return; }
-  mainContent.style.display="none";
-  logPage.style.display="block";
-
-  if(unsubscribeLogs) unsubscribeLogs();
-  const q=query(collection(db,"accessLogs"),orderBy("timestamp","desc"));
-  unsubscribeLogs = onSnapshot(q, snap=>{
-    logTable.innerHTML="";
-    snap.forEach(docItem=>{
-      const d = docItem.data();
-      const t = new Date(d.timestamp?.toDate?.() || Date.now()).toLocaleString();
-      const tr = document.createElement("tr");
-      tr.innerHTML=`<td>${d.adminId}</td><td>${d.action}</td><td>${t}</td>`;
-      logTable.appendChild(tr);
-    });
-  });
-};
-
-backBtn.onclick = ()=>{
-  logPage.style.display="none";
-  mainContent.style.display="block";
-  if(unsubscribeLogs) unsubscribeLogs();
-};
-
-clearLogsBtn.onclick = async()=>{
-  if(!confirm("本当にすべてのログを消去しますか？")) return;
+clearLogs.onclick = async ()=>{
+  if(!confirm("ログをすべて消去しますか？")) return;
   try{
-    const snap=await getDocs(collection(db,"accessLogs"));
-    for(const docItem of snap.docs){
-      await deleteDoc(doc(db,"accessLogs",docItem.id));
-    }
-    await logAccess(localStorage.getItem("adminId"),"ログ消去");
-  }catch(e){ alert("削除に失敗しました: "+e.message); }
+    const snap = await getDocs(collection(db,"logs"));
+    for(const docSnap of snap.docs){ await deleteDoc(doc(db,"logs",docSnap.id)); }
+    alert("ログを消去しました");
+    loadLogs();
+  } catch(e){ alert("削除失敗: "+e.message); }
 };
+
 </script>
 </body>
 </html>
