@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ファストパス設定＋ログ（タブUI版）</title>
+<title>ファストパス設定＋ログ（修正版）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
 <style>
@@ -147,7 +147,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
-// Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
   authDomain: "fastpass-system.firebaseapp.com",
@@ -186,7 +185,7 @@ checkLogin();
 document.getElementById("loginForm").onsubmit = e=>{
   e.preventDefault();
   const id   = document.getElementById("adminId").value.trim();
-  const pass = document.getElementById("adminPass").value.trim(); // ← 余分な空白対策
+  const pass = document.getElementById("adminPass").value.trim();
   if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
     localStorage.setItem("adminId", id);
     localStorage.setItem("adminPass", pass);
@@ -257,24 +256,23 @@ document.getElementById("stopBtn").onclick = async()=>{
   await logAccess(localStorage.getItem("adminId"),"発券停止");
 };
 
-// 時間帯設定
+// --- 時間処理修正版 ---
 function pad2(n){return n.toString().padStart(2,"0");}
-function addMinutes(time,min){
-  let [h,m]=time.split(":").map(Number);
-  m+=min; while(m>=60){m-=60; h+=1;} while(h>=24){h-=24;}
-  return `${pad2(h)}:${pad2(m)}`;
-}
+function timeToMinutes(t){ const [h,m]=t.split(":").map(Number); return h*60+m; }
+function minutesToTime(m){ return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`; }
 function generateSlots(start,end,interval){
-  const arr=[]; let curr=start;
-  while(curr<end){
-    const next=addMinutes(curr,interval);
-    if(next>end) break;
-    arr.push(curr+"〜"+next);
-    curr=next;
+  const arr=[]; 
+  let curr = timeToMinutes(start);
+  const endM = timeToMinutes(end);
+  while(curr + interval <= endM){
+    const next = curr + interval;
+    arr.push(`${minutesToTime(curr)}〜${minutesToTime(next)}`);
+    curr = next;
   }
   return arr;
 }
 
+// 時間帯設定保存
 document.getElementById("setTimeSlots").onsubmit = async e=>{
   e.preventDefault();
   const allSlots=[]; const allLimits=[];
@@ -352,52 +350,44 @@ loadTimeSlots();
 
 // アクセスログ
 async function logAccess(adminId,action){
-  try{
-    await addDoc(collection(db,"accessLogs"),{
-      adminId, action, timestamp:serverTimestamp()
-    });
-  }catch(_e){}
-}
-const logTable=document.getElementById("logTable");
-const clearLogsBtn=document.getElementById("clearLogsBtn");
-
-// リアルタイム監視
-const q=query(collection(db,"accessLogs"),orderBy("timestamp","desc"));
-onSnapshot(q, snap=>{
-  logTable.innerHTML="";
-  snap.forEach(docItem=>{
-    const d=docItem.data();
-    const t=new Date(d.timestamp?.toDate?.()||Date.now()).toLocaleString();
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td>${d.adminId}</td><td>${d.action}</td><td>${t}</td>`;
-    tr.style.color="#000"; // 念のための保険
-    logTable.appendChild(tr);
+  await addDoc(collection(db,"accessLogs"),{
+    adminId:adminId||"不明",
+    action, createdAt:serverTimestamp()
   });
-});
+}
 
-// ログ削除
-clearLogsBtn.onclick=async()=>{
-  if(!confirm("すべてのログを削除しますか？")) return;
-  const snap=await getDocs(collection(db,"accessLogs"));
-  for(const d of snap.docs) await deleteDoc(d.ref);
-  alert("削除完了");
-  logAccess(localStorage.getItem("adminId"),"全ログ削除");
+// ログ閲覧認証
+document.getElementById("logAuthForm").onsubmit = async e=>{
+  e.preventDefault();
+  const pass=document.getElementById("logPass").value;
+  if(pass==="1928mickeymouse"){ // ログ専用パス
+    document.getElementById("logAuthDiv").style.display="none";
+    document.getElementById("logContent").style.display="block";
+    loadLogs();
+  } else { document.getElementById("logAuthMsg").textContent="パスワード不正"; }
 };
 
-// アクセスログタブ認証（パスワード: 1118）
-const logAuthDiv=document.getElementById("logAuthDiv");
-const logContent=document.getElementById("logContent");
-document.getElementById("logAuthForm").onsubmit=e=>{
-  e.preventDefault();
-  const pass=document.getElementById("logPass").value.trim();
-  if(pass==="1118"){
-    logAuthDiv.style.display="none";
-    logContent.style.display="block";
-    document.getElementById("logPass").value="";
-    document.getElementById("logAuthMsg").textContent="";
-  }else{
-    document.getElementById("logAuthMsg").textContent="パスワードが違います";
-  }
+// ログ読み込み
+function loadLogs(){
+  const tbody=document.getElementById("logTable");
+  const q=query(collection(db,"accessLogs"),orderBy("createdAt","desc"));
+  onSnapshot(q,snap=>{
+    tbody.innerHTML="";
+    snap.forEach(doc=>{
+      const d=doc.data();
+      const date=d.createdAt?.toDate()?.toLocaleString()||"-";
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td>${d.adminId}</td><td>${d.action}</td><td>${date}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// ログ削除
+document.getElementById("clearLogsBtn").onclick = async()=>{
+  if(!confirm("本当に削除しますか？")) return;
+  const snap=await getDocs(collection(db,"accessLogs"));
+  for(const docSnap of snap.docs) await deleteDoc(doc(db,"accessLogs",docSnap.id));
 };
 </script>
 
