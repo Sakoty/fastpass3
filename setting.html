@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ファストパス設定</title>
+<title>ファストパス設定＋ログ</title>
 <style>
   body { font-family: "Segoe UI", sans-serif; max-width: 600px; margin: auto; padding: 15px; background: #f5f7fa; }
   h1 { text-align: center; margin-bottom: 5px; }
@@ -122,17 +122,14 @@
   <button id="backBtn" class="primary">戻る</button>
   <button id="clearLogsBtn" class="danger">全削除</button>
   <table>
-    <thead><tr><th>管理者ID</th><th>操作</th><th>日時</th></tr></thead>
+    <thead><tr><th>管理者ID/ユーザー</th><th>操作</th><th>日時</th></tr></thead>
     <tbody id="logTable"></tbody>
   </table>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import {
-  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp,
-  onSnapshot, query, orderBy, getDocs, deleteDoc
-} from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
 // Firebase設定
 const firebaseConfig = {
@@ -166,7 +163,7 @@ const backBtn = document.getElementById("backBtn");
 const clearLogsBtn = document.getElementById("clearLogsBtn");
 const logTable = document.getElementById("logTable");
 
-// ログイン状態確認
+// --- ログイン処理 ---
 function checkLogin(){
   const storedId = localStorage.getItem("adminId");
   const storedPass = localStorage.getItem("adminPass");
@@ -177,7 +174,6 @@ function checkLogin(){
 }
 checkLogin();
 
-// ログイン処理
 loginForm.onsubmit = e => {
   e.preventDefault();
   const inputId = document.getElementById("adminId").value.trim();
@@ -188,20 +184,20 @@ loginForm.onsubmit = e => {
     loginDiv.style.display="none";
     mainContent.style.display="block";
     errorMsg.textContent="";
-  } else {
-    errorMsg.textContent="IDまたはパスワードが違います";
-  }
+    logAccess(inputId,"ログイン成功");
+  } else { errorMsg.textContent="IDまたはパスワードが違います"; logAccess(inputId,"ログイン失敗"); }
 };
 
-// ログアウト処理
 logoutBtn.onclick = ()=>{
+  const id = localStorage.getItem("adminId");
+  logAccess(id,"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
   loginDiv.style.display="block";
   mainContent.style.display="none";
 };
 
-// 時計
+// --- 時計 ---
 function startClock() {
   setInterval(() => {
     const now = new Date();
@@ -211,7 +207,7 @@ function startClock() {
 }
 startClock();
 
-// 発券ステータス
+// --- 発券ステータス ---
 async function setIssueStatus(status){ await setDoc(doc(db,"settings","issueStatus"),{enabled:status}); updateStatusDisplay(); }
 async function updateStatusDisplay(){
   const snap = await getDoc(doc(db,"settings","issueStatus"));
@@ -222,15 +218,20 @@ async function updateStatusDisplay(){
 }
 updateStatusDisplay();
 
-document.getElementById("startBtn").onclick = async ()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
-document.getElementById("stopBtn").onclick = async ()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
+document.getElementById("startBtn").onclick = async ()=>{
+  await setIssueStatus(true); 
+  await logAccess(localStorage.getItem("adminId"),"発券開始");
+};
+document.getElementById("stopBtn").onclick = async ()=>{
+  await setIssueStatus(false); 
+  await logAccess(localStorage.getItem("adminId"),"発券停止");
+};
 
-// 時刻操作ユーティリティ
+// --- 時間帯設定 ---
 function pad2(num){return num.toString().padStart(2,"0");}
 function addMinutes(time, mins){let [h,m]=time.split(":").map(Number); m+=mins; while(m>=60){m-=60; h+=1;} while(h>=24){h-=24;} return `${pad2(h)}:${pad2(m)}`;}
 function generateSlots(start,end,interval){const result=[];let current=start; while(current<end){const next=addMinutes(current,interval); if(next>end) break; result.push(current+"〜"+next); current=next;} return result;}
 
-// 時間帯設定
 document.getElementById("setTimeSlots").onsubmit = async e=>{
   e.preventDefault();
   const slots=[]; const limits=[];
@@ -246,11 +247,14 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
     }
   }
   if(!slots.length){ alert("最低1つの時間枠を入力してください。"); return; }
-  try{ await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); alert("時間枠を保存しました。"); await logAccess(localStorage.getItem("adminId"),"時間枠設定保存"); }
-  catch(e){ alert("保存に失敗しました: "+e.message); }
+  try{ 
+    await setDoc(doc(db,"settings","timeSlots"),{slots,limits}); 
+    alert("時間枠を保存しました。"); 
+    await logAccess(localStorage.getItem("adminId"),"時間枠設定保存");
+  }catch(e){ alert("保存に失敗しました: "+e.message); }
 };
 
-// 特別パス発券
+// --- 特別パス発券 ---
 document.getElementById("specialForm").onsubmit = async e=>{
   e.preventDefault();
   const name=document.getElementById("specialName").value.trim();
@@ -260,11 +264,15 @@ document.getElementById("specialForm").onsubmit = async e=>{
   if(!name||isNaN(num)||num<1||!start||!end||start>=end){ alert("正しく入力してください。"); return; }
   const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
   const time=`${start}〜${end}`;
-  try{ await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); alert("特別パスを発行しました: "+id); document.getElementById("specialForm").reset(); await logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`); }
-  catch(e){ alert("発行に失敗しました: "+e.message); }
+  try{ 
+    await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time,used:false,createdAt:serverTimestamp(),special:true}); 
+    alert("特別パスを発行しました: "+id); 
+    document.getElementById("specialForm").reset(); 
+    await logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`);
+  }catch(e){ alert("発行に失敗しました: "+e.message); }
 };
 
-// 設定読み込み
+// --- 設定読み込み ---
 async function loadTimeSlots(){
   try{
     const timeSlotSnap=await getDoc(doc(db,"settings","timeSlots"));
