@@ -1,270 +1,142 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>プライオリティパス発券</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f8ff; }
-    h1 { color: #0066cc; }
-    form { margin-bottom: 20px; }
-    label, input { display: block; margin: 10px auto; }
-    #qrcode { margin: 20px auto; }
-    .ended, .used, .expired, .stopped, .notset {
-      color: red; font-weight: bold;
-    }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, collection, addDoc, doc, onSnapshot
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ファストパス発券</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007bff">
+<style>
+  body { font-family:"Segoe UI",sans-serif; background:#f5f7fa; margin:0; padding:0; }
+  .container { max-width:500px; margin:auto; padding:10px; }
+  h1 { text-align:center; margin-bottom:10px; }
+  #clock { text-align:center; font-weight:bold; margin-bottom:10px; }
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-      authDomain: "fastpass-system.firebaseapp.com",
-      projectId: "fastpass-system",
-      storageBucket: "fastpass-system.appspot.com",
-      messagingSenderId: "858745521872",
-      appId: "1:858745521872:web:29289b673855097e1200d5"
-    };
+  label { display:block; font-weight:bold; margin-top:10px; }
+  input { width:100%; padding:8px; margin-top:4px; border-radius:5px; border:1px solid #ccc; font-size:1rem; }
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+  button { width:100%; padding:14px; margin-top:10px; font-size:1rem; font-weight:bold; border:none; border-radius:8px; cursor:pointer; background:#007bff; color:white; }
 
-    function getTodayString() {
-      const now = new Date();
-      return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
-    }
+  .card { background:white; border-radius:10px; padding:15px; margin-top:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); text-align:center; }
 
-    function savePassToLocal(pass) {
-      localStorage.setItem("fp_pass", JSON.stringify({ ...pass, date: getTodayString() }));
-    }
-
-    function loadPassFromLocal() {
-      const saved = localStorage.getItem("fp_pass");
-      if (!saved) return null;
-      const data = JSON.parse(saved);
-      return data.date === getTodayString() ? data : null;
-    }
-
-    // 10分刻みで区切る関数（スロットを10分間隔で細分化）
-    function generateTimeBlocks(start, end) {
-      const blocks = [];
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      const startTime = new Date(); startTime.setHours(sh, sm, 0, 0);
-      const endTime = new Date(); endTime.setHours(eh, em, 0, 0);
-      while (startTime < endTime) {
-        const next = new Date(startTime.getTime() + 10 * 60000);
-        if (next > endTime) break;
-        const pad = n => n.toString().padStart(2, "0");
-        blocks.push(`${pad(startTime.getHours())}:${pad(startTime.getMinutes())}〜${pad(next.getHours())}:${pad(next.getMinutes())}`);
-        startTime.setMinutes(startTime.getMinutes() + 10);
-      }
-      return blocks;
-    }
-
-    // slots（大枠）から全部の10分刻みスロットを作る
-    function generateAllBlocks(slots) {
-      let all = [];
-      for (const slot of slots) {
-        const [start, end] = slot.split("〜");
-        all.push(...generateTimeBlocks(start, end));
-      }
-      return all;
-    }
-
-    function isExpired(timeStr) {
-      if (!timeStr) return true;
-      const [eh, em] = timeStr.split("〜")[1].split(":").map(Number);
-      const end = new Date();
-      end.setHours(eh, em, 0, 0);
-      return new Date() > end;
-    }
-
-    // 上限と発券済みを考慮して次に発券可能なスロットを返す
-    function getNextAvailableSlot(slots, limits, passes) {
-      const now = new Date();
-      const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-      // スロットごとの発券済み枚数カウント
-      const counts = slots.map(slot => passes.filter(p => p.time === slot).length);
-
-      const availableSlots = [];
-      for(let i = 0; i < slots.length; i++) {
-        if (counts[i] < limits[i]) {
-          const [start] = slots[i].split("〜");
-          const [h, m] = start.split(":").map(Number);
-          const slotMinutes = h * 60 + m;
-          if(slotMinutes >= nowMinutes) {
-            availableSlots.push({ slot: slots[i], slotMinutes, index: i });
-          }
-        }
-      }
-
-      availableSlots.sort((a, b) => a.slotMinutes - b.slotMinutes);
-      return availableSlots.length > 0 ? availableSlots[0].slot : null;
-    }
-
-    function drawQRCode(id) {
-      const qrContainer = document.getElementById("qrcode");
-      qrContainer.innerHTML = "";
-      QRCode.toCanvas(document.createElement("canvas"), id, { width: 200 }, (err, canvas) => {
-        if (!err) qrContainer.appendChild(canvas);
-      });
-    }
-
-    function updateUI(latestPasses, slots, limits, issueEnabled) {
-      const form = document.getElementById("form");
-      const info = document.getElementById("info");
-
-      if (!issueEnabled) {
-        form.style.display = "none";
-        info.innerHTML = `<p class="stopped">現在、プライオリティパスの発券は停止中です</p>`;
-        return;
-      }
-
-      if (!slots || slots.length === 0 || !limits || limits.length === 0) {
-        form.style.display = "none";
-        info.innerHTML = `<p class="notset">案内時間が設定されていません</p>`;
-        return;
-      }
-
-      const saved = loadPassFromLocal();
-      if (saved) {
-        const passInDb = latestPasses.find(p => p.id === saved.id);
-        const used = passInDb?.used || false;
-        saved.used = used;
-        if (used) savePassToLocal(saved);
-        const expired = isExpired(saved.time);
-
-        const [startHour, startMin] = saved.time.split("〜")[0].split(":").map(Number);
-        const startDate = new Date();
-        startDate.setHours(startHour, startMin, 0, 0);
-        const isBeforeStart = new Date() < startDate;
-
-        form.style.display = "none";
-        info.innerHTML = `
-          <h2 class="${used ? "used" : expired ? "expired" : ""}">
-            ${used ? "使用済み" : expired ? "無効（時間切れ）" : isBeforeStart ? "案内時刻前" : "現在案内中"}です
-          </h2>
-          <p>番号：${saved.id}</p>
-          <p>名前：${saved.name}</p>
-          <p>人数：${saved.numPeople}</p>
-          <p>案内時間：${saved.time}</p>
-        `;
-        drawQRCode(saved.id);
-        return;
-      }
-
-      // 次の発券可能時間を上限考慮で取得
-      const nextTime = getNextAvailableSlot(slots, limits, latestPasses);
-      if (!nextTime) {
-        form.style.display = "none";
-        info.innerHTML = `<p class="ended">本日のプライオリティパスは全て発券終了しました</p>`;
-      } else {
-        form.style.display = "block";
-        info.innerHTML = `<p>次の案内時間：<strong>${nextTime}</strong></p>`;
-      }
-    }
-
-    window.addEventListener("load", () => {
-      const passesCol = collection(db, "passes");
-      const timeSlotsDoc = doc(db, "settings", "timeSlots");
-      const issueStatusDoc = doc(db, "settings", "issueStatus");
-
-      let latestPasses = [];
-      let slots = [];
-      let limits = [];
-      let issueEnabled = false;
-      let isSubmitting = false;
-
-      function tryUpdateUI() {
-        if (slots.length && limits.length && typeof issueEnabled === "boolean") {
-          updateUI(latestPasses, slots, limits, issueEnabled);
-        }
-      }
-
-      onSnapshot(timeSlotsDoc, (snap) => {
-        const data = snap.data();
-        slots = data?.slots || [];
-        limits = data?.limits || [];
-        tryUpdateUI();
-      });
-
-      onSnapshot(issueStatusDoc, (snap) => {
-        issueEnabled = snap.data()?.enabled === true;
-        tryUpdateUI();
-      });
-
-      onSnapshot(passesCol, (snap) => {
-        latestPasses = snap.docs.map(doc => doc.data()).sort((a,b) => (a.number || 0) - (b.number || 0));
-        tryUpdateUI();
-      });
-
-      document.getElementById("form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (isSubmitting) return;
-        isSubmitting = true;
-
-        const name = document.getElementById("name").value.trim();
-        const num = parseInt(document.getElementById("people").value);
-        if (!name || isNaN(num) || num < 1) {
-          alert("正しい名前と人数を入力してください");
-          isSubmitting = false;
-          return;
-        }
-
-        if (!issueEnabled) {
-          isSubmitting = false;
-          return;
-        }
-
-        if (!slots || !limits || slots.length === 0 || limits.length === 0) {
-          alert("案内時間が正しく設定されていません");
-          isSubmitting = false;
-          return;
-        }
-
-        // 上限と発券済み枚数を考慮した次スロット取得
-        const nextTime = getNextAvailableSlot(slots, limits, latestPasses);
-        if (!nextTime) {
-          alert("本日のプライオリティパスはすべて発券終了しました");
-          isSubmitting = false;
-          return;
-        }
-
-        const lastNumber = latestPasses.length > 0 ? latestPasses[latestPasses.length - 1].number || 0 : 0;
-        const number = lastNumber + 1;
-        const id = `FP${number.toString().padStart(3, "0")}`;
-        const newPass = { id, number, name, numPeople: num, time: nextTime, used: false };
-
-        try {
-          await addDoc(passesCol, { ...newPass, createdAt: new Date() });
-          savePassToLocal(newPass);
-          latestPasses.push(newPass);
-          updateUI(latestPasses, slots, limits, issueEnabled);
-        } catch (err) {
-          alert("発券に失敗しました: " + err.message);
-        }
-
-        isSubmitting = false;
-      });
-    });
-  </script>
+  #qrCode { margin-top:10px; }
+</style>
 </head>
 <body>
-  <h1>プライオリティパス発券</h1>
-  <div id="info"></div>
+<div class="container">
+  <h1>ファストパス発券</h1>
+  <div id="clock"></div>
 
-  <form id="form">
-    <label>名前 <input type="text" id="name" required /></label>
-    <label>人数 <input type="number" id="people" required min="1" /></label>
-    <button type="submit">発券する</button>
-  </form>
+  <div class="card">
+    <label>名前</label>
+    <input type="text" id="nameInput" placeholder="名前を入力">
 
-  <div id="qrcode"></div>
+    <label>人数</label>
+    <input type="number" id="numInput" placeholder="人数" min="1" value="1">
+
+    <label>案内時間</label>
+    <select id="slotSelect">
+      <option>読み込み中...</option>
+    </select>
+
+    <button id="issueBtn">発券</button>
+
+    <div id="qrCode"></div>
+    <div id="issuedId" style="margin-top:10px; font-weight:bold;"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.appspot.com",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const clock = document.getElementById("clock");
+setInterval(()=>{
+  const now=new Date();
+  clock.textContent = now.toLocaleDateString()+" "+now.toLocaleTimeString();
+},1000);
+
+const slotSelect = document.getElementById("slotSelect");
+let currentSlots = [];
+
+async function loadSlots(){
+  const snap = await getDoc(doc(db,"settings","timeSlots"));
+  if(!snap.exists()) return;
+  const data = snap.data();
+  const now = new Date();
+  const nowMinutes = now.getHours()*60 + now.getMinutes();
+  currentSlots = [];
+
+  slotSelect.innerHTML = "";
+
+  for(const frame of data.slots){
+    const limitsObj = data.limits.find(l=>l.frame===frame.frame);
+    if(!limitsObj) continue;
+    frame.slots.forEach((s,idx)=>{
+      // 未来時間のみ表示
+      const [start,end] = s.split("〜");
+      const [h,m]=start.split(":").map(Number);
+      const slotMinutes = h*60 + m;
+      if(slotMinutes>=nowMinutes){
+        // 残数チェック
+        currentSlots.push({slot:s, limit:limitsObj.limits[idx]});
+        slotSelect.innerHTML += `<option value="${currentSlots.length-1}">${s} （上限${limitsObj.limits[idx]}人）</option>`;
+      }
+    });
+  }
+  if(currentSlots.length===0) slotSelect.innerHTML = `<option>発券可能枠なし</option>`;
+}
+loadSlots();
+
+// リアルタイム更新
+onSnapshot(doc(db,"settings","timeSlots"),()=>{ loadSlots(); });
+
+// 発券
+document.getElementById("issueBtn").onclick = async()=>{
+  const name = document.getElementById("nameInput").value.trim();
+  const num = parseInt(document.getElementById("numInput").value);
+  const idx = parseInt(slotSelect.value);
+
+  if(!name||!num||isNaN(idx)||!currentSlots[idx]){
+    alert("正しく入力してください"); return;
+  }
+
+  const slotObj = currentSlots[idx];
+
+  const id = "FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
+
+  try{
+    await addDoc(collection(db,"passes"),{
+      id, name, numPeople:num, time:slotObj.slot, used:false, special:false, createdAt:serverTimestamp()
+    });
+
+    document.getElementById("issuedId").textContent = `発券ID: ${id}`;
+    slotSelect.value = "";
+    document.getElementById("nameInput").value = "";
+    document.getElementById("numInput").value = 1;
+
+    // QR生成
+    QRCode.toCanvas(document.getElementById("qrCode"), id, { width:180 });
+
+    alert("発券完了");
+  }catch(e){
+    alert("発券失敗: "+e.message);
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 </body>
 </html>
