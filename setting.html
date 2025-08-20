@@ -38,7 +38,7 @@
 
   /* ログ */
   table { width:100%; border-collapse: collapse; margin-top:10px; }
-  th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; color: black; }
+  th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
 
   /* ログイン */
   #loginDiv { max-width: 400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
@@ -155,7 +155,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
-// Firebase設定
 const firebaseConfig = {
  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
  authDomain: "fastpass-system.firebaseapp.com",
@@ -167,7 +166,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- 管理者 ---
 const allowedAdmins = [
   { id: "Sakoty", password: "3214" },
   { id: "seseguchi914", password: "0914" },
@@ -180,6 +178,7 @@ const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 
+// セッション中ログイン確認
 function checkLogin(){
   const storedId = localStorage.getItem("adminId");
   const storedPass = localStorage.getItem("adminPass");
@@ -210,19 +209,25 @@ document.getElementById("logoutBtn").onclick = ()=>{
   logAccess(localStorage.getItem("adminId"),"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
+  sessionStorage.removeItem("logTabUnlocked"); // ログイン解除でログタブもリセット
   loginDiv.style.display="block";
   mainContent.style.display="none";
 };
 
-// --- 時計 ---
+// 時計
 setInterval(()=>{ const now=new Date(); document.getElementById("clock").textContent=now.toLocaleDateString()+" "+now.toLocaleTimeString(); },1000);
 
-// --- タブ切替 ---
+// タブ切替（アクセスログは一度のみパスワード）
 function initTabs(){
   const tabs=document.querySelectorAll(".tab");
   const contents=document.querySelectorAll(".tab-content");
   tabs.forEach(tab=>{
     tab.onclick = ()=>{
+      if(tab.dataset.tab === "logTab" && !sessionStorage.getItem("logTabUnlocked")){
+        const pass = prompt("アクセスログを見るにはパスワードが必要です");
+        if(pass !== "1118"){ alert("パスワードが違います"); return; }
+        sessionStorage.setItem("logTabUnlocked","true"); // 一度入力すればOK
+      }
       tabs.forEach(t=>t.classList.remove("active"));
       contents.forEach(c=>c.classList.remove("active"));
       tab.classList.add("active");
@@ -235,7 +240,6 @@ function initTabs(){
 async function setIssueStatus(status){ await setDoc(doc(db,"settings","issueStatus"),{enabled:status}); updateStatusDisplay(); }
 async function updateStatusDisplay(){ const snap=await getDoc(doc(db,"settings","issueStatus")); const badge=document.getElementById("statusBadge"); if(snap.exists() && snap.data().enabled){ badge.textContent="発券中"; badge.className="status-badge active"; } else{ badge.textContent="停止中"; badge.className="status-badge inactive"; } }
 updateStatusDisplay();
-
 document.getElementById("startBtn").onclick = async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
 document.getElementById("stopBtn").onclick = async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
 
