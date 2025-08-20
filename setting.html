@@ -11,25 +11,38 @@
   .container { max-width:600px; margin:auto; padding:10px; }
   h1 { text-align:center; margin-bottom:5px; }
   #clock { text-align:center; font-weight:bold; color:#555; margin-bottom:10px; }
+
   .status-badge { display:inline-block; padding:5px 12px; border-radius:15px; font-weight:bold; font-size:0.9rem; margin-top:5px; }
   .active { background-color:#28a745; color:white; }
   .inactive { background-color:#dc3545; color:white; }
+
   .card { background:white; border-radius:10px; padding:15px; margin-top:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+
   label { font-weight:bold; display:block; margin-top:10px; font-size:0.9rem; }
   input { width:100%; padding:8px; margin-top:4px; border-radius:5px; border:1px solid #ccc; font-size:1rem; box-sizing:border-box; }
+
   button { padding:14px; margin:5px 0; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size:1rem; }
   button.primary { background:#007bff; color:white; }
   button.success { background:#28a745; color:white; }
   button.danger { background:#dc3545; color:white; }
+
   .time-slot-group { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   @media(max-width:500px){ .time-slot-group { grid-template-columns:1fr; } }
+
+  /* タブ */
   .tabs { display:flex; justify-content:space-around; margin-bottom:10px; flex-wrap:wrap; }
   .tab { flex:1; padding:14px; text-align:center; cursor:pointer; background:#ddd; border-radius:8px 8px 0 0; font-weight:bold; margin-bottom:2px; }
   .tab.active { background:#007bff; color:white; }
+
   .tab-content { display:none; }
   .tab-content.active { display:block; }
+
+  /* テーブル（アクセスログの文字色を黒に） */
   table { width:100%; border-collapse: collapse; margin-top:10px; }
   th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
+  #logTab table, #logTab th, #logTab td { color:#000; }
+
+  /* ログイン＆ログ閲覧認証 */
   #loginDiv, #logAuthDiv { max-width:400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
   #loginDiv input, #logAuthDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
   #loginDiv button, #logAuthDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
@@ -136,61 +149,72 @@ import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp,
 
 // Firebase設定
 const firebaseConfig = {
- apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
- authDomain: "fastpass-system.firebaseapp.com",
- projectId: "fastpass-system",
- storageBucket: "fastpass-system.appspot.com",
- messagingSenderId: "858745521872",
- appId: "1:858745521872:web:29289b673855097e1200d5"
+  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.appspot.com",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5"
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // --- 管理者 ---
 const allowedAdmins = [
-  { id:"Sakoty", password:"3214" },
-  { id:"seseguchi914", password:"0914" },
-  { id:"2", password:"1928mickeymouse" },
-  { id:"3", password:"1928mickeymouse" },
-  { id:"4", password:"1928mickeymouse" }
+  { id:"Sakoty",        password:"3214" },
+  { id:"seseguchi914",  password:"0914" },
+  { id:"2",             password:"1928mickeymouse" },
+  { id:"3",             password:"1928mickeymouse" },
+  { id:"4",             password:"1928mickeymouse" }
 ];
 
-const loginDiv=document.getElementById("loginDiv");
-const mainContent=document.getElementById("mainContent");
-const errorMsg=document.getElementById("errorMsg");
+const loginDiv = document.getElementById("loginDiv");
+const mainContent = document.getElementById("mainContent");
+const errorMsg = document.getElementById("errorMsg");
 
 function checkLogin(){
-  const storedId=localStorage.getItem("adminId");
-  const storedPass=localStorage.getItem("adminPass");
-  if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
-    loginDiv.style.display="none"; mainContent.style.display="block"; initTabs();
+  const storedId = (localStorage.getItem("adminId")||"").trim();
+  const storedPass = (localStorage.getItem("adminPass")||"").trim();
+  if(storedId && storedPass && allowedAdmins.some(a => a.id===storedId && a.password===storedPass)){
+    loginDiv.style.display="none";
+    mainContent.style.display="block";
+    initTabs();
   }
 }
 checkLogin();
 
-document.getElementById("loginForm").onsubmit=e=>{
+document.getElementById("loginForm").onsubmit = e=>{
   e.preventDefault();
-  const id=document.getElementById("adminId").value.trim();
-  const pass=document.getElementById("adminPass").value;
+  const id   = document.getElementById("adminId").value.trim();
+  const pass = document.getElementById("adminPass").value.trim(); // ← 余分な空白対策
   if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
     localStorage.setItem("adminId", id);
     localStorage.setItem("adminPass", pass);
-    loginDiv.style.display="none"; mainContent.style.display="block";
+    loginDiv.style.display="none";
+    mainContent.style.display="block";
     errorMsg.textContent="";
     initTabs();
     logAccess(id,"ログイン成功");
-  } else { errorMsg.textContent="IDまたはパスワードが違います"; logAccess(id,"ログイン失敗"); }
+  } else {
+    errorMsg.textContent="IDまたはパスワードが違います";
+    logAccess(id,"ログイン失敗");
+  }
 };
 
-document.getElementById("logoutBtn").onclick=()=>{
+document.getElementById("logoutBtn").onclick = ()=>{
   logAccess(localStorage.getItem("adminId"),"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
-  loginDiv.style.display="block"; mainContent.style.display="none";
+  loginDiv.style.display="block";
+  mainContent.style.display="none";
 };
 
 // 時計
-setInterval(()=>{ const now=new Date(); document.getElementById("clock").textContent=now.toLocaleDateString()+" "+now.toLocaleTimeString(); },1000);
+setInterval(()=>{
+  const now=new Date();
+  document.getElementById("clock").textContent =
+    now.toLocaleDateString()+" "+now.toLocaleTimeString();
+},1000);
 
 // タブ切替
 function initTabs(){
@@ -207,19 +231,51 @@ function initTabs(){
 }
 
 // 発券ステータス
-async function setIssueStatus(status){ await setDoc(doc(db,"settings","issueStatus"),{enabled:status}); updateStatusDisplay(); }
-async function updateStatusDisplay(){ const snap=await getDoc(doc(db,"settings","issueStatus")); const badge=document.getElementById("statusBadge"); if(snap.exists() && snap.data().enabled){ badge.textContent="発券中"; badge.className="status-badge active"; } else{ badge.textContent="停止中"; badge.className="status-badge inactive"; } }
+async function setIssueStatus(status){
+  await setDoc(doc(db,"settings","issueStatus"),{enabled:status});
+  updateStatusDisplay();
+}
+async function updateStatusDisplay(){
+  const snap=await getDoc(doc(db,"settings","issueStatus"));
+  const badge=document.getElementById("statusBadge");
+  if(snap.exists() && snap.data().enabled){
+    badge.textContent="発券中";
+    badge.className="status-badge active";
+  } else {
+    badge.textContent="停止中";
+    badge.className="status-badge inactive";
+  }
+}
 updateStatusDisplay();
 
-document.getElementById("startBtn").onclick=async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
-document.getElementById("stopBtn").onclick=async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
+document.getElementById("startBtn").onclick = async()=>{
+  await setIssueStatus(true);
+  await logAccess(localStorage.getItem("adminId"),"発券開始");
+};
+document.getElementById("stopBtn").onclick = async()=>{
+  await setIssueStatus(false);
+  await logAccess(localStorage.getItem("adminId"),"発券停止");
+};
 
 // 時間帯設定
 function pad2(n){return n.toString().padStart(2,"0");}
-function addMinutes(time,min){let [h,m]=time.split(":").map(Number); m+=min; while(m>=60){m-=60; h+=1;} while(h>=24){h-=24;} return `${pad2(h)}:${pad2(m)}`; }
-function generateSlots(start,end,interval){const arr=[];let curr=start; while(curr<end){const next=addMinutes(curr,interval); if(next>end) break; arr.push(curr+"〜"+next); curr=next;} return arr; }
+function addMinutes(time,min){
+  let [h,m]=time.split(":").map(Number);
+  m+=min; while(m>=60){m-=60; h+=1;} while(h>=24){h-=24;}
+  return `${pad2(h)}:${pad2(m)}`;
+}
+function generateSlots(start,end,interval){
+  const arr=[]; let curr=start;
+  while(curr<end){
+    const next=addMinutes(curr,interval);
+    if(next>end) break;
+    arr.push(curr+"〜"+next);
+    curr=next;
+  }
+  return arr;
+}
 
-document.getElementById("setTimeSlots").onsubmit=async e=>{
+document.getElementById("setTimeSlots").onsubmit = async e=>{
   e.preventDefault();
   const allSlots=[]; const allLimits=[];
   for(let i=1;i<=3;i++){
@@ -228,26 +284,43 @@ document.getElementById("setTimeSlots").onsubmit=async e=>{
     const interval=parseInt(document.getElementById(`interval${i}`).value||"10");
     const limit=parseInt(document.getElementById(`limit${i}`).value);
     if(start && end && start<end && limit>0 && interval>0){
-      allSlots.push({frame:i, slots:generateSlots(start,end,interval)});
-      allLimits.push({frame:i, limits:Array(generateSlots(start,end,interval).length).fill(limit)});
+      const slots=generateSlots(start,end,interval);
+      allSlots.push({frame:i, slots});
+      allLimits.push({frame:i, limits:Array(slots.length).fill(limit)});
     }
   }
   if(!allSlots.length){ alert("最低1つの時間枠を入力してください"); return; }
-  try{ await setDoc(doc(db,"settings","timeSlots"),{slots:allSlots, limits:allLimits}); alert("保存しました"); logAccess(localStorage.getItem("adminId"),"時間帯設定保存"); }
-  catch(e){ alert("保存失敗: "+e.message); }
+  try{
+    await setDoc(doc(db,"settings","timeSlots"),{slots:allSlots, limits:allLimits});
+    alert("保存しました");
+    logAccess(localStorage.getItem("adminId"),"時間帯設定保存");
+  }catch(e){
+    alert("保存失敗: "+e.message);
+  }
 };
 
 // 特別パス
-document.getElementById("specialForm").onsubmit=async e=>{
+document.getElementById("specialForm").onsubmit = async e=>{
   e.preventDefault();
   const name=document.getElementById("specialName").value.trim();
   const num=parseInt(document.getElementById("specialPeople").value);
   const start=document.getElementById("specialStartTime").value;
   const end=document.getElementById("specialEndTime").value;
-  if(!name||!num||num<1||!start||!end||start>=end){ alert("正しく入力してください"); return; }
+  if(!name||!num||num<1||!start||!end||start>=end){
+    alert("正しく入力してください"); return;
+  }
   const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
-  try{ await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time:`${start}〜${end}`,used:false,createdAt:serverTimestamp(),special:true}); alert("特別パス発行: "+id); document.getElementById("specialForm").reset(); logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`); }
-  catch(e){ alert("発行失敗: "+e.message); }
+  try{
+    await addDoc(collection(db,"passes"),{
+      id, number:-1, name, numPeople:num, time:`${start}〜${end}`,
+      used:false, createdAt:serverTimestamp(), special:true
+    });
+    alert("特別パス発行: "+id);
+    document.getElementById("specialForm").reset();
+    logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`);
+  }catch(e){
+    alert("発行失敗: "+e.message);
+  }
 };
 
 // 設定読み込み
@@ -259,12 +332,18 @@ async function loadTimeSlots(){
     for(let i=1;i<=3;i++){
       const frameSlot=slotsData.find(s=>s.frame===i);
       const frameLimit=limitsData.find(l=>l.frame===i);
-      if(frameSlot){ document.getElementById(`start${i}`).value=frameSlot.slots[0]?.split("〜")[0]||""; document.getElementById(`end${i}`).value=frameSlot.slots[frameSlot.slots.length-1]?.split("〜")[1]||""; }
+      if(frameSlot){
+        document.getElementById(`start${i}`).value =
+          frameSlot.slots[0]?.split("〜")[0]||"";
+        document.getElementById(`end${i}`).value =
+          frameSlot.slots[frameSlot.slots.length-1]?.split("〜")[1]||"";
+      }
       if(frameLimit) document.getElementById(`limit${i}`).value=frameLimit.limits[0]||1;
       if(frameSlot && frameSlot.slots.length>=2){
-        const first=frameSlot.slots[0].split("〜")[0].split(":").map(Number);
-        const second=frameSlot.slots[1].split("〜")[0].split(":").map(Number);
-        document.getElementById(`interval${i}`).value=(second[0]*60+second[1])-(first[0]*60+first[1]);
+        const first = frameSlot.slots[0].split("〜")[0].split(":").map(Number);
+        const second= frameSlot.slots[1].split("〜")[0].split(":").map(Number);
+        document.getElementById(`interval${i}`).value =
+          (second[0]*60+second[1])-(first[0]*60+first[1]);
       }
     }
   }
@@ -272,20 +351,26 @@ async function loadTimeSlots(){
 loadTimeSlots();
 
 // アクセスログ
-async function logAccess(adminId,action){ await addDoc(collection(db,"accessLogs"),{adminId, action, timestamp:serverTimestamp()}); }
+async function logAccess(adminId,action){
+  try{
+    await addDoc(collection(db,"accessLogs"),{
+      adminId, action, timestamp:serverTimestamp()
+    });
+  }catch(_e){}
+}
 const logTable=document.getElementById("logTable");
 const clearLogsBtn=document.getElementById("clearLogsBtn");
-let unsubscribeLogs=null;
 
 // リアルタイム監視
 const q=query(collection(db,"accessLogs"),orderBy("timestamp","desc"));
-unsubscribeLogs=onSnapshot(q, snap=>{
+onSnapshot(q, snap=>{
   logTable.innerHTML="";
   snap.forEach(docItem=>{
     const d=docItem.data();
     const t=new Date(d.timestamp?.toDate?.()||Date.now()).toLocaleString();
     const tr=document.createElement("tr");
     tr.innerHTML=`<td>${d.adminId}</td><td>${d.action}</td><td>${t}</td>`;
+    tr.style.color="#000"; // 念のための保険
     logTable.appendChild(tr);
   });
 });
@@ -295,17 +380,24 @@ clearLogsBtn.onclick=async()=>{
   if(!confirm("すべてのログを削除しますか？")) return;
   const snap=await getDocs(collection(db,"accessLogs"));
   for(const d of snap.docs) await deleteDoc(d.ref);
-  alert("削除完了"); logAccess(localStorage.getItem("adminId"),"全ログ削除");
+  alert("削除完了");
+  logAccess(localStorage.getItem("adminId"),"全ログ削除");
 };
 
-// アクセスログタブ認証
+// アクセスログタブ認証（パスワード: 1118）
 const logAuthDiv=document.getElementById("logAuthDiv");
 const logContent=document.getElementById("logContent");
 document.getElementById("logAuthForm").onsubmit=e=>{
   e.preventDefault();
-  const pass=document.getElementById("logPass").value;
-  if(pass==="1118")(pass==="3214"){ logAuthDiv.style.display="none"; logContent.style.display="block"; document.getElementById("logPass").value=""; document.getElementById("logAuthMsg").textContent=""; }
-  else{ document.getElementById("logAuthMsg").textContent="パスワードが違います"; }
+  const pass=document.getElementById("logPass").value.trim();
+  if(pass==="1118"){
+    logAuthDiv.style.display="none";
+    logContent.style.display="block";
+    document.getElementById("logPass").value="";
+    document.getElementById("logAuthMsg").textContent="";
+  }else{
+    document.getElementById("logAuthMsg").textContent="パスワードが違います";
+  }
 };
 </script>
 
