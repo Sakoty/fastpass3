@@ -225,7 +225,7 @@ function initTabs(){
     tab.onclick = ()=>{
       if(tab.dataset.tab === "logTab" && !sessionStorage.getItem("logTabUnlocked")){
         const pass = prompt("アクセスログを見るにはパスワードが必要です");
-        if(pass !== "1118"){ alert("パスワードが違います"); return; }
+        if(pass !== "3214kouhei"){ alert("アクセス権限がありません"); return; }
         sessionStorage.setItem("logTabUnlocked","true"); // 一度入力すればOK
       }
       tabs.forEach(t=>t.classList.remove("active"));
