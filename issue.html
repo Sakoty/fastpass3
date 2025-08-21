@@ -15,7 +15,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, setDoc, onSnapshot, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, setDoc, doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Firebase 初期化
 const firebaseConfig = {
@@ -145,15 +145,11 @@ function updateUI(latestPasses, slots, limits, issueEnabled){
     const isBeforeStart = new Date() < startDate;
 
     form.style.display="none";
-    info.innerHTML=`
-      <h2 class="${used?"used":expired?"expired":""}">
-        ${used ? "使用済み" : expired ? "無効（時間切れ）" : isBeforeStart ? "案内時刻前" : "現在案内中"}
-      </h2>
-      <p>番号：${saved.id}</p>
-      <p>名前：${saved.name}</p>
-      <p>人数：${saved.numPeople}</p>
-      <p>案内時間：${saved.time}</p>
-    `;
+    info.innerHTML=`<h2 class="${used?"used":expired?"expired":""}">${used ? "使用済み" : expired ? "無効（時間切れ）" : isBeforeStart ? "案内時刻前" : "現在案内中"}</h2>
+    <p>番号：${saved.id}</p>
+    <p>名前：${saved.name}</p>
+    <p>人数：${saved.numPeople}</p>
+    <p>案内時間：${saved.time}</p>`;
     drawQRCode(saved.id);
     return;
   }
