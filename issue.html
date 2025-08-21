@@ -49,6 +49,7 @@
       return data.date === getTodayString() ? data : null;
     }
 
+    // --- 大枠を10分ごとに分割 ---
     function generateTimeBlocks(start, end) {
       const blocks = [];
       const [sh, sm] = start.split(":").map(Number);
@@ -65,13 +66,20 @@
       return blocks;
     }
 
-    function generateAllBlocks(slots) {
-      let all = [];
-      for (const slot of slots) {
-        const [start, end] = slot.split("〜");
-        all.push(...generateTimeBlocks(start, end));
+    // --- 大枠の制限を均等配分して全スロットを作る ---
+    function generateAllBlocks(slots, limits) {
+      let allSlots = [];
+      let allLimits = [];
+      for (let i = 0; i < slots.length; i++) {
+        const [start, end] = slots[i].split("〜");
+        const blocks = generateTimeBlocks(start, end);
+        if (blocks.length > 0) {
+          const perBlock = Math.floor(limits[i] / blocks.length);
+          blocks.forEach(() => allLimits.push(perBlock));
+          allSlots.push(...blocks);
+        }
       }
-      return all;
+      return { allSlots, allLimits };
     }
 
     function isExpired(timeStr) {
@@ -116,13 +124,16 @@
       const form = document.getElementById("form");
       const info = document.getElementById("info");
 
+      // スロット展開（均等配分）
+      const { allSlots, allLimits } = generateAllBlocks(slots, limits);
+
       if (!issueEnabled) {
         form.style.display = "none";
         info.innerHTML = `<p class="stopped">現在、プライオリティパスの発券は停止中です</p>`;
         return;
       }
 
-      if (!slots || slots.length === 0 || !limits || limits.length === 0) {
+      if (!allSlots || allSlots.length === 0) {
         form.style.display = "none";
         info.innerHTML = `<p class="notset">案内時間が設定されていません</p>`;
         return;
@@ -155,7 +166,7 @@
         return;
       }
 
-      const nextTime = getNextAvailableSlot(slots, limits, latestPasses);
+      const nextTime = getNextAvailableSlot(allSlots, allLimits, latestPasses);
       if (!nextTime) {
         form.style.display = "none";
         info.innerHTML = `<p class="ended">本日のプライオリティパスは全て発券終了しました</p>`;
@@ -182,24 +193,10 @@
         }
       }
 
-      // 🔥 ここを修正（10分刻みに展開する処理）
       onSnapshot(timeSlotsDoc, (snap) => {
         const data = snap.data();
-        const baseSlots = data?.slots || [];
-        const baseLimits = data?.limits || [];
-
-        // 10分刻みに展開
-        slots = generateAllBlocks(baseSlots);
-
-        // 各大枠の limit を 10分ブロックに均等配分
-        limits = [];
-        for (let i = 0; i < baseSlots.length; i++) {
-          const [start, end] = baseSlots[i].split("〜");
-          const blocks = generateTimeBlocks(start, end);
-          const perBlock = Math.floor((baseLimits[i] || 0) / blocks.length);
-          limits.push(...Array(blocks.length).fill(perBlock));
-        }
-
+        slots = data?.slots || [];
+        limits = data?.limits || [];
         tryUpdateUI();
       });
 
@@ -227,19 +224,8 @@
           return;
         }
 
-        if (!issueEnabled) {
-          alert("現在発券は停止中です");
-          isSubmitting = false;
-          return;
-        }
-
-        if (!slots || !limits || slots.length === 0 || limits.length === 0) {
-          alert("案内時間が正しく設定されていません");
-          isSubmitting = false;
-          return;
-        }
-
-        const nextTime = getNextAvailableSlot(slots, limits, latestPasses);
+        const { allSlots, allLimits } = generateAllBlocks(slots, limits);
+        const nextTime = getNextAvailableSlot(allSlots, allLimits, latestPasses);
         if (!nextTime) {
           alert("本日のプライオリティパスはすべて発券終了しました");
           isSubmitting = false;
