@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ファストパス設定＋ログ（永続版）</title>
+<title>ファストパス設定＋ログ（ユーザー・管理者対応版）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
 <style>
@@ -29,7 +29,7 @@ button.danger { background:#dc3545; color:white; }
 .tab-content { display:none; }
 .tab-content.active { display:block; }
 table { width:100%; border-collapse: collapse; margin-top:10px; }
-th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
+th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; color:black; } /* 黒文字に統一 */
 #loginDiv, #logAuthDiv { max-width:400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
 #loginDiv input, #logAuthDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
 #loginDiv button, #logAuthDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
@@ -144,6 +144,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// 管理者設定
 const allowedAdmins = [
   { id:"Sakoty", password:"3214" },
   { id:"seseguchi914", password:"0914" },
@@ -238,7 +239,7 @@ updateStatusDisplay();
 document.getElementById("startBtn").onclick = async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
 document.getElementById("stopBtn").onclick = async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
 
-// 時間帯設定保存
+// 時間処理
 function pad2(n){return n.toString().padStart(2,"0");}
 function timeToMinutes(t){ const [h,m]=t.split(":").map(Number); return h*60+m; }
 function minutesToTime(m){ return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`; }
@@ -252,6 +253,7 @@ function generateSlots(start,end,interval){
   return arr;
 }
 
+// 時間帯設定保存
 document.getElementById("setTimeSlots").onsubmit = async e=>{
   e.preventDefault();
   const frames=[];
@@ -308,15 +310,16 @@ document.getElementById("specialForm").onsubmit = async e=>{
   }catch(e){ alert("発行失敗: "+e.message); }
 };
 
-// アクセスログ
+// --- アクセスログ共通関数 ---
 async function logAccess(adminId,action){
   await addDoc(collection(db,"accessLogs"),{
-    adminId:adminId||"不明",
+    adminId:adminId||"不明", // 管理者IDまたはユーザー
     action,
     createdAt:serverTimestamp()
   });
 }
 
+// ログ認証
 document.getElementById("logAuthForm").onsubmit = async e=>{
   e.preventDefault();
   const pass=document.getElementById("logPass").value;
@@ -327,6 +330,7 @@ document.getElementById("logAuthForm").onsubmit = async e=>{
   } else { document.getElementById("logAuthMsg").textContent="アクセス権限がありません"; }
 };
 
+// ログ読み込み
 function loadLogs(){
   const tbody=document.getElementById("logTable");
   const q=query(collection(db,"accessLogs"),orderBy("createdAt","desc"));
@@ -342,11 +346,13 @@ function loadLogs(){
   });
 }
 
-document.getElementById("clearLogsBtn").onclick=async()=>{
-  if(!confirm("ログを全て削除しますか？")) return;
+// ログ削除
+document.getElementById("clearLogsBtn").onclick = async ()=>{
+  if(!confirm("全てのログを削除しますか？")) return;
   const snap=await getDocs(collection(db,"accessLogs"));
-  for(const docu of snap.docs){ await deleteDoc(doc(db,"accessLogs",docu.id)); }
+  for(const docSnap of snap.docs){ await deleteDoc(doc(db,"accessLogs",docSnap.id)); }
 };
+
 </script>
 </body>
 </html>
