@@ -182,10 +182,24 @@
         }
       }
 
+      // 🔥 ここを修正（10分刻みに展開する処理）
       onSnapshot(timeSlotsDoc, (snap) => {
         const data = snap.data();
-        slots = data?.slots || [];
-        limits = data?.limits || [];
+        const baseSlots = data?.slots || [];
+        const baseLimits = data?.limits || [];
+
+        // 10分刻みに展開
+        slots = generateAllBlocks(baseSlots);
+
+        // 各大枠の limit を 10分ブロックに均等配分
+        limits = [];
+        for (let i = 0; i < baseSlots.length; i++) {
+          const [start, end] = baseSlots[i].split("〜");
+          const blocks = generateTimeBlocks(start, end);
+          const perBlock = Math.floor((baseLimits[i] || 0) / blocks.length);
+          limits.push(...Array(blocks.length).fill(perBlock));
+        }
+
         tryUpdateUI();
       });
 
