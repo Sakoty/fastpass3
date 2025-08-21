@@ -147,6 +147,7 @@ function startApp(){
         if(confirm(`パス「${data.id}」を削除しますか？`)){
           try{
             await deleteDoc(doc(db,"passes",id));
+            // 削除ログ追加
             await logAccess(localStorage.getItem("adminId"),`削除: ${data.id}`, "admin");
             alert("削除しました");
           } catch(err){ alert("削除失敗: "+err.message); }
@@ -166,6 +167,7 @@ function startApp(){
     try{
       const snapshot = await getDocs(passesRef);
       await Promise.all(snapshot.docs.map(d=>deleteDoc(doc(db,"passes",d.id))));
+      // 全件削除ログ追加
       await logAccess(localStorage.getItem("adminId"),"全件削除","admin");
       alert("全件削除しました");
     } catch(err){ alert("削除失敗: "+err.message); }
@@ -207,5 +209,3 @@ function startApp(){
 </div>
 </body>
 </html>
-
-
