@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ファストパス設定＋ログ（安定版）</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ファストパス設定＋自動案内時間</title>
 <style>
 body{font-family:"Segoe UI",sans-serif;background:#f5f7fa;margin:0;padding:0;}
 .container{max-width:600px;margin:auto;padding:10px;}
@@ -28,7 +28,6 @@ button.danger{background:#dc3545;color:white;}
 .tab-content.active{display:block;}
 table{width:100%;border-collapse:collapse;margin-top:10px;}
 th,td{border:1px solid #ccc;padding:6px 8px;text-align:center;}
-#logTab table,#logTab th,#logTab td{color:#000;}
 #loginDiv,#logAuthDiv{max-width:400px;margin:auto;padding:20px;background:#fff;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
 #loginDiv input,#logAuthDiv input{width:100%;padding:10px;margin:8px 0;box-sizing:border-box;}
 #loginDiv button,#logAuthDiv button{width:100%;padding:10px;background:#007bff;color:white;border:none;border-radius:5px;font-size:16px;cursor:pointer;}
@@ -48,7 +47,7 @@ th,td{border:1px solid #ccc;padding:6px 8px;text-align:center;}
 </div>
 
 <div class="container" id="mainContent" style="display:none;">
-<h1>ファストパス設定</h1>
+<h1>ファストパス管理</h1>
 <div id="clock"></div>
 
 <div class="tabs">
@@ -64,6 +63,10 @@ th,td{border:1px solid #ccc;padding:6px 8px;text-align:center;}
 <button id="startBtn" class="success">発券開始</button>
 <button id="stopBtn" class="danger">発券停止</button>
 <button id="logoutBtn" class="danger">ログアウト</button>
+</div>
+<div class="card">
+<h3>次の案内時間</h3>
+<div id="nextTime">-</div>
 </div>
 </div>
 
@@ -122,38 +125,34 @@ th,td{border:1px solid #ccc;padding:6px 8px;text-align:center;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey:"AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain:"fastpass-system.firebaseapp.com",
-  projectId:"fastpass-system",
-  storageBucket:"fastpass-system.appspot.com",
-  messagingSenderId:"858745521872",
-  appId:"1:858745521872:web:29289b673855097e1200d5"
+apiKey:"AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+authDomain:"fastpass-system.firebaseapp.com",
+projectId:"fastpass-system",
+storageBucket:"fastpass-system.appspot.com",
+messagingSenderId:"858745521872",
+appId:"1:858745521872:web:29289b673855097e1200d5"
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const allowedAdmins = [
-{id:"Sakoty",password:"3214"},
-{id:"seseguchi914",password:"0914"},
-{id:"2",password:"1928mickeymouse"},
-{id:"3",password:"1928mickeymouse"},
-{id:"4",password:"1928mickeymouse"}
-];
+// 管理者認証
+const allowedAdmins = {Sakoty:"3214",seseguchi914:"0914",admin2:"1928mickeymouse",admin3:"1928mickeymouse",admin4:"1928mickeymouse"};
 
 const loginDiv=document.getElementById("loginDiv");
 const mainContent=document.getElementById("mainContent");
 const errorMsg=document.getElementById("errorMsg");
 
 function checkLogin(){
-const storedId=localStorage.getItem("adminId")||"";
-const storedPass=localStorage.getItem("adminPass")||"";
-if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
+const storedId=localStorage.getItem("adminId");
+const storedPass=localStorage.getItem("adminPass");
+if(storedId && storedPass && allowedAdmins[storedId]===storedPass){
 loginDiv.style.display="none";
 mainContent.style.display="block";
 initTabs();
+startRealtime();
 }
 }
 checkLogin();
@@ -162,13 +161,14 @@ document.getElementById("loginForm").onsubmit=e=>{
 e.preventDefault();
 const id=document.getElementById("adminId").value.trim();
 const pass=document.getElementById("adminPass").value.trim();
-if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
+if(allowedAdmins[id]===pass){
 localStorage.setItem("adminId",id);
 localStorage.setItem("adminPass",pass);
 loginDiv.style.display="none";
 mainContent.style.display="block";
 errorMsg.textContent="";
 initTabs();
+startRealtime();
 logAccess(id,"ログイン成功");
 }else{errorMsg.textContent="IDまたはパスワードが違います";logAccess(id,"ログイン失敗");}
 };
@@ -196,21 +196,44 @@ document.getElementById(tab.dataset.tab).classList.add("active");
 };});
 }
 
-// 発券ステータス（リアルタイム反映）
-const issueBadge=document.getElementById("statusBadge");
+// 発券制御＋自動案内時間
+const statusBadge=document.getElementById("statusBadge");
+const nextTimeDiv=document.getElementById("nextTime");
+function startRealtime(){
 onSnapshot(doc(db,"settings","issueStatus"),snap=>{
-if(snap.exists() && snap.data().enabled){issueBadge.textContent="発券中";issueBadge.className="status-badge active";}
-else{issueBadge.textContent="停止中";issueBadge.className="status-badge inactive";}
+if(snap.exists() && snap.data().enabled){statusBadge.textContent="発券中";statusBadge.className="status-badge active";updateNextTime();}
+else{statusBadge.textContent="停止中";statusBadge.className="status-badge inactive";nextTimeDiv.textContent="-";}
 });
+onSnapshot(doc(db,"settings","timeSlots"),snap=>{updateNextTime();});
+onSnapshot(collection(db,"passes"),snap=>{updateNextTime();});
+}
+
 document.getElementById("startBtn").onclick=()=>setIssue(true);
 document.getElementById("stopBtn").onclick=()=>setIssue(false);
 async function setIssue(status){await setDoc(doc(db,"settings","issueStatus"),{enabled:status});logAccess(localStorage.getItem("adminId"),status?"発券開始":"発券停止");}
 
-// 時間帯生成
+// 発券自動案内計算
 function pad2(n){return n.toString().padStart(2,"0");}
 function timeToMinutes(t){const [h,m]=t.split(":").map(Number);return h*60+m;}
 function minutesToTime(m){return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`;}
-function generateSlots(start,end,interval){const arr=[];let curr=timeToMinutes(start);const endM=timeToMinutes(end);while(curr+interval<=endM){const next=curr+interval;arr.push(`${minutesToTime(curr)}〜${minutesToTime(next)}`);curr=next;}return arr;}
+function generateSlots(start,end,interval){const arr=[];let curr=timeToMinutes(start);const endM=timeToMinutes(end);while(curr+interval<=endM){const next=curr+interval;arr.push(curr);curr=next;}return arr;}
+async function updateNextTime(){
+const tsSnap=await doc(db,"settings","timeSlots").get();
+if(!tsSnap.exists()) return;
+const frames=tsSnap.data().frames||[];
+const passesSnap=await getDocs(collection(db,"passes"));
+let totalIssued=0;
+passesSnap.forEach(doc=>{const d=doc.data();if(!d.special) totalIssued++;});
+let found=false;
+for(const f of frames){
+const slots=generateSlots(f.slots[0].split("〜")[0],f.slots[f.slots.length-1].split("〜")[1],f.slots.length>1?timeToMinutes(f.slots[1].split("〜")[0])-timeToMinutes(f.slots[0].split("〜")[0]):10);
+const limit=f.limits[0]||1;
+for(const s of slots){
+totalIssued-=limit;
+if(totalIssued<0){nextTimeDiv.textContent=minutesToTime(s);found=true;break;}}
+if(found) break;}
+if(!found) nextTimeDiv.textContent="次の時間帯なし";
+}
 
 // 時間帯設定保存
 document.getElementById("setTimeSlots").onsubmit=async e=>{
@@ -221,10 +244,10 @@ const start=document.getElementById(`start${i}`).value;
 const end=document.getElementById(`end${i}`).value;
 const interval=parseInt(document.getElementById(`interval${i}`).value||"10");
 const limit=parseInt(document.getElementById(`limit${i}`).value||"1");
-if(start && end && start<end && limit>0 && interval>0){const slots=generateSlots(start,end,interval);slotsArray.push({frame:i,slots,limits:slots.map(()=>limit)});}
-}
+if(start && end && start<end && limit>0 && interval>0){
+slotsArray.push({frame:i,slots:[`${start}〜${end}`],limits:[limit]});}}
 if(!slotsArray.length){alert("最低1つの時間枠を入力してください");return;}
-try{await setDoc(doc(db,"settings","timeSlots"),{frames:slotsArray});alert("保存しました");logAccess(localStorage.getItem("adminId"),"時間帯設定保存");}
+try{await setDoc(doc(db,"settings","timeSlots"),{frames:slotsArray});alert("保存しました");logAccess(localStorage.getItem("adminId"),"時間帯設定保存");updateNextTime();}
 catch(e){alert("保存失敗: "+e.message);}
 };
 
@@ -240,16 +263,6 @@ const id="FP"+Math.floor(Math.random()*1000).toString().padStart(3,"0");
 try{await addDoc(collection(db,"passes"),{id,number:-1,name,numPeople:num,time:`${start}〜${end}`,used:false,createdAt:serverTimestamp(),special:true});alert("特別パス発行: "+id);document.getElementById("specialForm").reset();logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`);}
 catch(e){alert("発行失敗: "+e.message);}
 };
-
-// 設定読み込み
-async function loadTimeSlots(){
-const snap=await getDoc(doc(db,"settings","timeSlots"));
-if(snap.exists()){
-const frames=snap.data().frames||[];
-for(let i=1;i<=3;i++){
-const f=frames.find(x=>x.frame===i);
-if(f && f.slots.length){document.getElementById(`start${i}`).value=f.slots[0].split("〜")[0];document.getElementById(`end${i}`).value=f.slots[f.slots.length-1].split("〜")[1];document.getElementById(`limit${i}`).value=f.limits[0];if(f.slots.length>=2){const first=f.slots[0].split("〜")[0].split(":").map(Number);const second=f.slots[1].split("〜")[0].split(":").map(Number);document.getElementById(`interval${i}`).value=(second[0]*60+second[1])-(first[0]*60+first[1]);}}}}
-loadTimeSlots();
 
 // アクセスログ
 async function logAccess(adminId,action){await addDoc(collection(db,"accessLogs"),{adminId:adminId||"不明",action,createdAt:serverTimestamp()});}
@@ -270,7 +283,7 @@ onSnapshot(q,snap=>{tbody.innerHTML="";snap.forEach(doc=>{const d=doc.data();con
 document.getElementById("clearLogsBtn").onclick=async()=>{
 if(!confirm("本当に削除しますか？"))return;
 const snap=await getDocs(collection(db,"accessLogs"));
-for(const docSnap of snap.docs) await deleteDoc(doc(db,"accessLogs",docSnap.id));
+for(const docSnap of snap.docs) await doc(db,"accessLogs",docSnap.id).delete();
 };
 </script>
 </body>
