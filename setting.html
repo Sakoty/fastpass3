@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ファストパス設定＋ログ（修正版）</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ファストパス設定＋ログ（永続版）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
 <style>
@@ -165,6 +165,8 @@ function checkLogin(){
     loginDiv.style.display="none";
     mainContent.style.display="block";
     initTabs();
+    updateStatusDisplay();
+    loadTimeSlots();
   }
 }
 checkLogin();
@@ -180,6 +182,8 @@ document.getElementById("loginForm").onsubmit = e=>{
     mainContent.style.display="block";
     errorMsg.textContent="";
     initTabs();
+    updateStatusDisplay();
+    loadTimeSlots();
     logAccess(id,"ログイン成功");
   } else {
     errorMsg.textContent="IDまたはパスワードが違います";
@@ -233,14 +237,8 @@ async function updateStatusDisplay(){
 }
 updateStatusDisplay();
 
-document.getElementById("startBtn").onclick = async()=>{
-  await setIssueStatus(true);
-  await logAccess(localStorage.getItem("adminId"),"発券開始");
-};
-document.getElementById("stopBtn").onclick = async()=>{
-  await setIssueStatus(false);
-  await logAccess(localStorage.getItem("adminId"),"発券停止");
-};
+document.getElementById("startBtn").onclick = async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem("adminId"),"発券開始"); };
+document.getElementById("stopBtn").onclick = async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem("adminId"),"発券停止"); };
 
 // 時間処理
 function pad2(n){return n.toString().padStart(2,"0");}
@@ -267,7 +265,7 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
     const limit=parseInt(document.getElementById(`limit${i}`).value);
     if(start && end && start<end && limit>0 && interval>0){
       const slots=generateSlots(start,end,interval);
-      frames.push({frame:i, slots, limits:Array(slots.length).fill(limit), interval});
+      frames.push({start,end,interval,slots,limits:Array(slots.length).fill(limit)});
     }
   }
   if(!frames.length){ alert("最低1つの時間枠を入力してください"); return; }
@@ -277,6 +275,21 @@ document.getElementById("setTimeSlots").onsubmit = async e=>{
     logAccess(localStorage.getItem("adminId"),"時間帯設定保存");
   }catch(e){ alert("保存失敗: "+e.message); }
 };
+
+// 時間帯設定ロード
+async function loadTimeSlots(){
+  const tsSnap = await getDoc(doc(db,"settings","timeSlots"));
+  if(tsSnap.exists()){
+    const frames=tsSnap.data().frames||[];
+    frames.forEach((f,i)=>{
+      if(i>=3) return;
+      document.getElementById(`start${i+1}`).value = f.start||"";
+      document.getElementById(`end${i+1}`).value = f.end||"";
+      document.getElementById(`interval${i+1}`).value = f.interval||10;
+      document.getElementById(`limit${i+1}`).value = f.limits && f.limits[0] ? f.limits[0] : 1;
+    });
+  }
+}
 
 // 特別パス発券
 document.getElementById("specialForm").onsubmit = async e=>{
@@ -297,51 +310,6 @@ document.getElementById("specialForm").onsubmit = async e=>{
     logAccess(localStorage.getItem("adminId"),`特別パス発券: ${id}`);
   }catch(e){ alert("発行失敗: "+e.message); }
 };
-
-// 時間帯設定ロード
-async function loadTimeSlots(){
-  const tsSnap = await getDoc(doc(db,"settings","timeSlots"));
-  if(tsSnap.exists()){
-    const frames=tsSnap.data().frames||[];
-    frames.forEach((f,i)=>{
-      if(i>=3) return;
-      const startElem=document.getElementById(`start${i+1}`);
-      const endElem=document.getElementById(`end${i+1}`);
-      const intervalElem=document.getElementById(`interval${i+1}`);
-      const limitElem=document.getElementById(`limit${i+1}`);
-      if(f.slots && f.slots[0]){
-        const times=f.slots[0].split("〜");
-        startElem.value = times[0];
-        endElem.value = times[1];
-      }
-      if(f.interval) intervalElem.value=f.interval;
-      if(f.limits && f.limits[0]) limitElem.value=f.limits[0];
-    });
-  }
-}
-loadTimeSlots();
-
-// 発券数に応じた自動案内時間計算
-async function getNextAvailableTime(frameIndex){
-  const tsSnap = await getDoc(doc(db,"settings","timeSlots"));
-  if(!tsSnap.exists()) return null;
-  const frame=tsSnap.data().frames[frameIndex];
-  if(!frame) return null;
-  const passSnap = await getDocs(collection(db,"passes"));
-  const counts=frame.slots.map(_=>0);
-  passSnap.forEach(doc=>{
-    const d=doc.data();
-    if(d.time && !d.used){
-      frame.slots.forEach((slot,i)=>{
-        if(d.time===slot) counts[i]+=d.numPeople||1;
-      });
-    }
-  });
-  for(let i=0;i<frame.slots.length;i++){
-    if(counts[i]<frame.limits[i]) return frame.slots[i];
-  }
-  return null; // 空きなし
-}
 
 // アクセスログ
 async function logAccess(adminId,action){
