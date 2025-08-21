@@ -6,7 +6,7 @@
 <title>プライオリティパス管理画面</title>
 <style>
 body { font-family: "Segoe UI", sans-serif; padding: 15px; background: #fefbd8; max-width: 900px; margin: auto; color: #333; }
-h1 { text-align: center; color: #444; }
+h1, h2 { text-align: center; color: #444; }
 .table-container { overflow-x: auto; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; border-radius: 6px; }
 table { width: 100%; border-collapse: collapse; min-width: 600px; }
 th, td { border: 1px solid #ddd; padding: 10px 8px; text-align: center; vertical-align: middle; font-size: 14px; }
@@ -22,8 +22,6 @@ button { padding: 6px 10px; font-size: 0.9rem; cursor: pointer; border: none; bo
 .status-expired { color: darkorange; font-weight: bold; }
 #deleteAllBtn { background-color: #d32f2f; color: white; margin: 20px auto 0 auto; display: block; max-width: 180px; font-weight: bold; box-shadow: 0 4px 10px rgba(211, 47, 47, 0.4); transition: background-color 0.3s ease; }
 #deleteAllBtn:hover { background-color: #9b1d1d; }
-@media (max-width: 600px) { body { padding: 10px 8px; } th, td { font-size: 12px; padding: 8px 6px; } button { font-size: 0.85rem; max-width: 100px; } #deleteAllBtn { max-width: 100%; margin-top: 15px; } }
-
 #loginDiv { max-width: 400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
 #loginDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
 #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
@@ -32,6 +30,8 @@ button { padding: 6px 10px; font-size: 0.9rem; cursor: pointer; border: none; bo
 #mainContent { display:none; }
 #logoutBtn { margin-top:10px; padding:8px 16px; background:#e74c3c; color:white; border:none; border-radius:5px; cursor:pointer; }
 #logoutBtn:hover { background:#c0392b; }
+#accessLogs { border:1px solid #ccc; background:#fff; padding:10px; max-height:300px; overflow-y:auto; color:black; font-size:0.85rem; margin-top:20px; }
+@media (max-width: 600px) { body { padding: 10px 8px; } th, td { font-size: 12px; padding: 8px 6px; } button { font-size: 0.85rem; max-width: 100px; } #deleteAllBtn { max-width: 100%; margin-top: 15px; } }
 </style>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -45,7 +45,6 @@ const firebaseConfig = {
   messagingSenderId: "858745521872",
   appId: "1:858745521872:web:29289b673855097e1200d5"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -61,6 +60,7 @@ const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const loginForm = document.getElementById("loginForm");
+const logsDiv = document.getElementById("accessLogs");
 
 // ログアクセス関数
 async function logAccess(adminId, action, page){
@@ -95,7 +95,12 @@ loginForm.onsubmit = e => {
 
 function startApp(){
   const logoutBtn = document.getElementById("logoutBtn");
-  logoutBtn.onclick = ()=>{ localStorage.removeItem("adminId"); localStorage.removeItem("adminPass"); loginDiv.style.display="block"; mainContent.style.display="none"; };
+  logoutBtn.onclick = ()=>{
+    localStorage.removeItem("adminId");
+    localStorage.removeItem("adminPass");
+    loginDiv.style.display="block";
+    mainContent.style.display="none";
+  };
 
   const passesRef = collection(db, "passes");
   const q = query(passesRef, orderBy("createdAt","desc"));
@@ -147,7 +152,6 @@ function startApp(){
         if(confirm(`パス「${data.id}」を削除しますか？`)){
           try{
             await deleteDoc(doc(db,"passes",id));
-            // 削除ログ追加
             await logAccess(localStorage.getItem("adminId"),`削除: ${data.id}`, "admin");
             alert("削除しました");
           } catch(err){ alert("削除失敗: "+err.message); }
@@ -167,11 +171,24 @@ function startApp(){
     try{
       const snapshot = await getDocs(passesRef);
       await Promise.all(snapshot.docs.map(d=>deleteDoc(doc(db,"passes",d.id))));
-      // 全件削除ログ追加
       await logAccess(localStorage.getItem("adminId"),"全件削除","admin");
       alert("全件削除しました");
     } catch(err){ alert("削除失敗: "+err.message); }
   };
+
+  // リアルタイムで操作ログを表示
+  const logsRef = collection(db, "accessLogs");
+  const logsQuery = query(logsRef, orderBy("timestamp", "desc"));
+  onSnapshot(logsQuery, snapshot => {
+    logsDiv.innerHTML = "";
+    snapshot.forEach(docSnap=>{
+      const data = docSnap.data();
+      const timeStr = data.timestamp?.toDate()?.toLocaleString() || "-";
+      const logLine = document.createElement("div");
+      logLine.textContent = `${timeStr} | ${data.adminId || "-"} | ${data.page || "-"} | ${data.action}`;
+      logsDiv.appendChild(logLine);
+    });
+  });
 }
 </script>
 </head>
@@ -205,6 +222,8 @@ function startApp(){
     </table>
   </div>
   <button id="deleteAllBtn">すべてのプライオリティパスを一括削除</button>
+  <h2>操作ログ</h2>
+  <div id="accessLogs"></div>
   <button id="logoutBtn">ログアウト</button>
 </div>
 </body>
