@@ -7,34 +7,34 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
 <style>
-  body { font-family:"Segoe UI",sans-serif; background:#f5f7fa; margin:0; padding:0; }
-  .container { max-width:600px; margin:auto; padding:10px; }
-  h1 { text-align:center; margin-bottom:5px; }
-  #clock { text-align:center; font-weight:bold; color:#555; margin-bottom:10px; }
-  .status-badge { display:inline-block; padding:5px 12px; border-radius:15px; font-weight:bold; font-size:0.9rem; margin-top:5px; }
-  .active { background-color:#28a745; color:white; }
-  .inactive { background-color:#dc3545; color:white; }
-  .card { background:white; border-radius:10px; padding:15px; margin-top:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
-  label { font-weight:bold; display:block; margin-top:10px; font-size:0.9rem; }
-  input { width:100%; padding:8px; margin-top:4px; border-radius:5px; border:1px solid #ccc; font-size:1rem; box-sizing:border-box; }
-  button { padding:14px; margin:5px 0; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size:1rem; }
-  button.primary { background:#007bff; color:white; }
-  button.success { background:#28a745; color:white; }
-  button.danger { background:#dc3545; color:white; }
-  .time-slot-group { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  @media(max-width:500px){ .time-slot-group { grid-template-columns:1fr; } }
-  .tabs { display:flex; justify-content:space-around; margin-bottom:10px; flex-wrap:wrap; }
-  .tab { flex:1; padding:14px; text-align:center; cursor:pointer; background:#ddd; border-radius:8px 8px 0 0; font-weight:bold; margin-bottom:2px; }
-  .tab.active { background:#007bff; color:white; }
-  .tab-content { display:none; }
-  .tab-content.active { display:block; }
-  table { width:100%; border-collapse: collapse; margin-top:10px; }
-  th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
-  #logTab table, #logTab th, #logTab td { color:#000; }
-  #loginDiv, #logAuthDiv { max-width:400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
-  #loginDiv input, #logAuthDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
-  #loginDiv button, #logAuthDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
-  #errorMsg, #logAuthMsg { color:red; margin-top:10px; text-align:center; }
+body { font-family:"Segoe UI",sans-serif; background:#f5f7fa; margin:0; padding:0; }
+.container { max-width:600px; margin:auto; padding:10px; }
+h1 { text-align:center; margin-bottom:5px; }
+#clock { text-align:center; font-weight:bold; color:#555; margin-bottom:10px; }
+.status-badge { display:inline-block; padding:5px 12px; border-radius:15px; font-weight:bold; font-size:0.9rem; margin-top:5px; }
+.active { background-color:#28a745; color:white; }
+.inactive { background-color:#dc3545; color:white; }
+.card { background:white; border-radius:10px; padding:15px; margin-top:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+label { font-weight:bold; display:block; margin-top:10px; font-size:0.9rem; }
+input { width:100%; padding:8px; margin-top:4px; border-radius:5px; border:1px solid #ccc; font-size:1rem; box-sizing:border-box; }
+button { padding:14px; margin:5px 0; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size:1rem; }
+button.primary { background:#007bff; color:white; }
+button.success { background:#28a745; color:white; }
+button.danger { background:#dc3545; color:white; }
+.time-slot-group { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+@media(max-width:500px){ .time-slot-group { grid-template-columns:1fr; } }
+.tabs { display:flex; justify-content:space-around; margin-bottom:10px; flex-wrap:wrap; }
+.tab { flex:1; padding:14px; text-align:center; cursor:pointer; background:#ddd; border-radius:8px 8px 0 0; font-weight:bold; margin-bottom:2px; }
+.tab.active { background:#007bff; color:white; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+table { width:100%; border-collapse: collapse; margin-top:10px; }
+th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
+#logTab table, #logTab th, #logTab td { color:#000; }
+#loginDiv, #logAuthDiv { max-width:400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+#loginDiv input, #logAuthDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
+#loginDiv button, #logAuthDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
+#errorMsg, #logAuthMsg { color:red; margin-top:10px; text-align:center; }
 </style>
 </head>
 <body>
@@ -145,7 +145,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- 管理者 ---
+// 管理者設定
 const allowedAdmins = [
   { id:"Sakoty", password:"3214" },
   { id:"seseguchi914", password:"0914" },
@@ -311,11 +311,12 @@ document.getElementById("specialForm").onsubmit = async e=>{
   }catch(e){ alert("発行失敗: "+e.message); }
 };
 
-// アクセスログ
+// --- アクセスログ共通関数 ---
 async function logAccess(adminId,action){
   await addDoc(collection(db,"accessLogs"),{
     adminId:adminId||"不明",
-    action, createdAt:serverTimestamp()
+    action,
+    createdAt:serverTimestamp()
   });
 }
 
@@ -352,6 +353,16 @@ document.getElementById("clearLogsBtn").onclick = async()=>{
   const snap=await getDocs(collection(db,"accessLogs"));
   for(const docSnap of snap.docs) await deleteDoc(doc(db,"accessLogs",docSnap.id));
 };
+
+// --- パス削除関数（アクセスログ記録付き） ---
+async function deletePass(passId, docId){
+  if(!confirm(`${passId} を削除しますか？`)) return;
+  try{
+    await deleteDoc(doc(db,"passes",docId));
+    await logAccess(localStorage.getItem("adminId"), `パス削除: ${passId}`);
+    alert(`${passId} を削除しました`);
+  }catch(e){ alert("削除失敗: "+e.message); }
+}
 </script>
 </body>
 </html>
