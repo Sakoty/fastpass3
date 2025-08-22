@@ -133,7 +133,7 @@ th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; color:black;
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Firebase初期化
 const firebaseConfig = {
@@ -174,7 +174,7 @@ document.querySelectorAll(".tab").forEach(tab=>{
 
 // ログイン処理
 document.getElementById("passLoginBtn").onclick=()=>{ passForm.style.display="block"; };
-document.getElementById("loginSubmit").onclick=()=>{
+document.getElementById("loginSubmit").onclick=()=> {
   const id=document.getElementById("adminId").value.trim();
   const pass=document.getElementById("adminPass").value.trim();
   if(allowedAdmins.some(a=>a.id===id && a.password===pass)){ loginSuccess(id); }
@@ -182,16 +182,19 @@ document.getElementById("loginSubmit").onclick=()=>{
 };
 
 // NFCカードログイン
-document.getElementById("cardLoginBtn").onclick=()=>{
-  const script=document.createElement("script");
-  script.src="https://cdn.socket.io/4.7.1/socket.io.min.js";
-  script.onload=()=>{ initNFC(); };
-  document.body.appendChild(script);
+document.getElementById("cardLoginBtn").onclick = () => {
+  if(!window.io) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.socket.io/4.7.1/socket.io.min.js";
+    script.onload = () => { initNFC(); };
+    document.body.appendChild(script);
+  } else { initNFC(); }
 };
-function initNFC(){
+
+function initNFC() {
   const socket = io("http://localhost:3000");
   socket.on("nfc-auth", data=>{
-    if(data.success){ loginSuccess("NFC:"+data.uid); }
+    if(data.success){ loginSuccess("NFC:" + data.uid); alert("カード認証成功: "+data.uid); }
     if(data.removed){ logout(); }
   });
 }
