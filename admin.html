@@ -24,7 +24,7 @@ button { padding: 6px 10px; font-size: 0.9rem; cursor: pointer; border: none; bo
 #deleteAllBtn:hover { background-color: #9b1d1d; }
 #loginDiv { max-width: 400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
 #loginDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
-#loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
+#loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; margin-bottom:5px; }
 #loginDiv button:hover { background:#0056b3; }
 #errorMsg { color:red; margin-top:10px; text-align:center; }
 #mainContent { display:none; }
@@ -48,13 +48,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 管理者情報（NFC UIDを追加）
+// 管理者情報
 const allowedAdmins = [
-  { id: "Sakoty", password: "3214", nfcId:"04A224B18C6480" },
-  { id: "seseguchi914", password: "0914", nfcId:"04B336C29D7481" },
-  { id: "2", password: "1928mickeymouse", nfcId:"04C447D30E8592" },
-  { id: "3", password: "1928mickeymouse", nfcId:"04D558E41F9603" },
-  { id: "4", password: "1928mickeymouse", nfcId:"04E669F52A0714" }
+  { id: "Sakoty", password: "3214", nfcId: "AB12CD34" },
+  { id: "seseguchi914", password: "0914", nfcId: "EF56GH78" },
+  { id: "2", password: "1928mickeymouse", nfcId: "12345678" }
 ];
 
 const loginDiv = document.getElementById("loginDiv");
@@ -62,6 +60,7 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const loginForm = document.getElementById("loginForm");
 const logsDiv = document.getElementById("accessLogs");
+const nfcMsg = document.getElementById("nfcMsg");
 
 // ログアクセス関数
 async function logAccess(adminId, action, page){
@@ -69,53 +68,24 @@ async function logAccess(adminId, action, page){
   catch(err){ console.error("ログ記録エラー:",err); }
 }
 
-// NFC認証関数
-async function requireNFCAuth(){
-  if(!("NDEFReader" in window)){ alert("NFC非対応ブラウザです"); return false; }
-  try{
-    const ndef = new NDEFReader();
-    await ndef.scan();
-    return new Promise((resolve)=>{
-      ndef.onreading = event => {
-        const nfcId = event.serialNumber.toUpperCase();
-        if(allowedAdmins.some(a=>a.nfcId===nfcId)){
-          localStorage.setItem("adminId", allowedAdmins.find(a=>a.nfcId===nfcId).id);
-          localStorage.setItem("adminPass", allowedAdmins.find(a=>a.nfcId===nfcId).password);
-          resolve(true);
-        } else { resolve(false); }
-      };
-    });
-  } catch(err){ console.error(err); return false; }
-}
-
 // ログイン処理
-window.addEventListener("DOMContentLoaded", async ()=>{
+window.addEventListener("DOMContentLoaded", ()=>{
   const storedId = localStorage.getItem("adminId");
-  const storedPass = localStorage.getItem("adminPass");
-  if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
+  if(storedId && allowedAdmins.some(a=>a.id===storedId)){
     loginDiv.style.display = "none";
     mainContent.style.display = "block";
     startApp();
-  } else {
-    // NFCでのログインも可能
-    if(confirm("NFCカードでログインしますか？")){
-      const authorized = await requireNFCAuth();
-      if(authorized){
-        loginDiv.style.display = "none";
-        mainContent.style.display = "block";
-        startApp();
-      }
-    }
   }
 });
 
+// パスワードログイン
 loginForm.onsubmit = e => {
   e.preventDefault();
   const inputId = document.getElementById("adminId").value.trim();
   const inputPass = document.getElementById("adminPass").value;
-  if(allowedAdmins.some(a => a.id === inputId && a.password === inputPass)){
-    localStorage.setItem("adminId", inputId);
-    localStorage.setItem("adminPass", inputPass);
+  const admin = allowedAdmins.find(a=>a.id===inputId && a.password===inputPass);
+  if(admin){
+    localStorage.setItem("adminId", admin.id);
     loginDiv.style.display = "none";
     mainContent.style.display = "block";
     errorMsg.textContent = "";
@@ -123,11 +93,30 @@ loginForm.onsubmit = e => {
   } else { errorMsg.textContent = "IDまたはパスワードが違います"; }
 };
 
+// NFCログイン
+document.getElementById("nfcLoginBtn").onclick = async ()=>{
+  nfcMsg.textContent = "カードをかざしてください...";
+  try{
+    const ndef = new NDEFReader();
+    await ndef.scan();
+    ndef.onreading = async e => {
+      const nfcId = Array.from(e.serialNumber).map(c=>c.charCodeAt(0).toString(16)).join('');
+      const admin = allowedAdmins.find(a=>a.nfcId === nfcId);
+      if(admin){
+        localStorage.setItem("adminId", admin.id);
+        loginDiv.style.display="none";
+        mainContent.style.display="block";
+        nfcMsg.textContent = "";
+        startApp();
+      } else { nfcMsg.textContent = "このカードは許可されていません"; }
+    }
+  }catch(err){ nfcMsg.textContent = "NFC読み取りエラー: "+err.message; }
+};
+
 function startApp(){
   const logoutBtn = document.getElementById("logoutBtn");
   logoutBtn.onclick = ()=>{
     localStorage.removeItem("adminId");
-    localStorage.removeItem("adminPass");
     loginDiv.style.display="block";
     mainContent.style.display="none";
   };
@@ -166,7 +155,7 @@ function startApp(){
         <td>${typeLabel}</td>
         <td class="${usedStatusClass}">${usedStatusText}</td>
         <td>
-          <button class="btn-toggle-used">${data.used ? "未使用に戻す":"使用済みにする"}</button><br>
+          <button class="btn-toggle-used"> ${data.used ? "未使用に戻す":"使用済みにする"} </button><br>
           <button class="btn-delete">削除</button>
         </td>
       `;
@@ -175,19 +164,19 @@ function startApp(){
         try{
           await updateDoc(doc(db,"passes",id),{used:!data.used});
           await logAccess(localStorage.getItem("adminId"),`使用済み切替: ${data.id}`, "admin");
-        } catch(err){ alert("切替失敗: "+err.message); }
+        }catch(err){ alert("切替失敗: "+err.message); }
       });
 
       tr.querySelector(".btn-delete").addEventListener("click", async()=>{
-        if(confirm(`パス「${data.id}」を削除しますか？`)){
-          const authorized = await requireNFCAuth();
-          if(!authorized){ alert("NFC認証に失敗しました"); return; }
-          try{
-            await deleteDoc(doc(db,"passes",id));
-            await logAccess(localStorage.getItem("adminId"),`削除: ${data.id}`, "admin");
-            alert("削除しました");
-          } catch(err){ alert("削除失敗: "+err.message); }
-        }
+        const adminPass = prompt("パスワードまたはカードで認証してください");
+        if(!adminPass){ return; }
+        const isPasswordOk = allowedAdmins.some(a=>a.password===adminPass && a.id===localStorage.getItem("adminId"));
+        if(!isPasswordOk){ alert("認証失敗"); return; }
+        try{
+          await deleteDoc(doc(db,"passes",id));
+          await logAccess(localStorage.getItem("adminId"),`削除: ${data.id}`, "admin");
+          alert("削除しました");
+        }catch(err){ alert("削除失敗: "+err.message); }
       });
 
       tbody.appendChild(tr);
@@ -197,18 +186,18 @@ function startApp(){
   onSnapshot(q,snapshot=>{ renderPasses(snapshot.docs); });
 
   document.getElementById("deleteAllBtn").onclick = async()=>{
+    const adminPass = prompt("パスワードまたはカードで認証してください");
+    if(!allowedAdmins.some(a=>a.password===adminPass && a.id===localStorage.getItem("adminId"))){ alert("認証失敗"); return; }
     if(!confirm("本当にすべてのパスを削除しますか？")) return;
-    const authorized = await requireNFCAuth();
-    if(!authorized){ alert("NFC認証に失敗しました"); return; }
     try{
       const snapshot = await getDocs(passesRef);
       await Promise.all(snapshot.docs.map(d=>deleteDoc(doc(db,"passes",d.id))));
       await logAccess(localStorage.getItem("adminId"),"全件削除","admin");
       alert("全件削除しました");
-    } catch(err){ alert("削除失敗: "+err.message); }
+    }catch(err){ alert("削除失敗: "+err.message); }
   };
 
-  // リアルタイムで操作ログを表示
+  // リアルタイム操作ログ表示
   const logsRef = collection(db, "accessLogs");
   const logsQuery = query(logsRef, orderBy("timestamp", "desc"));
   onSnapshot(logsQuery, snapshot => {
@@ -227,12 +216,17 @@ function startApp(){
 <body>
 <div id="loginDiv">
   <h1>管理者ログイン</h1>
-  <form id="loginForm">
+  <button id="pwLoginBtn">パスワードでログイン</button>
+  <button id="nfcLoginBtn">NFCカードでログイン</button>
+
+  <form id="loginForm" style="display:none;">
     <input type="text" id="adminId" placeholder="管理者ID">
     <input type="password" id="adminPass" placeholder="パスワード">
     <button type="submit">ログイン</button>
     <div id="errorMsg"></div>
   </form>
+
+  <div id="nfcMsg" style="text-align:center;color:green;margin-top:10px;"></div>
 </div>
 
 <div id="mainContent">
