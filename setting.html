@@ -135,6 +135,7 @@ th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; color:black;
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// Firebase初期化
 const firebaseConfig = {
   apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
   authDomain: "fastpass-system.firebaseapp.com",
@@ -146,11 +147,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// 管理者リスト
 const allowedAdmins = [
   {id:"Sakoty", password:"3214"},
   {id:"seseguchi914", password:"0914"}
 ];
 
+// DOM取得
 const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
 const passForm = document.getElementById("passForm");
@@ -161,7 +164,7 @@ setInterval(()=>{ document.getElementById("clock").textContent=new Date().toLoca
 
 // タブ切替
 document.querySelectorAll(".tab").forEach(tab=>{
-  tab.onclick=()=>{
+  tab.onclick=()=> {
     document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
     document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
     tab.classList.add("active");
