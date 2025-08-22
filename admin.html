@@ -48,12 +48,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// 管理者情報（NFC UIDを追加）
 const allowedAdmins = [
-  { id: "Sakoty", password: "3214" },
-  { id: "seseguchi914", password: "0914" },
-  { id: "2", password: "1928mickeymouse" },
-  { id: "3", password: "1928mickeymouse" },
-  { id: "4", password: "1928mickeymouse" }
+  { id: "Sakoty", password: "3214", nfcId:"04A224B18C6480" },
+  { id: "seseguchi914", password: "0914", nfcId:"04B336C29D7481" },
+  { id: "2", password: "1928mickeymouse", nfcId:"04C447D30E8592" },
+  { id: "3", password: "1928mickeymouse", nfcId:"04D558E41F9603" },
+  { id: "4", password: "1928mickeymouse", nfcId:"04E669F52A0714" }
 ];
 
 const loginDiv = document.getElementById("loginDiv");
@@ -68,14 +69,43 @@ async function logAccess(adminId, action, page){
   catch(err){ console.error("ログ記録エラー:",err); }
 }
 
+// NFC認証関数
+async function requireNFCAuth(){
+  if(!("NDEFReader" in window)){ alert("NFC非対応ブラウザです"); return false; }
+  try{
+    const ndef = new NDEFReader();
+    await ndef.scan();
+    return new Promise((resolve)=>{
+      ndef.onreading = event => {
+        const nfcId = event.serialNumber.toUpperCase();
+        if(allowedAdmins.some(a=>a.nfcId===nfcId)){
+          localStorage.setItem("adminId", allowedAdmins.find(a=>a.nfcId===nfcId).id);
+          localStorage.setItem("adminPass", allowedAdmins.find(a=>a.nfcId===nfcId).password);
+          resolve(true);
+        } else { resolve(false); }
+      };
+    });
+  } catch(err){ console.error(err); return false; }
+}
+
 // ログイン処理
-window.addEventListener("DOMContentLoaded", ()=>{
+window.addEventListener("DOMContentLoaded", async ()=>{
   const storedId = localStorage.getItem("adminId");
   const storedPass = localStorage.getItem("adminPass");
   if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
     loginDiv.style.display = "none";
     mainContent.style.display = "block";
     startApp();
+  } else {
+    // NFCでのログインも可能
+    if(confirm("NFCカードでログインしますか？")){
+      const authorized = await requireNFCAuth();
+      if(authorized){
+        loginDiv.style.display = "none";
+        mainContent.style.display = "block";
+        startApp();
+      }
+    }
   }
 });
 
@@ -150,6 +180,8 @@ function startApp(){
 
       tr.querySelector(".btn-delete").addEventListener("click", async()=>{
         if(confirm(`パス「${data.id}」を削除しますか？`)){
+          const authorized = await requireNFCAuth();
+          if(!authorized){ alert("NFC認証に失敗しました"); return; }
           try{
             await deleteDoc(doc(db,"passes",id));
             await logAccess(localStorage.getItem("adminId"),`削除: ${data.id}`, "admin");
@@ -165,9 +197,9 @@ function startApp(){
   onSnapshot(q,snapshot=>{ renderPasses(snapshot.docs); });
 
   document.getElementById("deleteAllBtn").onclick = async()=>{
-    const password = prompt("パスワードを入力してください");
-    if(!allowedAdmins.some(a=>a.password===password)){ alert("パスワードが違います"); return; }
     if(!confirm("本当にすべてのパスを削除しますか？")) return;
+    const authorized = await requireNFCAuth();
+    if(!authorized){ alert("NFC認証に失敗しました"); return; }
     try{
       const snapshot = await getDocs(passesRef);
       await Promise.all(snapshot.docs.map(d=>deleteDoc(doc(db,"passes",d.id))));
