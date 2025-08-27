@@ -500,6 +500,18 @@ function initNFC(isLogin=false, callback=null){
   if(id){ loginSuccess(id); }
 })();
 
+  window.addEventListener('beforeunload', (event) => {
+  // リロードの場合はスキップ
+  if (performance.getEntriesByType('navigation')[0]?.type === 'reload') return;
+
+  // ページ遷移ならログアウト処理
+  const adminId = localStorage.getItem('adminId');
+  if (adminId) {
+    logAccess(adminId, 'ページ遷移によるログアウト', 'auto');
+    localStorage.removeItem('adminId');
+  }
+});
+
 </script>
 </body>
 </html>
