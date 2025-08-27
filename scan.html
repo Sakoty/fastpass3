@@ -23,8 +23,9 @@
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
   authDomain: "fastpass-system.firebaseapp.com",
@@ -54,30 +55,31 @@ const logsDiv = document.createElement("div");
 logsDiv.id = "logs";
 document.body.appendChild(logsDiv);
 
-// ログ表示用関数
+// ---- ログ表示 ----
 function showLog(message){
   const p = document.createElement("div");
   p.textContent = message;
-  logsDiv.prepend(p); // 最新を上に
+  logsDiv.prepend(p);
 }
 
-// ログ書き込み
-async function logAccess(adminId, action){
+// ---- ログ書き込み（page付き）----
+async function logAccess(adminId, action, page = "scan"){
   try{
     const docRef = await addDoc(collection(db,"accessLogs"),{
-      adminId: adminId||"不明",
+      adminId: adminId || "不明",
       action,
+      page,
       createdAt: serverTimestamp()
     });
     console.log("ログ記録成功:", docRef.id);
-    showLog(`${new Date().toLocaleString()} | ${adminId||"不明"} | ${action}`);
+    showLog(`${new Date().toLocaleString()} | ${adminId||"不明"} | ${page} | ${action}`);
   }catch(e){ 
     console.error("ログ記録失敗:", e); 
     showLog(`ログ記録失敗: ${e.message}`);
   }
 }
 
-// ログイン状態チェック
+// ---- ログイン処理 ----
 window.addEventListener("DOMContentLoaded", ()=>{
   const storedId = localStorage.getItem("adminId");
   const storedPass = localStorage.getItem("adminPass");
@@ -135,7 +137,12 @@ function startScan(){
 
   function parseTimeRange(rangeStr){
     const [startStr,endStr]=rangeStr.split("〜");
-    const toDate=(timeStr)=>{ const [h,m]=timeStr.split(":").map(Number); const d=new Date(); d.setHours(h,m,0,0); return d; };
+    const toDate=(timeStr)=>{
+      const [h,m]=timeStr.split(":").map(Number);
+      const d=new Date();
+      d.setHours(h,m,0,0);
+      return d;
+    };
     return [toDate(startStr),toDate(endStr)];
   }
 
@@ -159,7 +166,7 @@ function startScan(){
         const now = new Date();
         if(now<start){
           pendingDoc = docSnap; pendingCode=code;
-          modalText.textContent=`このパスは案内時間前ですが、使用済みにしますか？（${code}）`;
+          modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
           modal.style.display="flex";
         } else if(now>end){
           showResult(`パス ${code} は案内時間を過ぎています`,true);
@@ -177,7 +184,12 @@ function startScan(){
           isReading=false;
         }
       }
-    } catch(e){ console.error(e); showResult("エラーが発生しました",true); logAccess(localStorage.getItem("adminId"),`エラー: ${code} ${e.message}`); isReading=false; }
+    } catch(e){ 
+      console.error(e); 
+      showResult("エラーが発生しました",true); 
+      logAccess(localStorage.getItem("adminId"),`エラー: ${code} ${e.message}`); 
+      isReading=false; 
+    }
   });
 
   confirmBtn.onclick=async()=>{
@@ -201,7 +213,6 @@ function startScan(){
 </script>
 </head>
 <body>
-  <!-- ログイン画面 -->
   <div id="loginDiv">
     <h1>管理者ログイン</h1>
     <form id="loginForm">
@@ -212,7 +223,6 @@ function startScan(){
     </form>
   </div>
 
-  <!-- 管理画面 -->
   <div id="mainContent">
     <h1>プライオリティパススキャン</h1>
     <video id="video" autoplay muted playsinline></video>
