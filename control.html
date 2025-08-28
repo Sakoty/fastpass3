@@ -7,9 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
 <style>
-  :root {
-    --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333;
-  }
+  :root { --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333; }
   *{box-sizing:border-box}
   body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
   .container { max-width:980px; margin:auto; padding:14px; }
@@ -46,8 +44,6 @@
   #nfcPrompt { display:none; text-align:center; color:#e11d48; font-weight:700; }
   .inline { display:inline-flex; gap:8px; align-items:center; }
   .w-auto { width:auto; }
-  /* 追加UI改善 */
-  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 </style>
 </head>
 <body>
@@ -184,7 +180,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
@@ -198,7 +194,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* =============== ローカル管理者（簡易） =============== */
+/* =============== 管理者情報 =============== */
 const allowedAdmins = [
   {id:"Sakoty", password:"3214"},
   {id:"seseguchi914", password:"0914"}
@@ -209,11 +205,12 @@ const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const nfcPrompt = document.getElementById("nfcPrompt");
+const passesTableBody = document.getElementById('passesTableBody');
 
-// 時計
+/* ================= 時計 ================= */
 setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent = d.toLocaleString(); },1000);
 
-// タブ切替
+/* ================= タブ切替 ================= */
 Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
   tab.addEventListener('click', ()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
@@ -223,9 +220,8 @@ Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
   });
 });
 
-/* ================= ログイン処理 ================= */
-const passLoginBtn = document.getElementById('loginSubmit');
-passLoginBtn.onclick = () => {
+/* ================= ログイン ================= */
+document.getElementById('loginSubmit').onclick = () => {
   const id = document.getElementById('adminId').value.trim();
   const pass = document.getElementById('adminPass').value.trim();
   if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
@@ -235,9 +231,7 @@ passLoginBtn.onclick = () => {
   }
 };
 
-// NFCログイン
-const cardLoginBtn = document.getElementById('cardLoginBtn');
-cardLoginBtn.onclick = () => { loadSocketIfNeeded(() => initNFC(true)); };
+document.getElementById('cardLoginBtn').onclick = () => { loadSocketIfNeeded(() => initNFC(true)); };
 
 function loginSuccess(adminId){
   localStorage.setItem('adminId', adminId);
@@ -249,15 +243,13 @@ function loginSuccess(adminId){
   startPassesListener();
 }
 
-function logout(){
+document.getElementById('logoutBtn').onclick = () => {
   const id = localStorage.getItem('adminId')||'不明';
   logAccess(id, 'ログアウト', 'admin');
   localStorage.removeItem('adminId');
   mainContent.style.display='none';
   loginDiv.style.display='block';
-}
-
-document.getElementById('logoutBtn').onclick = logout;
+};
 
 /* ================= 発券ステータス ================= */
 async function setIssueStatus(status){
@@ -321,45 +313,103 @@ document.getElementById('specialForm').onsubmit = async (e)=>{
   });
   alert('特別パス発券しました: '+id);
   e.target.reset();
-}
+};
 
 /* ================= パス一覧 ================= */
-const passesTableBody = document.getElementById('passesTableBody');
 let passesListener=null;
-
 function startPassesListener(){
   if(passesListener) passesListener();
   passesListener = onSnapshot(collection(db,'passes'), snap=>{
     passesTableBody.innerHTML='';
-    snap.docs.sort((a,b)=>a.data().id.localeCompare(b.data().id)).forEach
-<!-- ================= アクセスログ閲覧 ================= -->
-document.getElementById('logAuthBtn').onclick = async ()=>{
-  const pass = document.getElementById('logPass').value;
-  if(pass==='adminlog'){ // 簡易認証
-    document.getElementById('logContent').style.display='block';
-    loadLogs();
-  } else {
-    document.getElementById('logAuthMsg').textContent='パスワードが違います';
-  }
+    snap.docs.sort((a,b)=>a.data().id.localeCompare(b.data().id)).forEach(docSnap=>{
+      const d = docSnap.data();
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${d.id}</td>
+        <td>${d.name}</td>
+        <td>${d.people}</td>
+        <td>${d.start}〜${d.end}</td>
+        <td>${d.type}</td>
+        <td class="${d.status==='used'?'used':'unused'}">${d.status}</td>
+        <td><button class="js-del w-auto danger">削除(NFC)</button></td>
+      `;
+      tr.querySelector('.js-del').onclick = ()=>{
+        showInlineNFC(true);
+        initNFC(false, async (uid)=>{
+          if(!confirm(d.id+' を削除しますか？')) return;
+          await deleteDoc(doc(db,'passes',d.id));
+          showInlineNFC(false);
+        });
+      };
+      passesTableBody.appendChild(tr);
+    });
+  });
 }
+
+/* ================= 発券ID生成 ================= */
+async function generatePassId(){
+  const snap = await getDocs(collection(db,'passes'));
+  const nums = snap.docs.map(d=>parseInt(d.id.replace('FP',''))||0);
+  const next = (Math.max(0,...nums)+1).toString().padStart(3,'0');
+  return 'FP'+next;
+}
+
+/* ================= アクセスログ ================= */
+async function logAccess(admin,type,message){
+  await addDoc(collection(db,'accessLogs'),{
+    admin,type,message,time:serverTimestamp()
+  });
+}
+
+document.getElementById('logAuthBtn').onclick = async ()=>{
+  const pass = document.getElementById('logPass').value.trim();
+  if(pass==='adminlog'){
+    document.getElementById('logContent').style.display='block';
+    document.getElementById('logAuthMsg').textContent='';
+    await loadLogs();
+  } else { document.getElementById('logAuthMsg').textContent='パスワードが違います'; }
+};
 
 async function loadLogs(){
   const logsDiv = document.getElementById('accessLogs');
   logsDiv.innerHTML='';
-  const q = query(collection(db,'accessLogs'), orderBy('time','desc'));
+  const q = query(collection(db,'accessLogs'),orderBy('time','desc'));
   const snap = await getDocs(q);
-  snap.docs.forEach(d=>{
-    const data = d.data();
-    const time = data.time?.toDate?.()?.toLocaleString()||'-';
+  snap.docs.forEach(docSnap=>{
+    const d = docSnap.data();
+    const t = d.time?.toDate?.()?.toLocaleString()||'-';
     const div = document.createElement('div');
-    div.textContent = `[${time}] ${data.admin} - ${data.type} - ${data.message}`;
+    div.textContent=`[${t}] ${d.admin} - ${d.type} - ${d.message}`;
     logsDiv.appendChild(div);
   });
 }
 
 document.getElementById('clearLogsBtn').onclick = async ()=>{
-  if(!confirm('本当にログを全て削除しますか？')) return;
+  if(!confirm('本当にアクセスログを全て削除しますか？')) return;
   const snap = await getDocs(collection(db,'accessLogs'));
-  for(const d of snap.docs){ await deleteDoc(doc(db,'accessLogs',d.id)); }
-  loadLogs();
+  for(const docSnap of snap.docs){
+    await deleteDoc(doc(db,'accessLogs',docSnap.id));
+  }
+  await loadLogs();
 };
+
+/* ================= NFC (Web NFC/擬似) ================= */
+function showInlineNFC(show){ document.getElementById('nfcInlineMsg').style.display = show?'inline':'none'; }
+function initNFC(loginMode=false, callback=null){
+  if(!("NDEFReader" in window)){ alert('NFC未対応'); return; }
+  const reader = new NDEFReader();
+  if(loginMode) nfcPrompt.style.display='block';
+  reader.scan().then(()=>{
+    reader.onreading = event=>{
+      const uid = Array.from(event.serialNumber).map(n=>n.charCodeAt(0).toString(16)).join('');
+      if(loginMode){
+        const admin = allowedAdmins.find(a=>uid.includes(a.id));
+        if(admin) loginSuccess(admin.id);
+        nfcPrompt.style.display='none';
+      } else if(callback) callback(uid);
+    };
+  }).catch(err=>{ console.error(err); alert('NFC読取エラー'); });
+}
+</script>
+</body>
+</html>
