@@ -500,6 +500,20 @@ function initNFC(isLogin=false, callback=null){
   if(id){ loginSuccess(id); }
 })();
 
+  /* ================= ページ遷移時の自動ログアウト ================= */
+window.addEventListener("beforeunload", () => {
+  try {
+    const navType = performance.getEntriesByType("navigation")[0]?.type;
+    if (navType === "reload") return; // リロード時はログアウトしない
+    const adminId = localStorage.getItem("adminId");
+    if (adminId) {
+      logAccess(adminId, "ページ遷移による自動ログアウト", "auto");
+      localStorage.removeItem("adminId");
+    }
+  } catch (e) {
+    console.error("自動ログアウト処理エラー:", e);
+  }
+});
 </script>
 </body>
 </html>
