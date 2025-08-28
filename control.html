@@ -7,45 +7,43 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
 <style>
-:root {
-  --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333;
-}
-*{box-sizing:border-box}
-body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
-.container { max-width:980px; margin:auto; padding:14px; }
-h1 { text-align:center; margin:10px 0 4px; }
-#clock { text-align:center; font-weight:600; color:#555; margin-bottom:10px; }
-.status-badge { display:inline-block; padding:6px 14px; border-radius:16px; font-weight:700; font-size:0.95rem; margin-top:6px; }
-.active { background-color:var(--success); color:white; }
-.inactive { background-color:var(--danger); color:white; }
-.card { background:white; border-radius:12px; padding:16px; margin-top:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
-label { font-weight:600; display:block; margin-top:10px; font-size:0.9rem; }
-input, select { width:100%; padding:10px; margin-top:6px; border-radius:8px; border:1px solid #ccc; font-size:1rem; }
-button { padding:12px; margin:6px 0; border:none; border-radius:10px; font-weight:700; cursor:pointer; width:100%; font-size:1rem; }
-button.primary { background:var(--primary); color:white; }
-button.success { background:var(--success); color:white; }
-button.danger { background:var(--danger); color:white; }
-.row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-@media(max-width:640px){ .row { grid-template-columns:1fr; } }
-.tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
-.tab { flex:1; padding:12px; text-align:center; cursor:pointer; background:#e7e9ee; border-radius:10px; font-weight:700; }
-.tab.active-tab { background:var(--primary); color:#fff; }
-.tab-content { display:none; }
-.tab-content.active { display:block; }
-table { width:100%; border-collapse: collapse; margin-top:10px; background:white; border-radius:10px; overflow:hidden; }
-th, td { border:1px solid #e5e7eb; padding:10px; text-align:center; color:#111; font-size:0.95rem; }
-th { background:#f0f3ff; }
-.badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.8rem; font-weight:700; }
-.used { color:#0a7b26; }
-.unused { color:#b91c1c; }
-.expired { color:#b45309; }
-#loginDiv { max-width:420px; margin:30px auto; padding:20px; background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,0.12); }
-#loginDiv input { width:100%; padding:10px; margin:8px 0; }
-#loginDiv button { margin-top:6px; }
-#errorMsg, #logAuthMsg { color:#e11d48; margin-top:10px; text-align:center; font-weight:700; }
-#nfcPrompt { display:none; text-align:center; color:#e11d48; font-weight:700; }
-.inline { display:inline-flex; gap:8px; align-items:center; }
-.w-auto { width:auto; }
+  :root { --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333; }
+  *{box-sizing:border-box}
+  body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
+  .container { max-width:980px; margin:auto; padding:14px; }
+  h1 { text-align:center; margin:10px 0 4px; }
+  #clock { text-align:center; font-weight:600; color:#555; margin-bottom:10px; }
+  .status-badge { display:inline-block; padding:6px 14px; border-radius:16px; font-weight:700; font-size:0.95rem; margin-top:6px; }
+  .active { background-color:var(--success); color:white; }
+  .inactive { background-color:var(--danger); color:white; }
+  .card { background:white; border-radius:12px; padding:16px; margin-top:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  label { font-weight:600; display:block; margin-top:10px; font-size:0.9rem; }
+  input, select { width:100%; padding:10px; margin-top:6px; border-radius:8px; border:1px solid #ccc; font-size:1rem; }
+  button { padding:12px; margin:6px 0; border:none; border-radius:10px; font-weight:700; cursor:pointer; width:100%; font-size:1rem; }
+  button.primary { background:var(--primary); color:white; }
+  button.success { background:var(--success); color:white; }
+  button.danger { background:var(--danger); color:white; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media(max-width:640px){ .row { grid-template-columns:1fr; } }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+  .tab { flex:1; padding:12px; text-align:center; cursor:pointer; background:#e7e9ee; border-radius:10px; font-weight:700; }
+  .tab.active-tab { background:var(--primary); color:#fff; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  table { width:100%; border-collapse: collapse; margin-top:10px; background:white; border-radius:10px; overflow:hidden; }
+  th, td { border:1px solid #e5e7eb; padding:10px; text-align:center; color:#111; font-size:0.95rem; }
+  th { background:#f0f3ff; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.8rem; font-weight:700; }
+  .used { color:#0a7b26; }
+  .unused { color:#b91c1c; }
+  .expired { color:#b45309; }
+  #loginDiv { max-width:420px; margin:30px auto; padding:20px; background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,0.12); }
+  #loginDiv input { width:100%; padding:10px; margin:8px 0; }
+  #loginDiv button { margin-top:6px; }
+  #errorMsg, #logAuthMsg { color:#e11d48; margin-top:10px; text-align:center; font-weight:700; }
+  #nfcPrompt { display:none; text-align:center; color:#e11d48; font-weight:700; }
+  .inline { display:inline-flex; gap:8px; align-items:center; }
+  .w-auto { width:auto; }
 </style>
 </head>
 <body>
@@ -133,7 +131,7 @@ th { background:#f0f3ff; }
           <input type="time" id="specialStartTime" required>
           <input type="time" id="specialEndTime" required>
         </div>
-        <button type="submit" class="success">特別パス発券</button>
+        <button type="submit" class="success">特別パス発行</button>
       </form>
     </div>
   </div>
@@ -141,30 +139,48 @@ th { background:#f0f3ff; }
   <!-- パス一覧 -->
   <div class="tab-content" id="passesTab">
     <div class="card">
-      <table id="passesTable">
-        <thead>
-          <tr><th>ID</th><th>名前</th><th>人数</th><th>案内時間</th><th>状態</th><th>操作</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div class="inline" style="margin-bottom:8px;">
+        <button id="deleteAllBtn" class="danger w-auto">全件削除（NFC認証）</button>
+        <span id="nfcInlineMsg" class="w-auto" style="font-weight:700;color:#b91c1c;display:none;">カードをかざしてください…</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>発券ID</th>
+              <th>名前</th>
+              <th>人数</th>
+              <th>案内時間</th>
+              <th>種別</th>
+              <th>状態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="passesTableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <!-- アクセスログ -->
   <div class="tab-content" id="logTab">
-    <div class="card">
-      <table id="logTable">
-        <thead><tr><th>日時</th><th>操作</th><th>管理者</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <div class="card" id="logAuthCard">
+      <div class="row">
+        <input type="password" id="logPass" placeholder="ログ閲覧パスワード">
+        <button id="logAuthBtn" class="primary w-auto">認証</button>
+      </div>
+      <div id="logAuthMsg"></div>
+    </div>
+    <div class="card" id="logContent" style="display:none;">
+      <button id="clearLogsBtn" class="danger">ログ全削除</button>
+      <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
     </div>
   </div>
-
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
@@ -178,7 +194,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* =============== 管理者リスト =============== */
+/* =============== ローカル管理者（簡易） =============== */
 const allowedAdmins = [
   {id:"Sakoty", password:"3214"},
   {id:"seseguchi914", password:"0914"}
@@ -190,184 +206,247 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const nfcPrompt = document.getElementById("nfcPrompt");
 
-/* ================= ログイン ================= */
-document.getElementById('loginSubmit').onclick = () => {
+// 時計
+setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent = d.toLocaleString(); },1000);
+
+// タブ切替
+Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    tab.classList.add('active-tab');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+
+/* ================= ログイン処理 ================= */
+const passLoginBtn = document.getElementById('loginSubmit');
+passLoginBtn.onclick = () => {
   const id = document.getElementById('adminId').value.trim();
   const pass = document.getElementById('adminPass').value.trim();
   if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
     loginSuccess(id);
   } else { errorMsg.textContent = 'IDまたはパスワードが違います'; }
 };
-document.getElementById('cardLoginBtn').onclick = () => loadSocketIfNeeded(() => initNFC(true));
+
+// NFCログイン
+const cardLoginBtn = document.getElementById('cardLoginBtn');
+cardLoginBtn.onclick = () => {
+  loadSocketIfNeeded(() => {
+    nfcPrompt.textContent = 'カードをかざしてください…';
+    nfcPrompt.style.display = 'block';
+    initNFC(true);
+  });
+};
 
 function loginSuccess(adminId){
   localStorage.setItem('adminId', adminId);
-  loginDiv.style.display='none';
-  mainContent.style.display='block';
-  logAccess(adminId,'ログイン成功','login');
+  loginDiv.style.display = 'none';
+  mainContent.style.display = 'block';
+  logAccess(adminId, 'ログイン成功', 'login');
   updateStatusDisplay();
   loadTimeSlots();
   startPassesListener();
 }
 
-/* ================= Logout ================= */
-document.getElementById('logoutBtn').onclick = () => {
+function logout(){
   const id = localStorage.getItem('adminId')||'不明';
-  logAccess(id,'ログアウト','admin');
+  logAccess(id, 'ログアウト', 'admin');
   localStorage.removeItem('adminId');
   mainContent.style.display='none';
   loginDiv.style.display='block';
-};
-
-/* ================= タブ切替 ================= */
-document.querySelectorAll('.tab').forEach(t => {
-  t.onclick = ()=>{
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active-tab'));
-    document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active-tab');
-    document.getElementById(t.dataset.tab).classList.add('active');
-  };
-});
-
-/* ================= NFC (Socket.IO) ================= */
-function loadSocketIfNeeded(cb){
-  if(window.io){ cb(); return; }
-  const s=document.createElement('script');
-  s.src='https://cdn.socket.io/4.7.1/socket.io.min.js';
-  s.onload=cb; document.body.appendChild(s);
 }
-function initNFC(isLogin=false){
-  try{
-    const socket = io('http://localhost:3000');
-    if(isLogin) nfcPrompt.style.display='block';
-    socket.on('adminAuthenticated', (data)=>{
-      if(isLogin){
-        nfcPrompt.style.display='none';
-        loginSuccess('NFC:'+ (data?.uid || 'unknown'));
-        alert('カード認証成功: '+ (data?.uid || 'unknown'));
-      }
-    });
-    socket.on('connect_error', ()=>{
-      if(isLogin){
-        nfcPrompt.textContent='NFCサーバに接続できません';
-        setTimeout(()=>{ nfcPrompt.style.display='none'; },1800);
-      }
-    });
-  }catch(e){ console.error('NFC初期化失敗', e); }
-}
-
-/* ================= Firestore操作 ================= */
-function logAccess(admin, action, type){
-  addDoc(collection(db,'accessLogs'),{
-    admin: admin,
-    action: action,
-    type: type,
-    time: serverTimestamp()
-  });
-}
+document.getElementById('logoutBtn').onclick = logout;
 
 /* ================= 発券ステータス ================= */
+async function setIssueStatus(status){
+  await setDoc(doc(db,'settings','issueStatus'), { enabled: status, updatedAt: serverTimestamp() });
+  await updateStatusDisplay();
+}
 async function updateStatusDisplay(){
-  const docRef = doc(db,'settings','issueStatus');
-  const snap = await getDoc(docRef);
+  const snap = await getDoc(doc(db,'settings','issueStatus'));
   const badge = document.getElementById('statusBadge');
-  if(snap.exists() && snap.data().active){ badge.textContent='稼働中'; badge.className='status-badge active'; }
-  else{ badge.textContent='停止中'; badge.className='status-badge inactive'; }
+  if(snap.exists() && snap.data().enabled){
+    badge.textContent='発券中'; badge.classList.remove('inactive'); badge.classList.add('active');
+  } else { badge.textContent='停止中'; badge.classList.remove('active'); badge.classList.add('inactive'); }
 }
-document.getElementById('startBtn').onclick = ()=>setIssueStatus(true);
-document.getElementById('stopBtn').onclick = ()=>setIssueStatus(false);
-
-async function setIssueStatus(active){
-  await setDoc(doc(db,'settings','issueStatus'),{active:active});
-  updateStatusDisplay();
-  logAccess(localStorage.getItem('adminId'),'発券'+(active?'開始':'停止'),'admin');
-}
+document.getElementById('startBtn').onclick = async()=>{ await setIssueStatus(true); await logAccess(localStorage.getItem('adminId'),'発券開始','control'); };
+document.getElementById('stopBtn').onclick = async()=>{ await setIssueStatus(false); await logAccess(localStorage.getItem('adminId'),'発券停止','control'); };
 
 /* ================= 時間帯設定 ================= */
-document.getElementById('setTimeSlots').onsubmit=async(e)=>{
-  e.preventDefault();
-  const slots=[];
-  for(let i=1;i<=3;i++){
-    const start=document.getElementById('start'+i).value;
-    const end=document.getElementById('end'+i).value;
-    const interval=document.getElementById('interval'+i).value;
-    const limit=document.getElementById('limit'+i).value;
-    if(start&&end){ slots.push({start,end,interval:parseInt(interval),limit:parseInt(limit)}); }
-  }
-  await setDoc(doc(db,'settings','timeSlots'),{slots:slots});
-  alert('保存しました');
-};
-document.getElementById('reloadTimeBtn').onclick=loadTimeSlots;
+function pad2(n){ return n.toString().padStart(2,'0'); }
+function timeToMinutes(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+function minutesToTime(m){ return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`; }
+function generateSlots(start,end,interval){
+  const arr=[]; let curr=timeToMinutes(start); const endM=timeToMinutes(end);
+  while(curr + interval <= endM){ const next = curr + interval; arr.push(`${minutesToTime(curr)}〜${minutesToTime(next)}`); curr = next; }
+/* ================= 時間帯設定続き ================= */
 async function loadTimeSlots(){
-  const snap=await getDoc(doc(db,'settings','timeSlots'));
-  if(!snap.exists()) return;
-  const slots=snap.data().slots||[];
-  for(let i=1;i<=3;i++){
-    if(slots[i-1]){
-      document.getElementById('start'+i).value=slots[i-1].start||'';
-      document.getElementById('end'+i).value=slots[i-1].end||'';
-      document.getElementById('interval'+i).value=slots[i-1].interval||10;
-      document.getElementById('limit'+i).value=slots[i-1].limit||1;
+  const snap = await getDoc(doc(db,'settings','timeSlots'));
+  if(snap.exists()){
+    const data = snap.data();
+    for(let i=1;i<=3;i++){
+      if(data[`slot${i}`]){
+        document.getElementById(`start${i}`).value = data[`slot${i}`].start;
+        document.getElementById(`end${i}`).value = data[`slot${i}`].end;
+        document.getElementById(`interval${i}`).value = data[`slot${i}`].interval;
+        document.getElementById(`limit${i}`).value = data[`slot${i}`].limit;
+      }
     }
   }
 }
+document.getElementById('reloadTimeBtn').onclick = loadTimeSlots;
+
+document.getElementById('setTimeSlots').onsubmit = async (e)=>{
+  e.preventDefault();
+  const slots={};
+  for(let i=1;i<=3;i++){
+    slots[`slot${i}`]={
+      start:document.getElementById(`start${i}`).value,
+      end:document.getElementById(`end${i}`).value,
+      interval:parseInt(document.getElementById(`interval${i}`).value)||10,
+      limit:parseInt(document.getElementById(`limit${i}`).value)||1
+    };
+  }
+  await setDoc(doc(db,'settings','timeSlots'), slots);
+  alert('時間帯設定を保存しました');
+  logAccess(localStorage.getItem('adminId'),'時間帯設定変更','timeSlot');
+};
 
 /* ================= 特別パス発券 ================= */
-document.getElementById('specialForm').onsubmit=async(e)=>{
+document.getElementById('specialForm').onsubmit = async e=>{
   e.preventDefault();
-  const name=document.getElementById('specialName').value.trim();
-  const people=parseInt(document.getElementById('specialPeople').value);
-  const start=document.getElementById('specialStartTime').value;
-  const end=document.getElementById('specialEndTime').value;
-  if(!name||!people||!start||!end) return alert('入力必須');
-  const id='FP'+String(Math.floor(Math.random()*900+100));
-  await addDoc(collection(db,'passes'),{
-    id,name,people,startTime:start,endTime:end,used:false,special:true,time:serverTimestamp()
-  });
-  alert('特別パス発券: '+id);
+  const name = document.getElementById('specialName').value.trim();
+  const people = parseInt(document.getElementById('specialPeople').value);
+  const start = document.getElementById('specialStartTime').value;
+  const end = document.getElementById('specialEndTime').value;
+  if(!name||!people||!start||!end){ alert('全て入力してください'); return; }
+  const newPass = {
+    id:`FP${Math.floor(Math.random()*900+100)}`,
+    name, people, startTime:start, endTime:end,
+    type:'特別', used:false, createdAt:serverTimestamp()
+  };
+  await addDoc(collection(db,'passes'),newPass);
+  alert(`特別パス ${newPass.id} を発券しました`);
+  logAccess(localStorage.getItem('adminId'),`特別パス発券:${newPass.id}`,'special');
+  document.getElementById('specialForm').reset();
 };
 
 /* ================= パス一覧 ================= */
-function startPassesListener(){
-  const tbody=document.querySelector('#passesTable tbody');
-  const q=query(collection(db,'passes'),orderBy('time','desc'));
-  onSnapshot(q,(snap)=>{
+async function startPassesListener(){
+  const tbody = document.getElementById('passesTableBody');
+  const q = query(collection(db,'passes'),orderBy('createdAt','desc'));
+  onSnapshot(q,snap=>{
     tbody.innerHTML='';
-    snap.forEach(docu=>{
-      const d=docu.data();
-      const tr=document.createElement('tr');
+    snap.forEach(docSnap=>{
+      const d=docSnap.data();
+      const tr = document.createElement('tr');
       tr.innerHTML=`
         <td>${d.id}</td>
         <td>${d.name}</td>
         <td>${d.people}</td>
-        <td>${d.startTime}~${d.endTime}</td>
+        <td>${d.startTime}〜${d.endTime}</td>
+        <td>${d.type||'通常'}</td>
         <td class="${d.used?'used':'unused'}">${d.used?'使用済':'未使用'}</td>
-        <td class="inline">
-          <button class="success">${d.used?'未使用に':'使用済に'}する</button>
-          <button class="danger">削除</button>
-        </td>`;
-      const btns=tr.querySelectorAll('button');
-      btns[0].onclick=()=>updateDoc(doc(db,'passes',docu.id),{used:!d.used});
-      btns[1].onclick=()=>deleteDoc(doc(db,'passes',docu.id));
+        <td>
+          <button class="success btn-use" data-id="${docSnap.id}">${d.used?'未使用に':'使用済に'}</button>
+          <button class="danger btn-del" data-id="${docSnap.id}">削除</button>
+        </td>
+      `;
       tbody.appendChild(tr);
+    });
+
+    Array.from(document.querySelectorAll('.btn-use')).forEach(btn=>{
+      btn.onclick = async ()=>{
+        const id = btn.dataset.id;
+        const docRef = doc(db,'passes',id);
+        const snap = await getDoc(docRef);
+        if(snap.exists()){
+          await updateDoc(docRef,{used:!snap.data().used});
+          logAccess(localStorage.getItem('adminId'),`使用状態変更:${snap.data().id}`,'passes');
+        }
+      };
+    });
+    Array.from(document.querySelectorAll('.btn-del')).forEach(btn=>{
+      btn.onclick = async ()=>{
+        if(confirm('削除してよいですか？')){
+          const id = btn.dataset.id;
+          const snap = await getDoc(doc(db,'passes',id));
+          await deleteDoc(doc(db,'passes',id));
+          logAccess(localStorage.getItem('adminId'),`パス削除:${snap.data().id}`,'passes');
+        }
+      };
     });
   });
 }
 
-/* ================= 時計 ================= */
-setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString(),1000);
+/* ================= NFC削除認証 ================= */
+const deleteAllBtn = document.getElementById('deleteAllBtn');
+const nfcInlineMsg = document.getElementById('nfcInlineMsg');
 
-/* ================= アクセスログ一覧 ================= */
-const logTbody=document.querySelector('#logTable tbody');
-onSnapshot(query(collection(db,'accessLogs'),orderBy('time','desc')),(snap)=>{
-  logTbody.innerHTML='';
-  snap.forEach(docu=>{
-    const d=docu.data();
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${d.time?.toDate?.()?.toLocaleString()||''}</td><td>${d.action}</td><td>${d.admin}</td>`;
-    logTbody.appendChild(tr);
+deleteAllBtn.onclick = async ()=>{
+  if(!navigator.nfc){ alert('NFC非対応'); return; }
+  nfcInlineMsg.style.display='inline';
+  initNFC(false,true);
+};
+
+async function deleteAllPasses(){
+  const snap = await getDocs(collection(db,'passes'));
+  snap.forEach(async docSnap=>{ await deleteDoc(doc(db,'passes',docSnap.id)); });
+  logAccess(localStorage.getItem('adminId'),'全パス削除','passes');
+  alert('全パスを削除しました');
+}
+
+/* ================= NFC共通処理 ================= */
+async function initNFC(isLogin=false,isDelete=false){
+  if(!('NDEFReader' in window)){ alert('この端末はNFCに対応していません'); return; }
+  try{
+    const ndef = new NDEFReader();
+    await ndef.scan();
+    ndef.onreading = async (e)=>{
+      const cardId = Array.from(new Uint8Array(e.message.records[0].data.buffer||e.message.records[0].data)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      if(isLogin){
+        loginSuccess(cardId);
+        nfcPrompt.style.display='none';
+      } else if(isDelete){
+        await deleteAllPasses();
+        nfcInlineMsg.style.display='none';
+      }
+    };
+  }catch(err){ alert('NFC読み取りエラー:'+err); }
+}
+
+/* ================= アクセスログ ================= */
+const logDiv = document.getElementById('accessLogs');
+async function logAccess(user,action,type){
+  await addDoc(collection(db,'logs'),{user,action,type,time:serverTimestamp()});
+  if(logDiv) loadLogs();
+}
+document.getElementById('logAuthBtn').onclick = ()=>{
+  const pw = document.getElementById('logPass').value;
+  if(pw==='0914'){ document.getElementById('logContent').style.display='block'; loadLogs(); document.getElementById('logAuthMsg').textContent=''; }
+  else { document.getElementById('logAuthMsg').textContent='パスワード違反'; }
+};
+async function loadLogs(){
+  const snap = await getDocs(query(collection(db,'logs'),orderBy('time','desc')));
+  logDiv.innerHTML='';
+  snap.forEach(docSnap=>{
+    const d=docSnap.data();
+    const time=d.time?.toDate().toLocaleString()||'-';
+    logDiv.innerHTML+=`[${time}] ${d.user} - ${d.action} (${d.type})<br>`;
   });
-});
+}
+document.getElementById('clearLogsBtn').onclick=async()=>{
+  if(confirm('ログを全削除しますか？')){
+    const snap = await getDocs(collection(db,'logs'));
+    snap.forEach(async docSnap=>{ await deleteDoc(doc(db,'logs',docSnap.id)); });
+    loadLogs();
+  }
+};
+
+/* ================= Socket or NFC初期化補助 ================= */
+function loadSocketIfNeeded(cb){ cb(); }
+
 </script>
 </body>
 </html>
