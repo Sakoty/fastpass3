@@ -142,7 +142,8 @@ th { background:#f0f3ff; }
       <button id="deleteAllBtn" class="danger w-auto">全削除</button>
       <table id="passesTable">
         <thead>
-          <tr><th>ID</th><th>名前</th><th>人数</th><th>案内時間</th><th>状態</th><th>操作</th></tr>
+          <!-- ★★ 列を「種別」を含む7列に拡張 ★★ -->
+          <tr><th>ID</th><th>名前</th><th>人数</th><th>案内時間</th><th>種別</th><th>状態</th><th>操作</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -164,7 +165,7 @@ th { background:#f0f3ff; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp, getDoc, query, orderBy, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp, getDoc, query, orderBy, onSnapshot, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
@@ -352,23 +353,49 @@ function startPassesListener(){
   onSnapshot(q,snap=>{
     const tbody=document.querySelector('#passesTable tbody');
     tbody.innerHTML='';
-    snap.forEach(doc=>{
-      const d=doc.data();
+    snap.forEach(docSnap=>{
+      const d=docSnap.data();
+      const used = !!d.used;
+      const stateText= used ? '使用済' : '未使用';
+      const stateClass= used ? 'used' : 'unused';
+      // ★★ 券種を判定（type があれば優先、なければ special で判定）★★
+      const typeLabel = d.type ? (d.type==='special'?'特別':d.type) : (d.special ? '特別' : '通常');
+      const timeText = (d.startTime||d.start||'未設定') + ' - ' + (d.endTime||d.end||'未設定');
+
       const tr=document.createElement('tr');
-      const state=d.used?'使用済':'未使用';
-      const stateClass=d.used?'used':'unused';
       tr.innerHTML=`
-        <td>${d.id}</td>
-        <td>${d.name}</td>
-        <td>${d.people}</td>
-        <td>${d.startTime||'未設定'} - ${d.endTime||'未設定'}</td>
-        <td class="${stateClass}">${state}</td>
-        <td><button class="danger w-auto" onclick="deletePass('${doc.id}')">削除</button></td>
+        <td>${d.id||''}</td>
+        <td>${d.name||''}</td>
+        <td>${d.people ?? d.num ?? ''}</td>
+        <td>${timeText}</td>
+        <td>${typeLabel}</td>
+        <td class="${stateClass}">${stateText}</td>
+        <td>
+          <div class="row" style="grid-template-columns:1fr 1fr;">
+            <!-- ★★ ここで使用状態切替（NFC必須）ボタンを追加 ★★ -->
+            <button class="primary w-auto" onclick="toggleUsed('${docSnap.id}', ${used})">${used ? '未使用に戻す' : '使用済みにする'}</button>
+            <button class="danger w-auto" onclick="deletePass('${docSnap.id}')">削除</button>
+          </div>
+        </td>
       `;
       tbody.appendChild(tr);
     });
   });
 }
+
+// ★★ 使用済み・未使用 切替（NFC認証必須）★★
+window.toggleUsed = async (docId, currentUsed) => {
+  const ok = await requireNFCAuth('使用状態の切替');
+  if(!ok){ alert('NFC認証に失敗しました'); return; }
+  try{
+    await updateDoc(doc(db,'passes',docId), { used: !currentUsed });
+    logAccess(localStorage.getItem('adminId'), `使用状態切替: ${docId} -> ${!currentUsed ? '未使用' : '使用済'}`, 'admin');
+  }catch(e){
+    console.error(e);
+    alert('切り替えに失敗しました');
+  }
+};
+
 window.deletePass=async(id)=>{
   if(!confirm('削除しますか？')) return;
   const auth = await requireNFCAuth('パス削除');
