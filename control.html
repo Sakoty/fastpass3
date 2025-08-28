@@ -198,7 +198,6 @@ function requireNFCAuth(actionDesc='操作'){
       const socket = io('http://localhost:3000');
       socket.on('adminAuthenticated',(data)=>{
         nfcPrompt.style.display='none';
-        alert(`${actionDesc} NFC認証成功: ${data?.uid||'unknown'}`);
         if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; }
       });
       socket.on('connect_error',()=>{
