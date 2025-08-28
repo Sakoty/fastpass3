@@ -46,6 +46,8 @@
   #nfcPrompt { display:none; text-align:center; color:#e11d48; font-weight:700; }
   .inline { display:inline-flex; gap:8px; align-items:center; }
   .w-auto { width:auto; }
+  /* 追加UI改善 */
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 </style>
 </head>
 <body>
@@ -326,99 +328,38 @@ const passesTableBody = document.getElementById('passesTableBody');
 let passesListener=null;
 
 function startPassesListener(){
-  if(passesListener) passesListener(); // 前リスナー解除
+  if(passesListener) passesListener();
   passesListener = onSnapshot(collection(db,'passes'), snap=>{
     passesTableBody.innerHTML='';
-    snap.docs.sort((a,b)=>a.data().id.localeCompare(b.data().id)).forEach(docSnap=>{
-      const d = docSnap.data();
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${d.id}</td>
-        <td>${d.name}</td>
-        <td>${d.people}</td>
-        <td>${d.start}〜${d.end}</td>
-        <td>${d.type}</td>
-        <td class="${d.status==='used'?'used':'unused'}">${d.status}</td>
-        <td><button class="js-del w-auto danger">削除(NFC)</button></td>
-      `;
-      const btn = tr.querySelector('.js-del');
-      btn.onclick = ()=>{
-        showInlineNFC(true);
-        initNFC(false, async (ok)=>{
-          if(ok){
-            await deleteDoc(doc(db,'passes',d.id));
-            showInlineNFC(false);
-          } else { inlineNFCFailOnce(); }
-        });
-      }
-      passesTableBody.appendChild(tr);
-    });
+    snap.docs.sort((a,b)=>a.data().id.localeCompare(b.data().id)).forEach
+<!-- ================= アクセスログ閲覧 ================= -->
+document.getElementById('logAuthBtn').onclick = async ()=>{
+  const pass = document.getElementById('logPass').value;
+  if(pass==='adminlog'){ // 簡易認証
+    document.getElementById('logContent').style.display='block';
+    loadLogs();
+  } else {
+    document.getElementById('logAuthMsg').textContent='パスワードが違います';
+  }
+}
+
+async function loadLogs(){
+  const logsDiv = document.getElementById('accessLogs');
+  logsDiv.innerHTML='';
+  const q = query(collection(db,'accessLogs'), orderBy('time','desc'));
+  const snap = await getDocs(q);
+  snap.docs.forEach(d=>{
+    const data = d.data();
+    const time = data.time?.toDate?.()?.toLocaleString()||'-';
+    const div = document.createElement('div');
+    div.textContent = `[${time}] ${data.admin} - ${data.type} - ${data.message}`;
+    logsDiv.appendChild(div);
   });
 }
 
-// 全件削除
-const deleteAllBtn = document.getElementById('deleteAllBtn');
-deleteAllBtn.onclick = ()=>{
-  if(!confirm('本当に全件削除しますか？')) return;
-  showInlineNFC(true);
-  initNFC(false, async (ok)=>{
-    if(ok){
-      const snap = await getDocs(collection(db,'passes'));
-      for(const d of snap.docs){ await deleteDoc(doc(db,'passes',d.id)); }
-      showInlineNFC(false);
-    } else { inlineNFCFailOnce(); }
-  });
-}
-
-function showInlineNFC(show){ document.getElementById('nfcInlineMsg').style.display = show?'inline-flex':'none'; }
-function inlineNFCFailOnce(){ alert('NFC認証失敗'); }
-
-/* ================= ログ記録 ================= */
-async function logAccess(admin, message, type){
-  await addDoc(collection(db,'accessLogs'),{
-    admin,message,type,time:serverTimestamp()
-  });
-}
-
-/* ================= NFC関連 ================= */
-function loadSocketIfNeeded(cb){
-  if(window.io){ cb(); return; }
-  const s=document.createElement('script');
-  s.src='https://cdn.socket.io/4.7.1/socket.io.min.js';
-  s.onload=cb; document.body.appendChild(s);
-}
-
-function initNFC(isLogin=false, callback=null){
-  try{
-    const socket = io('http://localhost:3000'); // NFCサーバURL
-    if(isLogin) nfcPrompt.style.display='block';
-    socket.on('connect_error', ()=>{
-      if(isLogin){ nfcPrompt.textContent='NFCサーバ接続不可'; setTimeout(()=>nfcPrompt.style.display='none',1800);}
-    });
-    socket.on('nfc-auth', (data)=>{
-      if(data.success){
-        if(isLogin){
-          nfcPrompt.style.display='none';
-          loginSuccess('NFC:'+data.uid);
-          alert('カード認証成功: '+data.uid);
-        } else if(callback) callback(true);
-      }
-      if(data.removed){
-        if(isLogin){ nfcPrompt.style.display='none'; }
-        if(callback) callback(false);
-      }
-    });
-  }catch(e){ console.error('NFC初期化失敗', e); if(callback) callback(false);}
-}
-
-/* ================= 発券ID生成 ================= */
-async function generatePassId(){
-  const snap = await getDocs(collection(db,'passes'));
-  const ids = snap.docs.map(d=>parseInt(d.id.replace('FP',''))||0);
-  const next = (Math.max(0,...ids)+1).toString().padStart(3,'0');
-  return 'FP'+next;
-}
-
-</script>
-</body>
-</html>
+document.getElementById('clearLogsBtn').onclick = async ()=>{
+  if(!confirm('本当にログを全て削除しますか？')) return;
+  const snap = await getDocs(collection(db,'accessLogs'));
+  for(const d of snap.docs){ await deleteDoc(doc(db,'accessLogs',d.id)); }
+  loadLogs();
+};
