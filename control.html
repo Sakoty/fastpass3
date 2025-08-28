@@ -271,7 +271,6 @@ function initNFC(isLogin=false){
       if(isLogin){
         nfcPrompt.style.display='none';
         loginSuccess('NFC:'+ (data?.uid || 'unknown'));
-        alert('カード認証成功: '+ (data?.uid || 'unknown'));
       }
     });
     socket.on('connect_error', ()=>{ if(isLogin){ nfcPrompt.textContent='NFCサーバに接続できません'; setTimeout(()=>{ nfcPrompt.style.display='none'; },1800); }});
