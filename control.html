@@ -48,7 +48,7 @@ th { background:#f0f3ff; }
 </head>
 <body>
 
-<!-- ログイン画面 -->
+  <!-- ログイン画面 -->
 <div id="loginDiv">
   <h1>管理者ログイン</h1>
   <input type="text" id="adminId" placeholder="管理者ID" />
@@ -188,7 +188,7 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const nfcPrompt = document.getElementById("nfcPrompt");
 
-// NFC認証ヘルパー
+// --- NFC認証ヘルパー ---
 let nfcAuthResolve = null;
 function requireNFCAuth(actionDesc='操作'){
   return new Promise((resolve,reject)=>{
@@ -196,20 +196,51 @@ function requireNFCAuth(actionDesc='操作'){
     nfcPrompt.style.display='block';
     nfcPrompt.textContent=`${actionDesc}のためカードをかざしてください…`;
     loadSocketIfNeeded(()=>{
-      const socket = io('http://localhost:3000');
-      socket.on('adminAuthenticated',(data)=>{
-        nfcPrompt.style.display='none';
-        if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; }
-      });
-      socket.on('connect_error',()=>{
-        nfcPrompt.textContent='NFCサーバに接続できません';
-        setTimeout(()=>{ nfcPrompt.style.display='none'; },1800);
-        if(nfcAuthResolve){ nfcAuthResolve(false); nfcAuthResolve=null; }
+      initNFC(false).then(ok=>{
+        resolve(ok);
+        nfcAuthResolve=null;
       });
     });
   });
 }
 
+// --- NFCログイン初期化 ---
+function initNFC(isLogin=false){
+  return new Promise((resolve)=>{
+    try{
+      const socket = io('http://localhost:3000');
+      socket.on('connect', ()=>console.log('NFCソケット接続成功'));
+      socket.on('connect_error', ()=>console.log('NFCサーバに接続できません'));
+
+      if(isLogin) nfcPrompt.style.display='block';
+
+      socket.on('adminAuthenticated', (data)=>{
+        console.log('adminAuthenticated受信:', data);
+        nfcPrompt.style.display='none';
+        const uid = data.uid || data.cardUID || 'unknown';
+        if(isLogin){
+          loginSuccess('NFC:'+uid);
+        } else if(nfcAuthResolve){
+          nfcAuthResolve(true);
+        }
+      });
+
+      socket.on('adminAuthFailed', (data)=>{
+        console.log('NFC認証失敗:', data);
+        if(isLogin){
+          nfcPrompt.style.display='none';
+          alert('カード認証に失敗しました');
+        } else if(nfcAuthResolve){
+          nfcAuthResolve(false);
+        }
+      });
+
+      // 実運用では NFCリーダー側で socket.emit('nfcScan', UID)
+    }catch(e){ console.error('NFC初期化失敗', e); if(nfcAuthResolve) nfcAuthResolve(false); }
+  });
+}
+
+// --- ログイン処理 ---
 document.getElementById('loginSubmit').onclick = () => {
   const id = document.getElementById('adminId').value.trim();
   const pass = document.getElementById('adminPass').value.trim();
@@ -217,8 +248,9 @@ document.getElementById('loginSubmit').onclick = () => {
     loginSuccess(id);
   } else { errorMsg.textContent = 'IDまたはパスワードが違います'; }
 };
-document.getElementById('cardLoginBtn').onclick = () => loadSocketIfNeeded(() => initNFC(true));
+document.getElementById('cardLoginBtn').onclick = () => loadSocketIfNeeded(()=>initNFC(true));
 
+// --- 共通関数 ---
 function loginSuccess(adminId){
   localStorage.setItem('adminId', adminId);
   loginDiv.style.display='none';
@@ -228,62 +260,6 @@ function loginSuccess(adminId){
   loadTimeSlots();
   startPassesListener();
   startLogListener();
-}
-
-document.getElementById('logoutBtn').onclick = () => {
-  const id = localStorage.getItem('adminId')||'不明';
-  logAccess(id,'ログアウト','admin');
-  localStorage.removeItem('adminId');
-  mainContent.style.display='none';
-  loginDiv.style.display='block';
-};
-
-document.querySelectorAll('.tab').forEach(t => {
-  t.onclick = async ()=>{
-    if(t.dataset.tab==='logTab'){
-      let pwd = prompt('アクセスログ閲覧パスワードを入力してください');
-      if(pwd!=='3214'){
-        alert('パスワードが違います');
-        document.getElementById('logTable').style.display='none';
-        return;
-      }
-      document.getElementById('logAuthMsg').textContent='';
-      document.getElementById('logTable').style.display='table';
-    }
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active-tab'));
-    document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active-tab');
-    document.getElementById(t.dataset.tab).classList.add('active');
-  };
-});
-
-function loadSocketIfNeeded(cb){
-  if(window.io){ cb(); return; }
-  const s=document.createElement('script');
-  s.src='https://cdn.socket.io/4.7.1/socket.io.min.js';
-  s.onload=cb; document.body.appendChild(s);
-}
-function initNFC(isLogin=false){
-  try{
-    const socket = io('http://localhost:3000');
-    if(isLogin) nfcPrompt.style.display='block';
-    socket.on('adminAuthenticated', (data)=>{
-      if(isLogin){
-        nfcPrompt.style.display='none';
-        loginSuccess('NFC:'+ (data?.uid || 'unknown'));
-      }
-    });
-    socket.on('connect_error', ()=>{ if(isLogin){ nfcPrompt.textContent='NFCサーバに接続できません'; setTimeout(()=>{ nfcPrompt.style.display='none'; },1800); }});
-  }catch(e){ console.error('NFC初期化失敗', e); }
-}
-
-function logAccess(admin, action, type){
-  addDoc(collection(db,'accessLogs'),{
-    admin: admin,
-    action: action,
-    type: type,
-    time: serverTimestamp()
-  });
 }
 
 async function updateStatusDisplay(){
