@@ -198,7 +198,7 @@ function requireNFCAuth(actionDesc='操作'){
 
 function initNFC(){
   if(socket) return;
-  socket = io('http://localhost:3000');
+  socket = io('https://localhost:3000');
   socket.on('adminAuthenticated', data=>{
     nfcPrompt.style.display='none';
     if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; }
