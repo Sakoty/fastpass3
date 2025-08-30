@@ -208,6 +208,60 @@ const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const nfcPrompt = document.getElementById("nfcPrompt");
+  // --- Socket.IO ---
+const socket = io('http://localhost:3000');
+
+socket.on('connect_error', ()=>{ nfcPrompt.textContent='NFCサーバに接続できません'; setTimeout(()=>nfcPrompt.style.display='none',1800); });
+
+let nfcAuthResolve = null;
+
+socket.on('adminAuthenticated', ()=>{ 
+  hideNFCPrompt(); 
+  if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; } 
+});
+socket.on('adminAuthFailed', ()=>{ 
+  hideNFCPrompt(); 
+  errorMsg.textContent='カード認証に失敗しました'; 
+  if(nfcAuthResolve){ nfcAuthResolve(false); nfcAuthResolve=null; } 
+});
+
+// --- NFC 認証要求 ---
+function requireNFCAuth(action='操作'){ 
+  return new Promise(resolve=>{
+    nfcAuthResolve = resolve;
+    showNFCPrompt(`${action}のためカードをかざしてください…`);
+    socket.emit('requestNFC', { action });
+  });
+}
+
+function showNFCPrompt(msg){ nfcPrompt.style.display='block'; nfcPrompt.textContent = msg; }
+function hideNFCPrompt(){ nfcPrompt.style.display='none'; }
+
+// --- ログイン ---
+document.getElementById('loginSubmit').onclick = () => {
+  errorMsg.textContent='';
+  const id = document.getElementById('adminId').value.trim();
+  const pass = document.getElementById('adminPass').value.trim();
+  if(allowedAdmins.some(a=>a.id===id && a.password===pass)){ loginSuccess(id); } 
+  else errorMsg.textContent = 'IDまたはパスワードが違います';
+};
+
+document.getElementById('cardLoginBtn').onclick = async () => { 
+  if(await requireNFCAuth('ログイン')) loginSuccess('NFC'); 
+};
+
+function loginSuccess(adminId){
+  localStorage.setItem('adminId', adminId);
+  loginDiv.style.display='none';
+  mainContent.style.display='block';
+  startClock();
+  initTabs();
+  updateStatusDisplay();
+  loadTimeSlots();
+  startPassesListener();
+  startLogListener();
+}
+
 
 // 時計
 setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent = d.toLocaleString(); },1000);
