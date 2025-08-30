@@ -6,6 +6,10 @@
 <title>ファストパス管理（NFC対応・統合版）</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007bff">
+
+<!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
 <style>
 :root { --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333; }
 *{box-sizing:border-box} body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
@@ -74,7 +78,6 @@ th { background:#f0f3ff; }
   <div class="tab" data-tab="logTab">アクセスログ</div>
 </div>
 
-<!-- 発券制御 -->
 <div class="tab-content active" id="controlTab">
   <div class="card">
     <div class="row">
@@ -85,7 +88,6 @@ th { background:#f0f3ff; }
   </div>
 </div>
 
-<!-- 時間帯設定 -->
 <div class="tab-content" id="timeTab">
   <div class="card">
     <form id="setTimeSlots">
@@ -118,7 +120,6 @@ th { background:#f0f3ff; }
   </div>
 </div>
 
-<!-- 特別パス発券 -->
 <div class="tab-content" id="specialTab">
   <div class="card">
     <form id="specialForm">
@@ -135,7 +136,6 @@ th { background:#f0f3ff; }
   </div>
 </div>
 
-<!-- パス一覧 -->
 <div class="tab-content" id="passesTab">
   <div class="card">
     <button id="deleteAllBtn" class="danger w-auto">全削除</button>
@@ -148,7 +148,6 @@ th { background:#f0f3ff; }
   </div>
 </div>
 
-<!-- アクセスログ -->
 <div class="tab-content" id="logTab">
   <div class="card">
     <div id="logAuthMsg"></div>
@@ -184,74 +183,69 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const nfcPrompt = document.getElementById("nfcPrompt");
 
-// NFC認証ヘルパー
 let nfcAuthResolve = null;
-let socket = null;
-function requireNFCAuth(actionDesc='操作'){
-  return new Promise((resolve,reject)=>{
-    nfcAuthResolve = resolve;
-    nfcPrompt.style.display='block';
-    nfcPrompt.textContent = `${actionDesc}のためカードをかざしてください…`;
-    loadSocketIfNeeded(initNFC);
-  });
-}
+let socket = io('http://localhost:3000');
 
-function initNFC(){
-  if(socket) return;
-  socket = io('http://localhost:3000');
-  socket.on('adminAuthenticated', data=>{
-    nfcPrompt.style.display='none';
-    if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; }
-  });
-  socket.on('connect_error', ()=>{
-    nfcPrompt.textContent='NFCサーバに接続できません';
-    setTimeout(()=>{ nfcPrompt.style.display='none'; },1800);
-    if(nfcAuthResolve){ nfcAuthResolve(false); nfcAuthResolve=null; }
-  });
-  socket.on('adminAuthFailed', data=>{
-    nfcPrompt.style.display='none';
-    errorMsg.textContent='カード認証に失敗しました';
-    if(nfcAuthResolve){ nfcAuthResolve(false); nfcAuthResolve=null; }
-  });
-}
+socket.on('connect_error', ()=>{ nfcPrompt.textContent='NFCサーバに接続できません'; setTimeout(()=>nfcPrompt.style.display='none',1800); });
+socket.on('adminAuthenticated', ()=>{ nfcPrompt.style.display='none'; if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; } });
+socket.on('adminAuthFailed', ()=>{ nfcPrompt.style.display='none'; errorMsg.textContent='カード認証に失敗しました'; if(nfcAuthResolve){ nfcAuthResolve(false); nfcAuthResolve=null; } });
 
-// ログイン処理
+function requireNFCAuth(actionDesc='操作'){ return new Promise(resolve=>{ nfcAuthResolve = resolve; nfcPrompt.style.display='block'; nfcPrompt.textContent = `${actionDesc}のためカードをかざしてください…`; }); }
+
 document.getElementById('loginSubmit').onclick = () => {
+  errorMsg.textContent='';
   const id = document.getElementById('adminId').value.trim();
   const pass = document.getElementById('adminPass').value.trim();
-  if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
-    loginSuccess(id);
-  } else errorMsg.textContent = 'IDまたはパスワードが違います';
+  if(allowedAdmins.some(a=>a.id===id && a.password===pass)){ loginSuccess(id); } 
+  else errorMsg.textContent = 'IDまたはパスワードが違います';
 };
-document.getElementById('cardLoginBtn').onclick = () => {
-  requireNFCAuth('ログイン').then(ok=>{ if(ok) loginSuccess('NFC'); });
-};
+document.getElementById('cardLoginBtn').onclick = async () => { if(await requireNFCAuth('ログイン')) loginSuccess('NFC'); };
 
 function loginSuccess(adminId){
   localStorage.setItem('adminId', adminId);
   loginDiv.style.display='none';
   mainContent.style.display='block';
-  logAccess(adminId,'ログイン成功','login');
+  startClock();
+  initTabs();
   updateStatusDisplay();
   loadTimeSlots();
   startPassesListener();
   startLogListener();
 }
 
-// --- 以下、元の管理操作コードを統合 ---
-// タブ切替
-document.querySelectorAll('.tab').forEach(tab=>tab.onclick = ()=>{
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
-  document.querySelectorAll('.tab-content').forEach(tc=>tc.classList.remove('active'));
-  tab.classList.add('active-tab');
-  document.getElementById(tab.dataset.tab).classList.add('active');
-});
+// --- NFC 認証 ---
+let nfcAuthResolve = null;
+const socket = io('http://localhost:3000');
 
-// 時計表示
-function updateClock(){ document.getElementById('clock').textContent=new Date().toLocaleTimeString(); }
-setInterval(updateClock,1000); updateClock();
+socket.on('connect_error', ()=>{ showNFCPrompt('NFCサーバに接続できません'); });
+socket.on('adminAuthenticated', ()=>{ hideNFCPrompt(); if(nfcAuthResolve){ nfcAuthResolve(true); nfcAuthResolve=null; } });
+socket.on('adminAuthFailed', ()=>{ hideNFCPrompt(); errorMsg.textContent='カード認証に失敗しました'; if(nfcAuthResolve){ nfcAuthResolve(false); nfcAuthResolve=null; } });
 
-// 状態表示
+function requireNFCAuth(action='操作'){ 
+  return new Promise(resolve=>{
+    nfcAuthResolve = resolve; 
+    showNFCPrompt(`${action}のためカードをかざしてください…`);
+  });
+}
+function showNFCPrompt(msg){ nfcPrompt.style.display='block'; nfcPrompt.textContent = msg; }
+function hideNFCPrompt(){ nfcPrompt.style.display='none'; }
+
+// --- 時計表示 ---
+function startClock(){ setInterval(()=>{ document.getElementById('clock').textContent=new Date().toLocaleTimeString(); },1000); }
+
+// --- タブ切替 ---
+function initTabs(){
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.onclick = ()=>{
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
+      document.querySelectorAll('.tab-content').forEach(tc=>tc.classList.remove('active'));
+      tab.classList.add('active-tab');
+      document.getElementById(tab.dataset.tab).classList.add('active');
+    }
+  });
+}
+
+// --- 状態表示 ---
 function updateStatusDisplay(){
   const badge=document.getElementById('statusBadge');
   getDoc(doc(db,'settings','issueStatus')).then(d=>{
@@ -260,14 +254,24 @@ function updateStatusDisplay(){
   });
 }
 
-// 発券開始・停止
-document.getElementById('startBtn').onclick = ()=>{ requireNFCAuth('発券開始').then(ok=>{ if(ok){ setDoc(doc(db,'settings','issueStatus'),{active:true},{merge:true}); updateStatusDisplay(); } }); };
-document.getElementById('stopBtn').onclick = ()=>{ requireNFCAuth('発券停止').then(ok=>{ if(ok){ setDoc(doc(db,'settings','issueStatus'),{active:false},{merge:true}); updateStatusDisplay(); } }); };
+// --- 発券開始／停止 ---
+document.getElementById('startBtn').onclick = async ()=>{
+  if(await requireNFCAuth('発券開始')){
+    await setDoc(doc(db,'settings','issueStatus'),{active:true},{merge:true});
+    updateStatusDisplay();
+  }
+};
+document.getElementById('stopBtn').onclick = async ()=>{
+  if(await requireNFCAuth('発券停止')){
+    await setDoc(doc(db,'settings','issueStatus'),{active:false},{merge:true});
+    updateStatusDisplay();
+  }
+};
 
-// ログアウト
+// --- ログアウト ---
 document.getElementById('logoutBtn').onclick = ()=>{ localStorage.removeItem('adminId'); location.reload(); };
 
-// 時間帯設定
+// --- 時間帯設定 ---
 document.getElementById('setTimeSlots').onsubmit = async e=>{
   e.preventDefault();
   const slots=[];
@@ -296,7 +300,7 @@ function loadTimeSlots(){
   });
 }
 
-// 特別パス発券
+// --- 特別パス発券 ---
 document.getElementById('specialForm').onsubmit = async e=>{
   e.preventDefault();
   const name=document.getElementById('specialName').value.trim();
@@ -309,7 +313,7 @@ document.getElementById('specialForm').onsubmit = async e=>{
   alert('特別パスを発券しました');
 };
 
-// パス一覧表示
+// --- パス一覧 ---
 function startPassesListener(){
   const tbody=document.querySelector('#passesTable tbody');
   onSnapshot(collection(db,'passes'),snap=>{
@@ -327,31 +331,23 @@ function startPassesListener(){
     });
   });
 }
-window.toggleUsed = id=>{
-  requireNFCAuth('使用済み切替').then(ok=>{
-    if(ok){
-      const ref=doc(db,'passes',id);
-      getDoc(ref).then(d=>{
-        if(d.exists()) updateDoc(ref,{used:!d.data().used});
-      });
-    }
-  });
+window.toggleUsed = async id=>{
+  if(await requireNFCAuth('使用済み切替')){
+    const ref=doc(db,'passes',id);
+    getDoc(ref).then(d=>{ if(d.exists()) updateDoc(ref,{used:!d.data().used}); });
+  }
 };
-window.deletePass=id=>{
-  requireNFCAuth('削除').then(ok=>{ if(ok) deleteDoc(doc(db,'passes',id)); });
+window.deletePass = async id=>{
+  if(await requireNFCAuth('削除')) deleteDoc(doc(db,'passes',id));
 };
-document.getElementById('deleteAllBtn').onclick = ()=>{
-  requireNFCAuth('全削除').then(ok=>{
-    if(ok) onSnapshot(collection(db,'passes'),snap=>{
-      snap.docs.forEach(doc=>deleteDoc(doc.ref));
-    });
-  });
+document.getElementById('deleteAllBtn').onclick = async ()=>{
+  if(await requireNFCAuth('全削除')){
+    onSnapshot(collection(db,'passes'),snap=>{ snap.docs.forEach(doc=>deleteDoc(doc.ref)); });
+  }
 };
 
-// アクセスログ
-function logAccess(admin,action,type='action'){
-  addDoc(collection(db,'logs'),{admin,action,type,time:serverTimestamp()});
-}
+// --- アクセスログ ---
+function logAccess(admin,action,type='action'){ addDoc(collection(db,'logs'),{admin,action,type,time:serverTimestamp()}); }
 function startLogListener(){
   const tbody=document.querySelector('#logTable tbody');
   onSnapshot(query(collection(db,'logs'),orderBy('time','desc')),(snap)=>{
@@ -364,12 +360,6 @@ function startLogListener(){
     });
     document.getElementById('logTable').style.display='table';
   });
-}
-
-// NFCサーバロード
-function loadSocketIfNeeded(cb){ 
-  if(typeof io!=='undefined'){ cb(); } 
-  else { const s=document.createElement('script'); s.src='https://cdn.socket.io/4.7.2/socket.io.min.js'; s.onload=cb; document.body.appendChild(s); } 
 }
 </script>
 </body>
