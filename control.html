@@ -364,7 +364,7 @@ function startPassesListener(){
         <td>${d.id}</td>
         <td>${d.name||''}</td>
         <td>${d.people||1}</td>
-        <td>${d.startTime||''}〜${d.endTime||''}</td>
+        <td>${d.startTime ? d.startTime : '-'}〜${d.endTime ? d.endTime : '-'}</td>
         <td>${d.type||'通常'}</td>
         <td><span class="badge ${d.status==='使用済'?'used':'unused'}">${d.status||'未使用'}</span></td>
         <td><button class="danger w-auto">削除</button></td>
