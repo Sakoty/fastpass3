@@ -46,7 +46,6 @@ function loadPassFromLocal() {
   return data.date===getTodayString()?data:null;
 }
 
-// 10分刻みスロット生成
 function generateTimeBlocks(start,end,interval=10){
   const blocks=[];
   const [sh,sm] = start.split(":").map(Number);
@@ -63,7 +62,6 @@ function generateTimeBlocks(start,end,interval=10){
   return blocks;
 }
 
-// 次の空きスロット
 function getNextAvailableSlot(slots,limits,passes){
   const now = new Date();
   const nowMinutes = now.getHours()*60 + now.getMinutes();
@@ -79,7 +77,6 @@ function getNextAvailableSlot(slots,limits,passes){
   return available.length>0?available[0].slot:null;
 }
 
-// QR描画
 function drawQRCode(id){
   const qrContainer=document.getElementById("qrcode");
   qrContainer.innerHTML="";
@@ -88,18 +85,22 @@ function drawQRCode(id){
   });
 }
 
-// UI更新
-function updateUI(latestPasses,slots,limits){
+function updateUI(latestPasses, slots, limits){
   const info=document.getElementById("info");
-  const saved = loadPassFromLocal();
+  const form=document.getElementById("form");
   if(!slots || slots.length===0 || !limits || limits.length===0){
     info.innerHTML='<p class="notset">案内時間が設定されていません</p>'; return;
   }
+
+  let saved = loadPassFromLocal();
   if(saved){
     const passInDb = latestPasses.find(p=>p.id===saved.id);
+    if(passInDb) saved.time = passInDb.time;
+
     const used = passInDb?.used||false;
-    saved.used=used;
-    if(used) savePassToLocal(saved);
+    saved.used = used;
+
+    form.style.display='none'; // 発券済みならフォーム非表示
 
     const [sh,sm] = saved.time.split("〜")[0].split(":").map(Number);
     const [eh,em] = saved.time.split("〜")[1].split(":").map(Number);
@@ -107,15 +108,19 @@ function updateUI(latestPasses,slots,limits){
     const endDate = new Date(); endDate.setHours(eh,em,0,0);
     const now = new Date();
 
-    info.innerHTML=`<div class="status ${used?'used':now>endDate?'expired':''}">${used?'使用済み':now>endDate?'無効（時間切れ）':now<startDate?'案内時刻前です':'現在案内中'}</div>
-      <p>番号：${saved.id}</p>
-      <p>名前：${saved.name}</p>
-      <p>人数：${saved.people}</p>
-      <p>案内時間：${saved.time}</p>`;
+    info.innerHTML=`<div class="status ${used?'used':now>endDate?'expired':''}">
+      ${used?'使用済み':now>endDate?'無効（時間切れ）':now<startDate?'案内時刻前です':'現在案内中'}
+    </div>
+    <p>番号：${saved.id}</p>
+    <p>名前：${saved.name}</p>
+    <p>人数：${saved.people}</p>
+    <p>案内時間：${saved.time}</p>`;
     drawQRCode(saved.id);
     return;
   }
 
+  // 未発券ならフォーム表示
+  form.style.display='block';
   const nextTime = getNextAvailableSlot(slots,limits,latestPasses);
   if(!nextTime){
     info.innerHTML='<p class="ended">本日のプライオリティパスは全て発券終了しました</p>';
@@ -127,7 +132,6 @@ function updateUI(latestPasses,slots,limits){
 window.addEventListener("load", async ()=>{
   const passesCol = collection(db,"passes");
   const timeSlotsDoc = doc(db,"settings","timeSlots");
-  const issueStatusDoc = doc(db,"settings","issueStatus");
 
   let latestPasses = [];
   let slots = [];
@@ -136,7 +140,7 @@ window.addEventListener("load", async ()=>{
   onSnapshot(timeSlotsDoc,snap=>{
     const data = snap.data();
     if(data?.slots){
-      slots = []; limits = [];
+      slots=[]; limits=[];
       data.slots.forEach(f=>{
         const gen = generateTimeBlocks(f.start,f.end,f.interval||10);
         slots.push(...gen);
@@ -170,8 +174,11 @@ window.addEventListener("load", async ()=>{
     const id = `FP${number.toString().padStart(3,"0")}`;
     const newPass = {id,number,name,people:num,time:nextTime,used:false,createdAt:serverTimestamp()};
 
-    try{ await addDoc(passesCol,newPass); savePassToLocal(newPass); } 
-    catch(err){ alert("発券失敗:"+err.message); }
+    try{
+      await addDoc(passesCol,newPass);
+      savePassToLocal(newPass);
+    } catch(err){ alert("発券失敗:"+err.message); }
+
     isSubmitting=false;
   });
 });
