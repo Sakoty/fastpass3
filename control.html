@@ -140,26 +140,30 @@
   </div>
 
   <!-- パス一覧 -->
-  <div class="tab-content" id="passesTab">
-    <div class="card">
-      <div style="overflow-x:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>発券ID</th>
-              <th>名前</th>
-              <th>人数</th>
-              <th>案内時間</th>
-              <th>種別</th>
-              <th>状態</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="passesTableBody"></tbody>
-        </table>
-      </div>
+  <!-- パス一覧 -->
+<div class="tab-content" id="passesTab">
+  <div class="card">
+    <div style="text-align:right; margin-bottom:6px;">
+      <button id="deleteAllPassesBtn" class="danger w-auto">全削除</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>発券ID</th>
+            <th>名前</th>
+            <th>人数</th>
+            <th>案内時間</th>
+            <th>種別</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="passesTableBody"></tbody>
+      </table>
     </div>
   </div>
+</div>
 
   <!-- アクセスログ -->
   <div class="tab-content" id="logTab">
@@ -372,7 +376,6 @@ function startPassesListener(){
           return;
         }
         if(confirm(`本当にパス ${d.id} を削除しますか？`)){
-          // Firestore のドキュメントIDを使って削除
           await deleteDoc(doc(db,'passes',docSnap.id));
           logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
         }
@@ -381,6 +384,26 @@ function startPassesListener(){
     });
   });
 }
+
+// Shiftキー監視
+document.addEventListener('keydown', e=>{ if(e.key==='Shift') shiftPressed = true; });
+document.addEventListener('keyup', e=>{ if(e.key==='Shift') shiftPressed = false; });
+
+// 全削除ボタン
+document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
+  if(!shiftPressed){
+    alert('Shiftキーを押しながらクリックしてください');
+    return;
+  }
+  if(!confirm('本当に全てのパスを削除しますか？')) return;
+
+  const snap = await getDocs(collection(db,'passes'));
+  const batch = writeBatch(db);
+  snap.forEach(docSnap => batch.delete(docSnap.ref));
+  await batch.commit();
+  alert('全てのパスを削除しました');
+  logAccess(localStorage.getItem('adminId'), '全パス削除', 'admin');
+};
 
 /* ================= Shiftキー監視 ================= */
 document.addEventListener('keydown', e=>{
