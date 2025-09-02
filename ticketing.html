@@ -15,7 +15,7 @@ label,input { display:block; margin:10px auto; }
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, getDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Firebase設定
 const firebaseConfig = {
@@ -118,13 +118,11 @@ function updateUI(latestPasses,slots,limits,issueEnabled){
     const now = new Date();
 
     form.style.display="none";
-    info.innerHTML=`
-      <h2 class="${used?'used':now>endDate?'expired':''}">${used?'使用済み':now>endDate?'無効（時間切れ）':now<startDate?'案内時刻前です':'現在案内中'}</h2>
+    info.innerHTML=`<h2 class="${used?'used':now>endDate?'expired':''}">${used?'使用済み':now>endDate?'無効（時間切れ）':now<startDate?'案内時刻前です':'現在案内中'}</h2>
       <p>番号：${saved.id}</p>
       <p>名前：${saved.name}</p>
       <p>人数：${saved.people}</p>
-      <p>案内時間：${saved.time}</p>
-    `;
+      <p>案内時間：${saved.time}</p>`;
     drawQRCode(saved.id);
     return;
   }
@@ -140,7 +138,7 @@ function updateUI(latestPasses,slots,limits,issueEnabled){
 }
 
 // ページ読み込み時処理
-window.addEventListener("load",()=>{
+window.addEventListener("load",async()=>{
   const passesCol = collection(db,"passes");
   const timeSlotsDoc = doc(db,"settings","timeSlots");
   const issueStatusDoc = doc(db,"settings","issueStatus");
@@ -152,6 +150,12 @@ window.addEventListener("load",()=>{
   let isSubmitting = false;
 
   function tryUpdateUI(){ updateUI(latestPasses,slots,limits,issueEnabled); }
+
+  // 発券状態初期化
+  const issueStatusSnap = await getDoc(issueStatusDoc);
+  if(!issueStatusSnap.exists()){
+    await setDoc(issueStatusDoc,{active:true,updatedAt:serverTimestamp()});
+  }
 
   // 時間帯取得
   onSnapshot(timeSlotsDoc,snap=>{
