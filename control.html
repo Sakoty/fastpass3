@@ -354,25 +354,26 @@ function startPassesListener(){
     const tbody=document.getElementById('passesTableBody');
     tbody.innerHTML='';
     q.forEach(docSnap=>{
-      const d=docSnap.data();
-      const tr=document.createElement('tr');
-      tr.innerHTML=`
+      const d = docSnap.data();
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
         <td>${d.id}</td>
         <td>${d.name||''}</td>
         <td>${d.people||1}</td>
         <td>${d.startTime||''}〜${d.endTime||''}</td>
         <td>${d.type||'通常'}</td>
         <td><span class="badge ${d.status==='使用済'?'used':'unused'}">${d.status||'未使用'}</span></td>
-        <td><button class="danger" data-id="${d.id}">削除</button></td>
+        <td><button class="danger w-auto">削除</button></td>
       `;
       const btn = tr.querySelector('button');
-      btn.onclick = async(e)=>{
+      btn.onclick = async (e)=>{
         if(!shiftPressed){
           alert('Shiftキーを押しながらクリックしてください');
           return;
         }
         if(confirm(`本当にパス ${d.id} を削除しますか？`)){
-          await deleteDoc(doc(db,'passes',d.id));
+          // Firestore のドキュメントIDを使って削除
+          await deleteDoc(doc(db,'passes',docSnap.id));
           logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
         }
       };
