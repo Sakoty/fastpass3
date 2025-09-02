@@ -204,10 +204,10 @@ const loginDiv = document.getElementById("loginDiv");
 const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 
-// 時計
+/* ================= 時計 ================= */
 setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent = d.toLocaleString(); },1000);
 
-// タブ切替
+/* ================= タブ切替 ================= */
 Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
   tab.addEventListener('click', ()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
@@ -230,6 +230,7 @@ document.getElementById('loginSubmit').onclick = () => {
 
 let unsubPasses = null;
 let unsubIssueStatus = null;
+let shiftPressed = false;
 
 function loginSuccess(adminId){
   localStorage.setItem('adminId', adminId);
@@ -241,6 +242,7 @@ function loginSuccess(adminId){
   startPassesListener();
 }
 
+/* ================= ログアウト処理 ================= */
 function logout(){
   const id = localStorage.getItem('adminId')||'不明';
   logAccess(id, 'ログアウト', 'admin');
@@ -251,8 +253,10 @@ function logout(){
   mainContent.style.display='none';
   loginDiv.style.display='block';
 }
-
 document.getElementById('logoutBtn').onclick = logout;
+
+/* ページ遷移・閉じるイベントで自動ログアウト */
+window.addEventListener("beforeunload", logout);
 
 /* ================= 発券ステータス ================= */
 async function setIssueStatus(status){
@@ -285,10 +289,6 @@ document.getElementById('stopBtn').onclick = async()=>{
 function pad2(n){ return n.toString().padStart(2,'0'); }
 function timeToMinutes(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
 function minutesToTime(m){ return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`; }
-function generateSlots(start,end,interval){
-  const arr=[]; let curr=timeToMinutes(start); const endM=timeToMinutes(end);
-  while(curr<=endM){ arr.push(minutesToTime(curr)); curr+=interval; } return arr;
-}
 
 document.getElementById('setTimeSlots').onsubmit=async(e)=>{
   e.preventDefault();
@@ -331,19 +331,20 @@ document.getElementById('specialForm').onsubmit=async(e)=>{
   const start=document.getElementById('specialStartTime').value;
   const end=document.getElementById('specialEndTime').value;
   if(!name || !start || !end) return alert('全て入力してください');
-  const idNum=String(Math.floor(Math.random()*900+100));
-  const passId='FP'+idNum;
-  await setDoc(doc(db,'passes',passId),{
-    id:passId,
-    name, people,
-    startTime:start,
-    endTime:end,
-    type:'特別',
-    status:'未使用',
-    createdAt:serverTimestamp()
-  });
-  alert(`特別パス発券完了: ${passId}`);
-  logAccess(localStorage.getItem('adminId'),`特別パス発券: ${passId}`,'special');
+  const idNum = String(Math.floor(Math.random()*900+100));
+const passId = 'FP' + idNum;
+await setDoc(doc(db,'passes',passId),{
+  id: passId,
+  name,
+  people,
+  startTime: start,
+  endTime: end,
+  type: '特別',
+  status: '未使用',
+  createdAt: serverTimestamp()
+});
+alert(`特別パス発券完了: ${passId}`);
+logAccess(localStorage.getItem('adminId'), `特別パス発券: ${passId}`, 'special');
 };
 
 /* ================= パス一覧 ================= */
@@ -364,20 +365,38 @@ function startPassesListener(){
         <td><span class="badge ${d.status==='使用済'?'used':'unused'}">${d.status||'未使用'}</span></td>
         <td><button class="danger" data-id="${d.id}">削除</button></td>
       `;
-      tr.querySelector('button').onclick=async()=>{ await deleteDoc(doc(db,'passes',d.id)); logAccess(localStorage.getItem('adminId'),`パス削除: ${d.id}`,'admin'); };
+      const btn = tr.querySelector('button');
+      btn.onclick = async(e)=>{
+        if(!shiftPressed){
+          alert('Shiftキーを押しながらクリックしてください');
+          return;
+        }
+        if(confirm(`本当にパス ${d.id} を削除しますか？`)){
+          await deleteDoc(doc(db,'passes',d.id));
+          logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
+        }
+      };
       tbody.appendChild(tr);
     });
   });
 }
 
+/* ================= Shiftキー監視 ================= */
+document.addEventListener('keydown', e=>{
+  if(e.key==='Shift') shiftPressed = true;
+});
+document.addEventListener('keyup', e=>{
+  if(e.key==='Shift') shiftPressed = false;
+});
+
 /* ================= アクセスログ ================= */
-async function logAccess(adminId,msg,type){
+async function logAccess(adminId, msg, type){
   await addDoc(collection(db,'accessLogs'),{
-    adminId, msg, type, timestamp:serverTimestamp()
+    adminId, msg, type, timestamp: serverTimestamp()
   });
 }
 
-document.getElementById('logAuthBtn').onclick=async()=>{
+document.getElementById('logAuthBtn').onclick = async()=>{
   const pass=document.getElementById('logPass').value;
   if(pass==='0914'){
     document.getElementById('logContent').style.display='block';
@@ -395,19 +414,19 @@ async function loadLogs(){
   snap.forEach(d=>{
     const data=d.data();
     const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
-    div.innerHTML+=`[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
+    div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
   });
 }
 
-document.getElementById('clearLogsBtn').onclick=async()=>{
-  const confirmClear = confirm('本当にログを全て削除しますか？');
-  if(!confirmClear) return;
+document.getElementById('clearLogsBtn').onclick = async()=>{
+  if(!confirm('本当にログを全て削除しますか？')) return;
   const snap = await getDocs(collection(db,'accessLogs'));
   const batch = writeBatch(db);
-  snap.forEach(docSnap=>batch.delete(docSnap.ref));
+  snap.forEach(docSnap => batch.delete(docSnap.ref));
   await batch.commit();
   loadLogs();
 };
 </script>
 </body>
 </html>
+
