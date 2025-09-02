@@ -5,18 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>プライオリティパス発券</title>
 <style>
-body { font-family:sans-serif; text-align:center; padding:20px; background:#f0f8ff; }
-h1 { color:#0066cc; }
+body { font-family:sans-serif; text-align:center; padding:20px; background:#e6f2ff; }
+h1 { color:#004080; margin-bottom:20px; }
+form { margin-bottom:20px; display:inline-block; padding:20px; background:#fff; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,0.2);}
+input { font-size:16px; padding:8px; margin:8px; width:200px; border-radius:6px; border:1px solid #ccc; }
+button { font-size:16px; padding:10px 20px; border:none; border-radius:6px; background:#0066cc; color:#fff; cursor:pointer; }
+button:hover { background:#0052a3; }
+#info { margin:20px auto; font-size:18px; }
 #qrcode { margin:20px auto; }
-.ended,.used,.expired,.stopped,.notset { color:red; font-weight:bold; }
-input { font-size:16px; padding:5px; margin:5px; width:200px; }
+.ended,.used,.expired,.stopped,.notset { color:red; font-weight:bold; font-size:18px; }
+.status { font-weight:bold; margin-bottom:10px; font-size:20px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// Firebase初期化
+// Firebase設定
 const firebaseConfig = {
   apiKey:"AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
   authDomain:"fastpass-system.firebaseapp.com",
@@ -28,13 +33,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 今日の日付
 function getTodayString() {
   const now = new Date();
   return `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,"0")}-${now.getDate().toString().padStart(2,"0")}`;
 }
 
-// ローカル保存
 function savePassToLocal(pass) { localStorage.setItem("fp_pass", JSON.stringify({...pass,date:getTodayString()})); }
 function loadPassFromLocal() {
   const saved = localStorage.getItem("fp_pass");
@@ -43,7 +46,7 @@ function loadPassFromLocal() {
   return data.date===getTodayString()?data:null;
 }
 
-// 10分刻み生成
+// 10分刻みスロット生成
 function generateTimeBlocks(start,end,interval=10){
   const blocks=[];
   const [sh,sm] = start.split(":").map(Number);
@@ -69,7 +72,7 @@ function getNextAvailableSlot(slots,limits,passes){
   for(let i=0;i<slots.length;i++){
     if(counts[i]<limits[i]){
       const [h,m] = slots[i].split("〜")[0].split(":").map(Number);
-      if(h*60+m>=nowMinutes) available.push({slot:slots[i], index:i, minutes:h*60+m});
+      if(h*60+m>=nowMinutes) available.push({slot:slots[i], minutes:h*60+m});
     }
   }
   available.sort((a,b)=>a.minutes-b.minutes);
@@ -104,7 +107,7 @@ function updateUI(latestPasses,slots,limits){
     const endDate = new Date(); endDate.setHours(eh,em,0,0);
     const now = new Date();
 
-    info.innerHTML=`<h2 class="${used?'used':now>endDate?'expired':''}">${used?'使用済み':now>endDate?'無効（時間切れ）':now<startDate?'案内時刻前です':'現在案内中'}</h2>
+    info.innerHTML=`<div class="status ${used?'used':now>endDate?'expired':''}">${used?'使用済み':now>endDate?'無効（時間切れ）':now<startDate?'案内時刻前です':'現在案内中'}</div>
       <p>番号：${saved.id}</p>
       <p>名前：${saved.name}</p>
       <p>人数：${saved.people}</p>
@@ -121,7 +124,6 @@ function updateUI(latestPasses,slots,limits){
   }
 }
 
-// 初期処理
 window.addEventListener("load", async ()=>{
   const passesCol = collection(db,"passes");
   const timeSlotsDoc = doc(db,"settings","timeSlots");
@@ -131,7 +133,6 @@ window.addEventListener("load", async ()=>{
   let slots = [];
   let limits = [];
 
-  // 時間帯取得
   onSnapshot(timeSlotsDoc,snap=>{
     const data = snap.data();
     if(data?.slots){
@@ -145,13 +146,11 @@ window.addEventListener("load", async ()=>{
     updateUI(latestPasses,slots,limits);
   });
 
-  // 発券状況監視
   onSnapshot(passesCol,snap=>{
     latestPasses = snap.docs.map(d=>d.data());
     updateUI(latestPasses,slots,limits);
   });
 
-  // 発券処理
   let isSubmitting=false;
   document.getElementById("form").addEventListener("submit", async(e)=>{
     e.preventDefault();
@@ -180,11 +179,12 @@ window.addEventListener("load", async ()=>{
 </head>
 <body>
 <h1>プライオリティパス発券</h1>
-<div id="info"></div>
 <form id="form">
-<input type="text" id="name" placeholder="名前" required>
-<input type="number" id="people" placeholder="人数" required min="1">
+<input type="text" id="name" placeholder="名前" required><br>
+<input type="number" id="people" placeholder="人数" required min="1"><br>
+<button type="submit">発券する</button>
 </form>
+<div id="info"></div>
 <div id="qrcode"></div>
 </body>
 </html>
