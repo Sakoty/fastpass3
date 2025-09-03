@@ -38,7 +38,9 @@ function getTodayString() {
   return `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,"0")}-${now.getDate().toString().padStart(2,"0")}`;
 }
 
-function savePassToLocal(pass) { localStorage.setItem("fp_pass", JSON.stringify({...pass,date:getTodayString()})); }
+function savePassToLocal(pass) {
+  localStorage.setItem("fp_pass", JSON.stringify({...pass,date:getTodayString()}));
+}
 function loadPassFromLocal() {
   const saved = localStorage.getItem("fp_pass");
   if(!saved) return null;
@@ -89,7 +91,9 @@ function updateUI(latestPasses, slots, limits){
   const info=document.getElementById("info");
   const form=document.getElementById("form");
   if(!slots || slots.length===0 || !limits || limits.length===0){
-    info.innerHTML='<p class="notset">案内時間が設定されていません</p>'; return;
+    info.innerHTML='<p class="notset">案内時間が設定されていません</p>'; 
+    form.style.display="none";
+    return;
   }
 
   let saved = loadPassFromLocal();
@@ -151,7 +155,7 @@ window.addEventListener("load", async ()=>{
   });
 
   onSnapshot(passesCol,snap=>{
-    latestPasses = snap.docs.map(d=>d.data());
+    latestPasses = snap.docs.map(d => ({...d.data(), docId:d.id}));
     updateUI(latestPasses,slots,limits);
   });
 
