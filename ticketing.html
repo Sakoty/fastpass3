@@ -28,9 +28,7 @@ button:hover { background:#0052a3; }
 }
 .ticket-card h2 { margin:0 0 10px; font-size:22px; color:#004080; }
 .ticket-card p { margin:6px 0; font-size:16px; }
-.ticket-card .status {
-  font-size:18px; font-weight:bold; margin-bottom:12px;
-}
+.ticket-card .status { font-size:18px; font-weight:bold; margin-bottom:12px; }
 .ticket-card.used { border:2px solid #999; }
 .ticket-card.expired { border:2px solid #cc0000; }
 .ticket-card.active { border:2px solid #009933; }
@@ -55,6 +53,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// --- localStorage ---
 function getTodayString() {
   const now = new Date();
   return `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,"0")}-${now.getDate().toString().padStart(2,"0")}`;
@@ -67,6 +66,7 @@ function loadPassFromLocal() {
   return data.date===getTodayString()?data:null;
 }
 
+// --- 時間ブロック生成 ---
 function generateTimeBlocks(start,end,interval=10){
   const blocks=[];
   const [sh,sm] = start.split(":").map(Number);
@@ -83,6 +83,7 @@ function generateTimeBlocks(start,end,interval=10){
   return blocks;
 }
 
+// --- QRコード ---
 function drawQRCode(id){
   const qrContainer=document.getElementById("qrcode");
   qrContainer.innerHTML="";
@@ -91,13 +92,19 @@ function drawQRCode(id){
   });
 }
 
-// UI更新
+// --- UI更新 ---
 function updateUI(latestPasses,slots,limits,issueActive){
   const info=document.getElementById("info");
-  info.innerHTML="";
-  const form = document.getElementById("form");
-  const saved = loadPassFromLocal();
-  const now = new Date();
+  const form=document.getElementById("form");
+  const saved=loadPassFromLocal();
+  const now=new Date();
+
+  // --- 発券停止優先 ---
+  if(!issueActive){
+    form.style.display="none";
+    info.innerHTML='<p class="ended">本日の発券は停止中です</p>';
+    return;
+  }
 
   if(!slots || slots.length===0){
     info.innerHTML='<p class="notset">案内時間が設定されていません</p>';
@@ -105,17 +112,17 @@ function updateUI(latestPasses,slots,limits,issueActive){
     return;
   }
 
-  // 発券済みパスがある場合はフォーム非表示
+  // --- 当日発券済み表示 ---
   if(saved){
-    const passInDb = latestPasses.find(p=>p.id===saved.id);
-    const used = passInDb?.used||false;
-    saved.used = used;
+    const passInDb=latestPasses.find(p=>p.id===saved.id);
+    const used=passInDb?.used||false;
+    saved.used=used;
     if(used) savePassToLocal(saved);
 
-    const [sh,sm] = saved.time.split("〜")[0].split(":").map(Number);
-    const [eh,em] = saved.time.split("〜")[1].split(":").map(Number);
-    const startDate = new Date(); startDate.setHours(sh,sm,0,0);
-    const endDate = new Date(); endDate.setHours(eh,em,0,0);
+    const [sh,sm]=saved.time.split("〜")[0].split(":").map(Number);
+    const [eh,em]=saved.time.split("〜")[1].split(":").map(Number);
+    const startDate=new Date(); startDate.setHours(sh,sm,0,0);
+    const endDate=new Date(); endDate.setHours(eh,em,0,0);
 
     let statusText="現在案内中", cls="active";
     if(used){ statusText="使用済み"; cls="used"; }
@@ -123,72 +130,70 @@ function updateUI(latestPasses,slots,limits,issueActive){
     else if(now<startDate){ statusText="案内時刻前です"; cls="active"; }
 
     info.innerHTML=`<div class="ticket-card ${cls}">
-        <div class="status">${statusText}</div>
-        <h2>番号：${saved.id}</h2>
-        <p>名前：${saved.name}</p>
-        <p>人数：${saved.people}</p>
-        <p>案内時間：${saved.time}</p>
-        <div id="qrcode"></div>
-      </div>`;
+      <div class="status">${statusText}</div>
+      <h2>番号：${saved.id}</h2>
+      <p>名前：${saved.name}</p>
+      <p>人数：${saved.people}</p>
+      <p>案内時間：${saved.time}</p>
+      <div id="qrcode"></div>
+    </div>`;
     drawQRCode(saved.id);
     form.style.display="none";
     return;
   }
 
-  // 空き枠リスト作成 & 残り枠チェック（過去時間帯除外）
-  let allFull = true;
+  // --- 空き枠リスト作成 ---
+  let allFull=true;
   const select=document.getElementById("timeSelect");
   select.innerHTML="";
   slots.forEach((slot,i)=>{
-    const [sh,sm] = slot.split("〜")[0].split(":").map(Number);
-    const slotStart = new Date(); slotStart.setHours(sh,sm,0,0);
-    if(slotStart < now) return; // 過去時間帯は非表示
+    const [sh,sm]=slot.split("〜")[0].split(":").map(Number);
+    const slotStart=new Date(); slotStart.setHours(sh,sm,0,0);
+    if(slotStart<now) return;
 
-    const count = latestPasses.filter(p=>p.time===slot).length;
-    const left = limits[i] - count;
-    const opt = document.createElement("option");
-    opt.value = slot;
-    opt.textContent = `${slot}（残り${left}枠）`;
-    if(left <= 0){ opt.disabled = true; opt.textContent += "【満員】"; } else { allFull = false; }
+    const count=latestPasses.filter(p=>p.time===slot).length;
+    const left=limits[i]-count;
+    const opt=document.createElement("option");
+    opt.value=slot;
+    opt.textContent=`${slot}（残り${left}枠）`;
+    if(left<=0){ opt.disabled=true; opt.textContent+="【満員】"; } else { allFull=false; }
     select.appendChild(opt);
   });
 
-  // 発券不可条件
-  if(!issueActive){
+  if(allFull){
     form.style.display="none";
-    info.innerHTML = '<p class="ended">本日の発券は停止中です</p>';
-  } else if(allFull){
-    form.style.display="none";
-    info.innerHTML = '<p class="ended">本日のプライオリティパスは全て発券終了しました</p>';
+    info.innerHTML='<p class="ended">本日のプライオリティパスは全て発券終了しました</p>';
   } else {
     form.style.display="block";
+    info.innerHTML="";
   }
 }
 
+// --- 初期処理 ---
 window.addEventListener("load", ()=>{
-  const passesCol = collection(db,"passes");
-  const timeSlotsDoc = doc(db,"settings","timeSlots");
-  const issueStatusDoc = doc(db,"settings","issueStatus"); // 発券ON/OFF
+  const passesCol=collection(db,"passes");
+  const timeSlotsDoc=doc(db,"settings","timeSlots");
+  const issueStatusDoc=doc(db,"settings","issueStatus");
 
-  let latestPasses = [];
-  let slots = [];
-  let limits = [];
-  let issueActive = true;
+  let latestPasses=[];
+  let slots=[];
+  let limits=[];
+  let issueActive=true;
 
-  // 発券ON/OFF取得
+  // 発券ON/OFF
   onSnapshot(issueStatusDoc,snap=>{
-    const data = snap.data();
-    issueActive = data?.active ?? true;
+    const data=snap.data();
+    issueActive=data?.active??true;
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // 時間枠取得
+  // 時間枠
   onSnapshot(timeSlotsDoc,snap=>{
-    const data = snap.data();
+    const data=snap.data();
     if(data?.slots){
-      slots = []; limits = [];
+      slots=[]; limits=[];
       data.slots.forEach(f=>{
-        const gen = generateTimeBlocks(f.start,f.end,f.interval||10);
+        const gen=generateTimeBlocks(f.start,f.end,f.interval||10);
         slots.push(...gen);
         for(let i=0;i<gen.length;i++) limits.push(f.limit||1);
       });
@@ -196,9 +201,9 @@ window.addEventListener("load", ()=>{
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // 発券済みパス取得
+  // 発券済み
   onSnapshot(passesCol,snap=>{
-    latestPasses = snap.docs.map(d=>d.data());
+    latestPasses=snap.docs.map(d=>d.data());
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
@@ -213,10 +218,10 @@ window.addEventListener("load", ()=>{
     const time=document.getElementById("timeSelect").value;
     if(!name||isNaN(num)||num<1||!time){ alert("正しい情報を入力してください"); isSubmitting=false; return; }
 
-    const lastNum = latestPasses.length>0?Math.max(...latestPasses.map(p=>p.number||0)):0;
-    const number = lastNum+1;
-    const id = `FP${number.toString().padStart(3,"0")}`;
-    const newPass = {id,number,name,people:num,time,used:false,createdAt:serverTimestamp()};
+    const lastNum=latestPasses.length>0?Math.max(...latestPasses.map(p=>p.number||0)):0;
+    const number=lastNum+1;
+    const id=`FP${number.toString().padStart(3,"0")}`;
+    const newPass={id,number,name,people:num,time,used:false,createdAt:serverTimestamp()};
 
     try{ await addDoc(passesCol,newPass); savePassToLocal(newPass); }
     catch(err){ alert("発券失敗:"+err.message); }
@@ -234,5 +239,6 @@ window.addEventListener("load", ()=>{
   <button type="submit">🎟️ 発券する</button>
 </form>
 <div id="info"></div>
+<div id="qrcode"></div>
 </body>
 </html>
