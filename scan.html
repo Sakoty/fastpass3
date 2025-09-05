@@ -62,7 +62,7 @@ function showLog(message){
   logsDiv.prepend(p);
 }
 
-// ---- ログ書き込み（page付き）----
+// ---- ログ書き込み ----
 async function logAccess(adminId, action, page = "scan"){
   try{
     await addDoc(collection(db,"accessLogs"),{
@@ -162,14 +162,7 @@ function startScan(){
         const docSnap = snapshot.docs[0];
         const data = docSnap.data();
 
-        // ---- 追加：日付チェック ----
-        const today = new Date().toISOString().slice(0,10); // "YYYY-MM-DD"
-        if(data.date !== today){
-          showResult(`このパスは本日(${today})のものではありません`,true);
-          logAccess(localStorage.getItem("adminId"),`日付不一致: ${code}`);
-          isReading=false;
-          return;
-        }
+        // --- 本日判定を削除しました ---
 
         const [start,end] = parseTimeRange(data.time);
         const now = new Date();
