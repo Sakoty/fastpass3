@@ -37,7 +37,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 管理者ID・パスワード
+// 管理者ID・パスワード（本番運用ではFirestore管理を推奨）
 const allowedAdmins = [
   { id: "Sakoty", password: "3214" },
   { id: "seseguchi914", password: "0914" },
@@ -53,7 +53,7 @@ const loginForm = document.getElementById("loginForm");
 const logoutBtn = document.getElementById("logoutBtn");
 const logsDiv = document.createElement("div");
 logsDiv.id = "logs";
-document.body.appendChild(logsDiv);
+mainContent?.appendChild(logsDiv);
 
 // ---- ログ表示 ----
 function showLog(message){
@@ -65,13 +65,12 @@ function showLog(message){
 // ---- ログ書き込み（page付き）----
 async function logAccess(adminId, action, page = "scan"){
   try{
-    const docRef = await addDoc(collection(db,"accessLogs"),{
+    await addDoc(collection(db,"accessLogs"),{
       adminId: adminId || "不明",
       action,
       page,
       createdAt: serverTimestamp()
     });
-    console.log("ログ記録成功:", docRef.id);
     showLog(`${new Date().toLocaleString()} | ${adminId||"不明"} | ${page} | ${action}`);
   }catch(e){ 
     console.error("ログ記録失敗:", e); 
@@ -162,6 +161,16 @@ function startScan(){
       } else {
         const docSnap = snapshot.docs[0];
         const data = docSnap.data();
+
+        // ---- 追加：日付チェック ----
+        const today = new Date().toISOString().slice(0,10); // "YYYY-MM-DD"
+        if(data.date !== today){
+          showResult(`このパスは本日(${today})のものではありません`,true);
+          logAccess(localStorage.getItem("adminId"),`日付不一致: ${code}`);
+          isReading=false;
+          return;
+        }
+
         const [start,end] = parseTimeRange(data.time);
         const now = new Date();
         if(now<start){
