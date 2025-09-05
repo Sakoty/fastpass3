@@ -67,7 +67,6 @@ function loadPassFromLocal() {
   return data.date===getTodayString()?data:null;
 }
 
-// 時間ブロック生成
 function generateTimeBlocks(start,end,interval=10){
   const blocks=[];
   const [sh,sm] = start.split(":").map(Number);
@@ -84,7 +83,6 @@ function generateTimeBlocks(start,end,interval=10){
   return blocks;
 }
 
-// QRコード
 function drawQRCode(id){
   const qrContainer=document.getElementById("qrcode");
   qrContainer.innerHTML="";
@@ -97,10 +95,16 @@ function drawQRCode(id){
 function updateUI(latestPasses,slots,limits){
   const info=document.getElementById("info");
   info.innerHTML="";
+  const form = document.getElementById("form");
   const saved = loadPassFromLocal();
+
   if(!slots || slots.length===0){
-    info.innerHTML='<p class="notset">案内時間が設定されていません</p>'; return;
+    info.innerHTML='<p class="notset">案内時間が設定されていません</p>';
+    form.style.display="none";
+    return;
   }
+
+  // 発券済みパスがある場合
   if(saved){
     const passInDb = latestPasses.find(p=>p.id===saved.id);
     const used = passInDb?.used||false;
@@ -118,8 +122,7 @@ function updateUI(latestPasses,slots,limits){
     else if(now>endDate){ statusText="無効（時間切れ）"; cls="expired"; }
     else if(now<startDate){ statusText="案内時刻前です"; cls="active"; }
 
-    info.innerHTML=`
-      <div class="ticket-card ${cls}">
+    info.innerHTML=`<div class="ticket-card ${cls}">
         <div class="status">${statusText}</div>
         <h2>番号：${saved.id}</h2>
         <p>名前：${saved.name}</p>
@@ -128,11 +131,12 @@ function updateUI(latestPasses,slots,limits){
         <div id="qrcode"></div>
       </div>`;
     drawQRCode(saved.id);
-    document.getElementById("form").style.display="none"; // 発券済みなのでフォーム非表示
+    form.style.display="none";
     return;
   }
 
-  // 空き枠リストを作成
+  // 空き枠リストを作成 & 残り枠チェック
+  let allFull = true;
   const select=document.getElementById("timeSelect");
   select.innerHTML="";
   slots.forEach((slot,i)=>{
@@ -141,9 +145,16 @@ function updateUI(latestPasses,slots,limits){
     const opt=document.createElement("option");
     opt.value=slot;
     opt.textContent=`${slot}（残り${left}枠）`;
-    if(left<=0){ opt.disabled=true; opt.textContent+= "【満員】"; }
+    if(left<=0){ opt.disabled=true; opt.textContent+= "【満員】"; } else { allFull=false; }
     select.appendChild(opt);
   });
+
+  if(allFull){
+    form.style.display="none";
+    info.innerHTML='<p class="ended">本日のプライオリティパスは全て発券終了しました</p>';
+  } else {
+    form.style.display="block";
+  }
 }
 
 window.addEventListener("load", ()=>{
