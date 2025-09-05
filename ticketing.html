@@ -36,7 +36,7 @@ button:hover { background:#0052a3; }
 .ticket-card.active { border:2px solid #009933; }
 
 #qrcode { margin:20px auto; }
-.ended,.notset { color:red; font-weight:bold; }
+.ended,.notset,.stopped { color:red; font-weight:bold; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
@@ -91,20 +91,23 @@ function drawQRCode(id){
   });
 }
 
-// UI更新
+let issueActive = true; // 発券開始/停止フラグ
+
 function updateUI(latestPasses,slots,limits){
   const info=document.getElementById("info");
-  info.innerHTML="";
   const form = document.getElementById("form");
+  info.innerHTML="";
+
   const saved = loadPassFromLocal();
 
-  if(!slots || slots.length===0){
-    info.innerHTML='<p class="notset">案内時間が設定されていません</p>';
+  // 発券停止中で発券済みパスが無い場合
+  if(!issueActive && !saved){
     form.style.display="none";
+    info.innerHTML='<p class="stopped">現在、発券は停止中です</p>';
     return;
   }
 
-  // 発券済みパスがある場合
+  // 発券済みパスがある場合は優先表示
   if(saved){
     const passInDb = latestPasses.find(p=>p.id===saved.id);
     const used = passInDb?.used||false;
@@ -131,11 +134,21 @@ function updateUI(latestPasses,slots,limits){
         <div id="qrcode"></div>
       </div>`;
     drawQRCode(saved.id);
+
+    // 発券停止中はフォーム非表示
+    form.style.display = issueActive ? "block" : "none";
+    if(!issueActive) info.innerHTML += '<p class="stopped">※現在、発券は停止中です</p>';
+    return;
+  }
+
+  // 発券停止中かつ発券済みがない場合は既に上で処理される
+  if(!slots || slots.length===0){
+    info.innerHTML='<p class="notset">案内時間が設定されていません</p>';
     form.style.display="none";
     return;
   }
 
-  // 空き枠リストを作成 & 残り枠チェック
+  // 空き枠リスト作成 & 残り枠チェック
   let allFull = true;
   const select=document.getElementById("timeSelect");
   select.innerHTML="";
@@ -160,10 +173,18 @@ function updateUI(latestPasses,slots,limits){
 window.addEventListener("load", ()=>{
   const passesCol = collection(db,"passes");
   const timeSlotsDoc = doc(db,"settings","timeSlots");
+  const issueStatusDoc = doc(db,"settings","issueStatus");
 
   let latestPasses = [];
   let slots = [];
   let limits = [];
+
+  // 発券開始/停止監視
+  onSnapshot(issueStatusDoc, snap=>{
+    const data = snap.data();
+    issueActive = data?.active ?? true;
+    updateUI(latestPasses,slots,limits);
+  });
 
   onSnapshot(timeSlotsDoc,snap=>{
     const data = snap.data();
