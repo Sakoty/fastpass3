@@ -183,7 +183,7 @@ window.addEventListener("load", ()=>{
   // 発券ON/OFF
   onSnapshot(issueStatusDoc,snap=>{
     const data=snap.data();
-    issueActive=data?.active??true;
+    issueActive=data?.enabled ?? true; // ← 修正
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
