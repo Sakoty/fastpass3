@@ -37,7 +37,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 管理者ID・パスワード（本番運用ではFirestore管理を推奨）
+// 管理者ID・パスワード（簡易管理）
 const allowedAdmins = [
   { id: "Sakoty", password: "3214" },
   { id: "seseguchi914", password: "0914" },
@@ -51,9 +51,18 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const loginForm = document.getElementById("loginForm");
 const logoutBtn = document.getElementById("logoutBtn");
+
+// ログ表示用
 const logsDiv = document.createElement("div");
 logsDiv.id = "logs";
 mainContent?.appendChild(logsDiv);
+
+// --- scanId を生成して localStorage に保持 ---
+let scanId = localStorage.getItem("scanId");
+if(!scanId){
+  scanId = "scan_" + Math.floor(Math.random()*1000000);
+  localStorage.setItem("scanId", scanId);
+}
 
 // ---- ログ表示 ----
 function showLog(message){
@@ -66,12 +75,12 @@ function showLog(message){
 async function logAccess(adminId, action, page = "scan"){
   try{
     await addDoc(collection(db,"accessLogs"),{
-      adminId: adminId || "不明",
+      adminId: adminId || scanId,
       action,
       page,
       createdAt: serverTimestamp()
     });
-    showLog(`${new Date().toLocaleString()} | ${adminId||"不明"} | ${page} | ${action}`);
+    showLog(`${new Date().toLocaleString()} | ${adminId||scanId} | ${page} | ${action}`);
   }catch(e){ 
     console.error("ログ記録失敗:", e); 
     showLog(`ログ記録失敗: ${e.message}`);
@@ -156,40 +165,40 @@ function startScan(){
       const snapshot = await getDocs(q);
       if(snapshot.empty){
         showResult("該当するパスが見つかりません",true);
-        logAccess(localStorage.getItem("adminId"),`無効スキャン: ${code}`);
+        logAccess(null, `無効スキャン: ${code}`, "scan");
         isReading=false;
       } else {
         const docSnap = snapshot.docs[0];
         const data = docSnap.data();
 
-        // --- 本日判定を削除しました ---
-
-        const [start,end] = parseTimeRange(data.time);
         const now = new Date();
-        if(now<start){
+        const start = data.startTime ? new Date(`${now.toDateString()}T${data.startTime}:00`) : now;
+        const end = data.endTime ? new Date(`${now.toDateString()}T${data.endTime}:00`) : now;
+
+        if(now < start){
           pendingDoc = docSnap; pendingCode=code;
           modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
           modal.style.display="flex";
-        } else if(now>end){
+        } else if(now > end){
           showResult(`パス ${code} は案内時間を過ぎています`,true);
-          logAccess(localStorage.getItem("adminId"),`時間外スキャン: ${code}`);
+          logAccess(null, `時間外スキャン: ${code}`, "scan");
           isReading=false;
         } else if(data.used){
           showResult(`パス ${code} はすでに使用済みです`,true);
-          logAccess(localStorage.getItem("adminId"),`再スキャン: ${code}`);
+          logAccess(null, `再スキャン: ${code}`, "scan");
           isReading=false;
         } else {
           await updateDoc(doc(db,"passes",docSnap.id),{used:true});
           showResult(`パス ${code} を使用済みにしました`);
-          logAccess(localStorage.getItem("adminId"),`使用済みにした: ${code}`);
-          sound.currentTime=0; sound.play().catch(err=>console.warn("音声再生エラー:",err));
+          logAccess(null, `使用済みにした: ${code}`, "scan");
+          sound.currentTime=0; sound.play().catch(()=>{});
           isReading=false;
         }
       }
     } catch(e){ 
       console.error(e); 
       showResult("エラーが発生しました",true); 
-      logAccess(localStorage.getItem("adminId"),`エラー: ${code} ${e.message}`); 
+      logAccess(null, `エラー: ${code} ${e.message}`, "scan"); 
       isReading=false; 
     }
   });
@@ -198,8 +207,8 @@ function startScan(){
     if(pendingDoc){
       await updateDoc(doc(db,"passes",pendingDoc.id),{used:true});
       showResult(`パス ${pendingCode} を使用済みにしました`);
-      logAccess(localStorage.getItem("adminId"),`使用済みにした（前倒し）: ${pendingCode}`);
-      sound.currentTime=0; sound.play().catch(err=>console.warn("音声再生エラー:",err));
+      logAccess(null, `使用済みにした（前倒し）: ${pendingCode}`, "scan");
+      sound.currentTime=0; sound.play().catch(()=>{});
     }
     modal.style.display="none";
     isReading=false;
@@ -207,7 +216,7 @@ function startScan(){
 
   cancelBtn.onclick=()=>{
     showResult("スキャンをキャンセルしました",true);
-    logAccess(localStorage.getItem("adminId"),"スキャンキャンセル");
+    logAccess(null,"スキャンキャンセル","scan");
     modal.style.display="none";
     isReading=false;
   };
