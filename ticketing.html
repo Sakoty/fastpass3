@@ -125,7 +125,9 @@ function updateUI(latestPasses,slots,limits,issueActive){
     const endDate=new Date(); endDate.setHours(eh,em,0,0);
 
     let statusText="現在案内中", cls="active";
-    if(used){ statusText="使用済み"; cls="used"; }
+    if (used) {
+  statusText = '<span style="color:red;">使用済み</span>';
+}
     else if(now>endDate){ statusText="無効（時間切れ）"; cls="expired"; }
     else if(now<startDate){ statusText="案内時刻前です"; cls="active"; }
 
