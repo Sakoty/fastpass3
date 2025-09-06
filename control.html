@@ -464,49 +464,57 @@ document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
 };
 
 /* ================= アクセスログ ================= */
+// リアルタイム監視用 unsubscribe
+let unsubLogs = null;
+
 async function logAccess(adminId, msg, type){
   await addDoc(collection(db,'accessLogs'),{
     adminId, msg, type, timestamp: serverTimestamp()
   });
 }
 
+// ログ認証
 document.getElementById('logAuthBtn').onclick = async()=>{
   const pass=document.getElementById('logPass').value;
   if(pass==='3214'){
     document.getElementById('logContent').style.display='block';
     document.getElementById('logAuthMsg').textContent='';
-    loadLogs();
+    startLogsListener();
   } else {
     document.getElementById('logAuthMsg').textContent='パスワードが違います';
   }
 };
 
-async function loadLogs(){
-  const snap=await getDocs(query(collection(db,'accessLogs'),orderBy('timestamp','desc')));
-  const div=document.getElementById('accessLogs');
-  const filter = document.getElementById('logFilterSelect').value;
-  div.innerHTML='';
-  snap.forEach(d=>{
-    const data=d.data();
-    if(filter!=='all' && data.type !== filter) return;
-    const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
-    div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
+// ログリスナー開始
+function startLogsListener(){
+  if(unsubLogs) unsubLogs(); // 古いリスナー解除
+  const logsQueryRef = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
+  unsubLogs = onSnapshot(logsQueryRef, snapshot => {
+    const div = document.getElementById('accessLogs');
+    const filter = document.getElementById('logFilterSelect').value;
+    div.innerHTML = '';
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if(filter!=='all' && data.type !== filter) return;
+      const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
+      div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
+    });
   });
 }
 
-document.getElementById('logFilterSelect').onchange = loadLogs;
+// フィルター変更時も再描画
+document.getElementById('logFilterSelect').onchange = ()=>{
+  if(unsubLogs) startLogsListener();
+}
 
+// ログ全削除
 document.getElementById('clearLogsBtn').onclick = async()=>{
   if(!confirm('本当にログを全て削除しますか？')) return;
   const snap = await getDocs(collection(db,'accessLogs'));
   const batch = writeBatch(db);
   snap.forEach(docSnap => batch.delete(docSnap.ref));
   await batch.commit();
-  loadLogs();
 };
-
-  // ログ再読み込みボタン
-document.getElementById('reloadLogsBtn').onclick = loadLogs;
 
 </script>
 </body>
