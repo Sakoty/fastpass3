@@ -504,6 +504,10 @@ document.getElementById('clearLogsBtn').onclick = async()=>{
   await batch.commit();
   loadLogs();
 };
+
+  // ログ再読み込みボタン
+document.getElementById('reloadLogsBtn').onclick = loadLogs;
+
 </script>
 </body>
 </html>
