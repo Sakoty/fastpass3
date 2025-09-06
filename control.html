@@ -174,31 +174,32 @@
 </div>
 
   <!-- アクセスログ -->
-  <div class="tab-content" id="logTab">
-    <div class="card" id="logAuthCard">
-      <div class="row">
-        <input type="password" id="logPass" placeholder="ログ閲覧パスワード">
-        <button id="logAuthBtn" class="primary w-auto">認証</button>
-      </div>
-      <div id="logAuthMsg"></div>
+<div class="tab-content" id="logTab">
+  <div class="card" id="logAuthCard">
+    <div class="row">
+      <input type="password" id="logPass" placeholder="ログ閲覧パスワード">
+      <button id="logAuthBtn" class="primary w-auto">認証</button>
     </div>
-    <div class="card" id="logContent" style="display:none;">
-      <div style="margin-bottom:6px;">
-        <label>ログ種別フィルタ:
-          <select id="logFilterSelect">
-            <option value="all">全て</option>
-            <option value="login">ログイン/ログアウト</option>
-            <option value="control">発券制御</option>
-            <option value="time">時間帯設定</option>
-            <option value="special">特別パス</option>
-            <option value="admin">管理操作</option>
-            <option value="scan">スキャンログ</option>
-          </select>
-        </label>
-      </div>
-      <button id="clearLogsBtn" class="danger">ログ全削除</button>
-      <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
+    <div id="logAuthMsg"></div>
+  </div>
+  <div class="card" id="logContent" style="display:none;">
+    <div style="margin-bottom:6px;">
+      <label>ログ種別フィルタ:
+        <select id="logFilterSelect">
+          <option value="all">全て</option>
+          <option value="login">ログイン/ログアウト</option>
+          <option value="control">発券制御</option>
+          <option value="time">時間帯設定</option>
+          <option value="special">特別パス</option>
+          <option value="admin">管理操作</option>
+          <option value="scan">スキャンログ</option>
+        </select>
+      </label>
+      <!-- 追加ボタン -->
+      <button id="reloadLogsBtn" class="primary w-auto">ログ読み込み</button>
     </div>
+    <button id="clearLogsBtn" class="danger">ログ全削除</button>
+    <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
   </div>
 </div>
 
