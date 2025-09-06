@@ -140,7 +140,6 @@
   </div>
 
   <!-- パス一覧 -->
-  <!-- パス一覧 -->
 <div class="tab-content" id="passesTab">
   <div class="card">
     <div style="text-align:right; margin-bottom:6px;">
@@ -165,6 +164,15 @@
   </div>
 </div>
 
+<div style="margin:10px 0;">
+  <label>並び替え:
+    <select id="sortSelect">
+      <option value="id">パスID順</option>
+      <option value="time">案内時間順</option>
+    </select>
+  </label>
+</div>
+  
   <!-- アクセスログ -->
   <div class="tab-content" id="logTab">
     <div class="card" id="logAuthCard">
@@ -355,48 +363,84 @@ logAccess(localStorage.getItem('adminId'), `特別パス発券: ${passId}`, 'spe
 function startPassesListener(){
   if(unsubPasses) unsubPasses();
   unsubPasses = onSnapshot(collection(db,'passes'), q=>{
-    const tbody=document.getElementById('passesTableBody');
-    tbody.innerHTML='';
+    const passes = [];
     q.forEach(docSnap=>{
       const d = docSnap.data();
-
-      // 案内時間を統一表示
-      let guideTime = '-';
-      if(d.startTime && d.endTime){
-        guideTime = `${d.startTime}〜${d.endTime}`;
-      } else if(d.time){
-        guideTime = d.time;
-      }
-
-      // ステータスに応じてバッジ色を切替
-      let statusClass = 'unused';
-      if(d.status === '使用済') statusClass = 'used';
-      if(d.status === '期限切れ') statusClass = 'expired';
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${d.id}</td>
-        <td>${d.name||''}</td>
-        <td>${d.people||1}</td>
-        <td>${guideTime}</td>
-        <td>${d.type||'通常'}</td>
-        <td><span class="badge ${statusClass}">${d.status||'未使用'}</span></td>
-        <td><button class="danger w-auto">削除</button></td>
-      `;
-      const btn = tr.querySelector('button');
-      btn.onclick = async ()=>{
-        if(!shiftPressed){
-          alert('削除権限がありません');
-          return;
-        }
-        if(confirm(`本当にパス ${d.id} を削除しますか？`)){
-          await deleteDoc(doc(db,'passes',docSnap.id));
-          logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
-        }
-      };
-      tbody.appendChild(tr);
+      passes.push({...d, _docId: docSnap.id});
     });
+
+    renderPasses(passes);
+    document.getElementById("sortSelect").onchange = ()=>renderPasses(passes);
   });
+}
+
+function renderPasses(passes){
+  const sortType = document.getElementById("sortSelect").value;
+  const tbody=document.getElementById('passesTableBody');
+  tbody.innerHTML='';
+
+  // ソート処理
+  if(sortType === "id"){
+    passes.sort((a,b)=>{
+      const na = parseInt((a.id||"FP000").replace("FP",""),10);
+      const nb = parseInt((b.id||"FP000").replace("FP",""),10);
+      return na-nb;
+    });
+  } else if(sortType === "time"){
+    passes.sort((a,b)=>{
+      const ta = getStartTime(a);
+      const tb = getStartTime(b);
+      return ta-tb;
+    });
+  }
+
+  passes.forEach(d=>{
+    // 案内時間を統一表示
+    let guideTime = '-';
+    if(d.startTime && d.endTime){
+      guideTime = `${d.startTime}〜${d.endTime}`;
+    } else if(d.time){
+      guideTime = d.time;
+    }
+
+    // ステータスに応じてバッジ色を切替
+    let statusClass = 'unused';
+    if(d.status === '使用済') statusClass = 'used';
+    if(d.status === '期限切れ') statusClass = 'expired';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d.id}</td>
+      <td>${d.name||''}</td>
+      <td>${d.people||1}</td>
+      <td>${guideTime}</td>
+      <td>${d.type||'通常'}</td>
+      <td><span class="badge ${statusClass}">${d.status||'未使用'}</span></td>
+      <td><button class="danger w-auto">削除</button></td>
+    `;
+    const btn = tr.querySelector('button');
+    btn.onclick = async ()=>{
+      if(!shiftPressed){
+        alert('削除権限がありません（Shiftキーを押しながら操作してください）');
+        return;
+      }
+      if(confirm(`本当にパス ${d.id} を削除しますか？`)){
+        await deleteDoc(doc(db,'passes',d._docId));
+        logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
+      }
+    };
+    tbody.appendChild(tr);
+  });
+}
+
+// 案内時間の開始時刻をDate化
+function getStartTime(d){
+  let t = "23:59";
+  if(d.startTime) t = d.startTime;
+  else if(d.time) t = d.time.split("〜")[0];
+  const [h,m] = t.split(":").map(Number);
+  const date = new Date(); date.setHours(h||0,m||0,0,0);
+  return date.getTime();
 }
 
 // Shiftキー監視
