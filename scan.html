@@ -71,14 +71,14 @@ function showLog(message){
   logsDiv.prepend(p);
 }
 
-// ---- ログ書き込み ----
+// ---- ログ書き込み（admin.html連携形式）----
 async function logAccess(adminId, action, page = "scan"){
   try{
     await addDoc(collection(db,"accessLogs"),{
       adminId: adminId || scanId,
-      action,
-      page,
-      createdAt: serverTimestamp()
+      msg: action,
+      type: page,
+      timestamp: serverTimestamp()
     });
     showLog(`${new Date().toLocaleString()} | ${adminId||scanId} | ${page} | ${action}`);
   }catch(e){ 
@@ -141,17 +141,6 @@ function startScan(){
   function showResult(msg, isError=false){
     resultEl.textContent=msg;
     resultEl.className=isError?"error":"";
-  }
-
-  function parseTimeRange(rangeStr){
-    const [startStr,endStr]=rangeStr.split("〜");
-    const toDate=(timeStr)=>{
-      const [h,m]=timeStr.split(":").map(Number);
-      const d=new Date();
-      d.setHours(h,m,0,0);
-      return d;
-    };
-    return [toDate(startStr),toDate(endStr)];
   }
 
   const codeReader = new ZXing.BrowserQRCodeReader();
