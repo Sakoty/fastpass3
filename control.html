@@ -359,18 +359,32 @@ function startPassesListener(){
     tbody.innerHTML='';
     q.forEach(docSnap=>{
       const d = docSnap.data();
+
+      // 案内時間を統一表示
+      let guideTime = '-';
+      if(d.startTime && d.endTime){
+        guideTime = `${d.startTime}〜${d.endTime}`;
+      } else if(d.time){
+        guideTime = d.time;
+      }
+
+      // ステータスに応じてバッジ色を切替
+      let statusClass = 'unused';
+      if(d.status === '使用済') statusClass = 'used';
+      if(d.status === '期限切れ') statusClass = 'expired';
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${d.id}</td>
         <td>${d.name||''}</td>
         <td>${d.people||1}</td>
-        <td>${d.startTime ? d.startTime : '-'}〜${d.endTime ? d.endTime : '-'}</td>
+        <td>${guideTime}</td>
         <td>${d.type||'通常'}</td>
-        <td><span class="badge ${d.status==='使用済'?'used':'unused'}">${d.status||'未使用'}</span></td>
+        <td><span class="badge ${statusClass}">${d.status||'未使用'}</span></td>
         <td><button class="danger w-auto">削除</button></td>
       `;
       const btn = tr.querySelector('button');
-      btn.onclick = async (e)=>{
+      btn.onclick = async ()=>{
         if(!shiftPressed){
           alert('削除権限がありません');
           return;
