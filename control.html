@@ -145,6 +145,14 @@
     <div style="text-align:right; margin-bottom:6px;">
       <button id="deleteAllPassesBtn" class="danger w-auto">全削除</button>
     </div>
+    <div style="margin:10px 0;">
+  <label>並び替え:
+    <select id="sortSelect">
+      <option value="id">パスID順</option>
+      <option value="time">案内時間順</option>
+    </select>
+  </label>
+</div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -164,15 +172,6 @@
   </div>
 </div>
 
-<div style="margin:10px 0;">
-  <label>並び替え:
-    <select id="sortSelect">
-      <option value="id">パスID順</option>
-      <option value="time">案内時間順</option>
-    </select>
-  </label>
-</div>
-  
   <!-- アクセスログ -->
   <div class="tab-content" id="logTab">
     <div class="card" id="logAuthCard">
