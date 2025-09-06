@@ -424,7 +424,7 @@ function renderPasses(passes){
     const btn = tr.querySelector('button');
     btn.onclick = async ()=>{
       if(!shiftPressed){
-        alert('削除権限がありません（Shiftキーを押しながら操作してください）');
+        alert('削除権限がありません');
         return;
       }
       if(confirm(`本当にパス ${d.id} を削除しますか？`)){
