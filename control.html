@@ -181,17 +181,10 @@
       </div>
       <div id="logAuthMsg"></div>
     </div>
-   <div class="card" id="logCard">
-  <div class="row">
-    <select id="logFilter" style="padding:8px; border-radius:6px;">
-      <option value="all">全ログ表示</option>
-      <option value="admin">管理者ログのみ</option>
-      <option value="scan">スキャンログのみ</option>
-    </select>
-    <button id="clearLogsBtn" class="danger w-auto">ログ全削除</button>
-  </div>
-  <div id="logs" style="border:1px solid #e5e7eb; border-radius:8px; padding:10px; max-height:360px; overflow:auto; background:#fff; margin-top:10px;"></div>
-</div>
+    <div class="card" id="logContent" style="display:none;">
+      <button id="clearLogsBtn" class="danger">ログ全削除</button>
+      <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
+    </div>
   </div>
 </div>
 
@@ -495,51 +488,25 @@ document.getElementById('logAuthBtn').onclick = async()=>{
   }
 };
 
-// Firestore初期化済み db を利用
-const logsDiv = document.getElementById("logs");
-const logFilter = document.getElementById("logFilter");
-
-// リアルタイムで取得
-const logsQuery = query(
-  collection(db, "accessLogs"),
-  orderBy("createdAt", "desc")
-);
-
-onSnapshot(logsQuery, (snapshot) => {
-  renderLogs(snapshot.docs);
-});
-
-// ログ表示関数
-function renderLogs(docs){
-  logsDiv.innerHTML = "";
-  const filter = logFilter.value; // all / admin / scan
-  docs.forEach(docSnap => {
-    const data = docSnap.data();
-    if(filter === "all" || data.page === filter){
-      const p = document.createElement("div");
-      const timeStr = data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString() : "";
-      p.textContent = `[${timeStr}] ${data.adminId || "不明"} | ${data.page} | ${data.action}`;
-      logsDiv.appendChild(p);
-    }
+async function loadLogs(){
+  const snap=await getDocs(query(collection(db,'accessLogs'),orderBy('timestamp','desc')));
+  const div=document.getElementById('accessLogs');
+  div.innerHTML='';
+  snap.forEach(d=>{
+    const data=d.data();
+    const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
+    div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
   });
 }
 
-// フィルター変更時に再描画
-logFilter.addEventListener("change", () => {
-  getDocs(query(collection(db,"accessLogs"), orderBy("createdAt","desc")))
-    .then(snapshot => renderLogs(snapshot.docs));
-});
-
-// ログ全削除
-document.getElementById("clearLogsBtn").onclick = async () => {
-  if(!confirm("本当に全てのログを削除しますか？")) return;
-  const snap = await getDocs(collection(db,"accessLogs"));
+document.getElementById('clearLogsBtn').onclick = async()=>{
+  if(!confirm('本当にログを全て削除しますか？')) return;
+  const snap = await getDocs(collection(db,'accessLogs'));
   const batch = writeBatch(db);
   snap.forEach(docSnap => batch.delete(docSnap.ref));
   await batch.commit();
-  logsDiv.innerHTML = "";
+  loadLogs();
 };
 </script>
 </body>
 </html>
-
