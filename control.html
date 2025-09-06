@@ -45,6 +45,7 @@
   .inline { display:inline-flex; gap:8px; align-items:center; }
   .w-auto { width:auto; }
   .muted { color:#6b7280; font-size:0.9rem; }
+  #logFilterSelect { width:auto; display:inline-block; margin-bottom:8px; }
 </style>
 </head>
 <body>
@@ -146,13 +147,13 @@
       <button id="deleteAllPassesBtn" class="danger w-auto">全削除</button>
     </div>
     <div style="margin:10px 0;">
-  <label>並び替え:
-    <select id="sortSelect">
-      <option value="id">パスID順</option>
-      <option value="time">案内時間順</option>
-    </select>
-  </label>
-</div>
+      <label>並び替え:
+        <select id="sortSelect">
+          <option value="id">パスID順</option>
+          <option value="time">案内時間順</option>
+        </select>
+      </label>
+    </div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -182,6 +183,19 @@
       <div id="logAuthMsg"></div>
     </div>
     <div class="card" id="logContent" style="display:none;">
+      <div style="margin-bottom:6px;">
+        <label>ログ種別フィルタ:
+          <select id="logFilterSelect">
+            <option value="all">全て</option>
+            <option value="login">ログイン/ログアウト</option>
+            <option value="control">発券制御</option>
+            <option value="time">時間帯設定</option>
+            <option value="special">特別パス</option>
+            <option value="admin">管理操作</option>
+            <option value="scan">スキャンログ</option>
+          </select>
+        </label>
+      </div>
       <button id="clearLogsBtn" class="danger">ログ全削除</button>
       <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
     </div>
@@ -265,8 +279,6 @@ function logout(){
   loginDiv.style.display='block';
 }
 document.getElementById('logoutBtn').onclick = logout;
-
-/* ページ遷移・閉じるイベントで自動ログアウト */
 window.addEventListener("beforeunload", logout);
 
 /* ================= 発券ステータス ================= */
@@ -471,13 +483,17 @@ document.getElementById('logAuthBtn').onclick = async()=>{
 async function loadLogs(){
   const snap=await getDocs(query(collection(db,'accessLogs'),orderBy('timestamp','desc')));
   const div=document.getElementById('accessLogs');
+  const filter = document.getElementById('logFilterSelect').value;
   div.innerHTML='';
   snap.forEach(d=>{
     const data=d.data();
+    if(filter!=='all' && data.type !== filter) return;
     const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
     div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
   });
 }
+
+document.getElementById('logFilterSelect').onchange = loadLogs;
 
 document.getElementById('clearLogsBtn').onclick = async()=>{
   if(!confirm('本当にログを全て削除しますか？')) return;
