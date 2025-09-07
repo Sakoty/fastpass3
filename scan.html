@@ -55,13 +55,6 @@ const logsDiv = document.createElement("div");
 logsDiv.id = "logs";
 document.body.appendChild(logsDiv);
 
-// ---- ログ表示 ----
-function showLog(message){
-  const p = document.createElement("div");
-  p.textContent = message;
-  logsDiv.prepend(p);
-}
-
 // ---- Firestoreログ書き込み ----
 async function logAccess(adminId, action, page = "scan"){
   try{
@@ -160,7 +153,7 @@ function startScan(){
       const snapshot = await getDocs(q);
       if(snapshot.empty){
         showResult("該当するパスが見つかりません",true);
-        logAccess(adminId, `無効スキャン: ${code}`);
+        scanlog(adminId, `無効スキャン: ${code}`);
         isReading=false;
         return;
       }
@@ -180,19 +173,19 @@ function startScan(){
       }
       else if(now > end){
         showResult(`パス ${code} は案内時間を過ぎています`,true);
-        logAccess(adminId, `時間外スキャン: ${code}`);
+        scanlog(adminId, `時間外スキャン: ${code}`);
         isReading=false;
       }
       else if(data.used){
         showResult(`パス ${code} はすでに使用済みです`,true);
-        logAccess(adminId, `再スキャン: ${code}`);
+        scanlog(adminId, `再スキャン: ${code}`);
         isReading=false;
       }
       else{
         // 通常スキャン → 使用済みに
         await updateDoc(doc(db,"passes",docSnap.id),{used:true});
         showResult(`パス ${code} を使用済みにしました`);
-        logAccess(adminId, `通常スキャン使用済みにした: ${code}`);
+        scanlog(adminId, `通常スキャン使用済みにした: ${code}`);
 
         sound.currentTime=0;
         sound.play()
@@ -264,3 +257,4 @@ function startScan(){
   </div>
 </body>
 </html>
+
