@@ -382,10 +382,9 @@ function startPassesListener(){
 
 function renderPasses(passes){
   const sortType = document.getElementById("sortSelect").value;
-  const tbody = document.getElementById('passesTableBody');
-  tbody.innerHTML = '';
+  const tbody=document.getElementById('passesTableBody');
+  tbody.innerHTML='';
 
-  // 並び替え
   if(sortType === "id"){
     passes.sort((a,b)=>{
       const na = parseInt((a.id||"FP000").replace("FP",""),10);
@@ -408,17 +407,9 @@ function renderPasses(passes){
       guideTime = d.time;
     }
 
-    // ステータス正規化
     let statusClass = 'unused';
-    let statusText = '未使用';
-    if(d.status === '使用済' || d.status === 'used') { 
-      statusClass = 'used'; 
-      statusText = '使用済';
-    }
-    if(d.status === '期限切れ' || d.status === 'expired') { 
-      statusClass = 'expired'; 
-      statusText = '期限切れ';
-    }
+    if(d.status === '使用済') statusClass = 'used';
+    if(d.status === '期限切れ') statusClass = 'expired';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -427,11 +418,9 @@ function renderPasses(passes){
       <td>${d.people||1}</td>
       <td>${guideTime}</td>
       <td>${d.type||'通常'}</td>
-      <td><span class="badge ${statusClass}">${statusText}</span></td>
+      <td><span class="badge ${statusClass}">${d.status||'未使用'}</span></td>
       <td><button class="danger w-auto">削除</button></td>
     `;
-
-    // 削除ボタン
     const btn = tr.querySelector('button');
     btn.onclick = async ()=>{
       if(!shiftPressed){
@@ -443,27 +432,17 @@ function renderPasses(passes){
         logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
       }
     };
-
     tbody.appendChild(tr);
   });
 }
 
-// パス一覧のリアルタイム監視（使用済み状態も即反映）
-function startPassesListener(){
-  if(unsubPasses) unsubPasses();
-  unsubPasses = onSnapshot(collection(db,'passes'), snapshot=>{
-    const passes = [];
-    snapshot.forEach(docSnap=>{
-      const data = docSnap.data();
-      passes.push({...data, _docId: docSnap.id});
-    });
-    renderPasses(passes);
-  });
-
-  // 並び替え選択時も再描画
-  document.getElementById("sortSelect").onchange = ()=> {
-    if(unsubPasses) startPassesListener();
-  };
+function getStartTime(d){
+  let t = "23:59";
+  if(d.startTime) t = d.startTime;
+  else if(d.time) t = d.time.split("〜")[0];
+  const [h,m] = t.split(":").map(Number);
+  const date = new Date(); date.setHours(h||0,m||0,0,0);
+  return date.getTime();
 }
 
 document.addEventListener('keydown', e=>{ if(e.key==='Shift') shiftPressed = true; });
