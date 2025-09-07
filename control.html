@@ -463,47 +463,17 @@ document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
   logAccess(localStorage.getItem('adminId'), '全パス削除', 'admin');
 };
 
-  <!-- アクセスログ -->
-<div class="tab-content" id="logTab">
-  <div class="card" id="logAuthCard">
-    <div class="row">
-      <input type="password" id="logPass" placeholder="ログ閲覧パスワード">
-      <button id="logAuthBtn" class="primary w-auto">認証</button>
-    </div>
-    <div id="logAuthMsg"></div>
-  </div>
-  <div class="card" id="logContent" style="display:none;">
-    <div style="margin-bottom:6px;">
-      <label>ログ種別フィルタ:
-        <select id="logFilterSelect">
-          <option value="all">全て</option>
-          <option value="login">ログイン</option>
-          <option value="admin">ログアウト</option>
-          <option value="control">発券制御</option>
-          <option value="time">時間帯設定</option>
-          <option value="special">特別パス</option>
-          <option value="scan">スキャンログ</option>
-        </select>
-      </label>
-      <button id="reloadLogsBtn" class="primary w-auto">ログ読み込み</button>
-    </div>
-    <button id="clearLogsBtn" class="danger">ログ全削除</button>
-    <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
-  </div>
-</div>
+/* ================= アクセスログ ================= */
+// リアルタイム監視用 unsubscribe
+let unsubLogs = null;
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-/* アクセスログ記録 */
 async function logAccess(adminId, msg, type){
   await addDoc(collection(db,'accessLogs'),{
     adminId, msg, type, timestamp: serverTimestamp()
   });
 }
 
-/* ログ認証 */
+// ログ認証
 document.getElementById('logAuthBtn').onclick = async()=>{
   const pass=document.getElementById('logPass').value;
   if(pass==='3214'){
@@ -515,68 +485,36 @@ document.getElementById('logAuthBtn').onclick = async()=>{
   }
 };
 
-/* ログリスナー（アクセス + スキャン統合） */
+// ログリスナー開始
 function startLogsListener(){
   if(unsubLogs) unsubLogs(); // 古いリスナー解除
-  const accessQuery = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
-  const scanQuery = query(collection(db,'scanLogs'), orderBy('timestamp','desc'));
-
-  unsubLogs = onSnapshot(accessQuery, async accessSnap => {
-    const scanSnap = await getDocs(scanQuery);
-    const combinedLogs = [];
-
-    accessSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      combinedLogs.push({
-        adminId: data.adminId || '',
-        msg: data.msg || '',
-        type: data.type || 'access',
-        timestamp: data.timestamp?.toDate?.() || new Date(0)
-      });
-    });
-
-    scanSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      combinedLogs.push({
-        adminId: data.adminId || '',
-        msg: data.msg || '',
-        type: 'scan',
-        timestamp: data.timestamp?.toDate?.() || new Date(0)
-      });
-    });
-
-    combinedLogs.sort((a,b)=>b.timestamp - a.timestamp);
-
-    const filter = document.getElementById('logFilterSelect').value;
+  const logsQueryRef = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
+  unsubLogs = onSnapshot(logsQueryRef, snapshot => {
     const div = document.getElementById('accessLogs');
+    const filter = document.getElementById('logFilterSelect').value;
     div.innerHTML = '';
-    combinedLogs.forEach(d=>{
-      if(filter!=='all' && d.type !== filter) return;
-      const ts = d.timestamp.toLocaleString();
-      div.innerHTML += `[${ts}] ${d.adminId} - ${d.msg}<br>`;
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if(filter!=='all' && data.type !== filter) return;
+      const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
+      div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
     });
   });
 }
 
-/* フィルター変更 */
+// フィルター変更時も再描画
 document.getElementById('logFilterSelect').onchange = ()=>{
   if(unsubLogs) startLogsListener();
-};
+}
 
-/* ログ全削除 */
+// ログ全削除
 document.getElementById('clearLogsBtn').onclick = async()=>{
   if(!confirm('本当にログを全て削除しますか？')) return;
   const snap = await getDocs(collection(db,'accessLogs'));
   const batch = writeBatch(db);
   snap.forEach(docSnap => batch.delete(docSnap.ref));
-  const scanSnap = await getDocs(collection(db,'scanLogs'));
-  scanSnap.forEach(docSnap => batch.delete(docSnap.ref));
   await batch.commit();
 };
-</script>
-</body>
-</html>
-
 
 </script>
 </body>
