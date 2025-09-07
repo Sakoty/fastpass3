@@ -37,7 +37,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 管理者ID・パスワード（簡易管理）
+// 管理者ID・パスワード
 const allowedAdmins = [
   { id: "Sakoty", password: "3214" },
   { id: "seseguchi914", password: "0914" },
@@ -57,9 +57,9 @@ const logsDiv = document.createElement("div");
 logsDiv.id = "logs";
 mainContent?.appendChild(logsDiv);
 
-let currentAdmin = null; // 現在ログインしている管理者名
-let lastScannedCode = ""; // 直前に読み込んだコード
-let lastScanTime = 0;     // 直前のスキャン時刻
+let currentAdmin = null;
+let lastScannedCode = "";
+let lastScanTime = 0;
 
 // ---- ログ表示 ----
 function showLog(message){
@@ -150,7 +150,7 @@ function startScan(){
     if(!res||isReading) return;
     const code=res.text;
 
-    // 連続スキャン防止（同じコードを1秒以内に再検出した場合は無視）
+    // 連続スキャン防止
     const nowTime = Date.now();
     if(code===lastScannedCode && nowTime - lastScanTime < 1000){
       return;
@@ -171,14 +171,23 @@ function startScan(){
         const data = docSnap.data();
 
         const now = new Date();
-        const start = data.startTime ? new Date(`${now.toDateString()}T${data.startTime}:00`) : now;
-        const end = data.endTime ? new Date(`${now.toDateString()}T${data.endTime}:00`) : now;
 
-        if(now < start){
+        // 🔽 ここを修正： startTime/endTime が "HH:mm" 文字列で保存されている前提
+        function buildDateFromTimeStr(timeStr){
+          if(!timeStr) return null;
+          const [h,m] = timeStr.split(":").map(Number);
+          const d = new Date();
+          d.setHours(h, m, 0, 0);
+          return d;
+        }
+        const start = buildDateFromTimeStr(data.startTime);
+        const end   = buildDateFromTimeStr(data.endTime);
+
+        if(start && now < start){
           pendingDoc = docSnap; pendingCode=code;
           modalText.textContent=`案内時間前です。使用済みにしますか？（${code}）`;
           modal.style.display="flex";
-        } else if(now > end){
+        } else if(end && now > end){
           showResult(`パス ${code} は案内時間を過ぎています`,true);
           logAccess(`時間外スキャン: ${code}`);
           isReading=false;
