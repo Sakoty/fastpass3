@@ -99,7 +99,6 @@ function updateUI(latestPasses,slots,limits,issueActive){
   const saved=loadPassFromLocal();
   const now=new Date();
 
-  // --- 発券停止優先 ---
   if(!issueActive){
     form.style.display="none";
     info.innerHTML='<p class="ended">現在プライオリティパスの発券は一時中止中です</p>';
@@ -112,7 +111,6 @@ function updateUI(latestPasses,slots,limits,issueActive){
     return;
   }
 
-  // --- 当日発券済み表示 ---
   if(saved){
     const passInDb=latestPasses.find(p=>p.id===saved.id);
     const used=passInDb?.used||false;
@@ -142,7 +140,6 @@ function updateUI(latestPasses,slots,limits,issueActive){
     return;
   }
 
-  // --- 空き枠リスト作成 ---
   let allFull=true;
   const select=document.getElementById("timeSelect");
   select.innerHTML="";
@@ -180,14 +177,12 @@ window.addEventListener("load", ()=>{
   let limits=[];
   let issueActive=true;
 
-  // 発券ON/OFF
   onSnapshot(issueStatusDoc,snap=>{
     const data=snap.data();
-    issueActive=data?.enabled ?? true; // ← 修正
+    issueActive=data?.enabled ?? true;
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // 時間枠
   onSnapshot(timeSlotsDoc,snap=>{
     const data=snap.data();
     if(data?.slots){
@@ -201,7 +196,6 @@ window.addEventListener("load", ()=>{
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // 発券済み
   onSnapshot(passesCol,snap=>{
     latestPasses=snap.docs.map(d=>d.data());
     updateUI(latestPasses,slots,limits,issueActive);
