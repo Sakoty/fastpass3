@@ -463,17 +463,188 @@ document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
   logAccess(localStorage.getItem('adminId'), '全パス削除', 'admin');
 };
 
-/* ================= アクセスログ ================= */
-// リアルタイム監視用 unsubscribe
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ファストパス管理（パスワードログイン版）</title>
+<meta name="theme-color" content="#007bff">
+<style>
+  :root {
+    --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333;
+  }
+  *{box-sizing:border-box}
+  body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
+  .container { max-width:980px; margin:auto; padding:14px; }
+  h1 { text-align:center; margin:10px 0 4px; }
+  #clock { text-align:center; font-weight:600; color:#555; margin-bottom:10px; }
+  .status-badge { display:inline-block; padding:6px 14px; border-radius:16px; font-weight:700; font-size:0.95rem; margin-top:6px; }
+  .active { background-color:var(--success); color:white; }
+  .inactive { background-color:var(--danger); color:white; }
+  .card { background:white; border-radius:12px; padding:16px; margin-top:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  label { font-weight:600; display:block; margin-top:10px; font-size:0.9rem; }
+  input, select { width:100%; padding:10px; margin-top:6px; border-radius:8px; border:1px solid #ccc; font-size:1rem; }
+  button { padding:12px; margin:6px 0; border:none; border-radius:10px; font-weight:700; cursor:pointer; width:100%; font-size:1rem; }
+  button.primary { background:var(--primary); color:white; }
+  button.success { background:var(--success); color:white; }
+  button.danger { background:var(--danger); color:white; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media(max-width:640px){ .row { grid-template-columns:1fr; } }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+  .tab { flex:1; padding:12px; text-align:center; cursor:pointer; background:#e7e9ee; border-radius:10px; font-weight:700; }
+  .tab.active-tab { background:var(--primary); color:#fff; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  table { width:100%; border-collapse: collapse; margin-top:10px; background:white; border-radius:10px; overflow:hidden; }
+  th, td { border:1px solid #e5e7eb; padding:10px; text-align:center; color:#111; font-size:0.95rem; }
+  th { background:#f0f3ff; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.8rem; font-weight:700; }
+  .used { color:#0a7b26; }
+  .unused { color:#b91c1c; }
+  .expired { color:#b45309; }
+  #loginDiv { max-width:420px; margin:30px auto; padding:20px; background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,0.12); }
+  #loginDiv input { width:100%; padding:10px; margin:8px 0; }
+  #loginDiv button { margin-top:6px; }
+  #errorMsg, #logAuthMsg { color:#e11d48; margin-top:10px; text-align:center; font-weight:700; }
+  .inline { display:inline-flex; gap:8px; align-items:center; }
+  .w-auto { width:auto; }
+  .muted { color:#6b7280; font-size:0.9rem; }
+  #logFilterSelect { width:auto; display:inline-block; margin-bottom:8px; }
+</style>
+</head>
+<body>
+
+<!-- ログイン画面 -->
+<div id="loginDiv">
+  <h1>管理者ログイン</h1>
+  <input type="text" id="adminId" placeholder="管理者ID" />
+  <input type="password" id="adminPass" placeholder="パスワード" />
+  <button id="loginSubmit" class="primary">ログイン</button>
+  <div id="errorMsg"></div>
+</div>
+
+<!-- 管理コンテンツ -->
+<div class="container" id="mainContent" style="display:none;">
+  <h1>ファストパス管理</h1>
+  <div id="clock"></div>
+  <div style="text-align:center;">
+    <span id="statusBadge" class="status-badge inactive">停止中</span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active-tab" data-tab="controlTab">発券制御</div>
+    <div class="tab" data-tab="timeTab">時間帯設定</div>
+    <div class="tab" data-tab="specialTab">特別パス発券</div>
+    <div class="tab" data-tab="passesTab">パス一覧</div>
+    <div class="tab" data-tab="logTab">アクセスログ</div>
+  </div>
+
+  <!-- アクセスログ -->
+<div class="tab-content" id="logTab">
+  <div class="card" id="logAuthCard">
+    <div class="row">
+      <input type="password" id="logPass" placeholder="ログ閲覧パスワード">
+      <button id="logAuthBtn" class="primary w-auto">認証</button>
+    </div>
+    <div id="logAuthMsg"></div>
+  </div>
+  <div class="card" id="logContent" style="display:none;">
+    <div style="margin-bottom:6px;">
+      <label>ログ種別フィルタ:
+        <select id="logFilterSelect">
+          <option value="all">全て</option>
+          <option value="login">ログイン</option>
+          <option value="admin">ログアウト</option>
+          <option value="control">発券制御</option>
+          <option value="time">時間帯設定</option>
+          <option value="special">特別パス</option>
+          <option value="scan">スキャンログ</option>
+        </select>
+      </label>
+      <button id="reloadLogsBtn" class="primary w-auto">ログ読み込み</button>
+    </div>
+    <button id="clearLogsBtn" class="danger">ログ全削除</button>
+    <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* Firebase */
+const firebaseConfig = {
+  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.appspot.com",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* 管理者 */
+const allowedAdmins = [
+  {id:"Sakoty", password:"3214"},
+  {id:"seseguchi914", password:"0914"}
+];
+
+/* DOM */
+const loginDiv = document.getElementById("loginDiv");
+const mainContent = document.getElementById("mainContent");
+const errorMsg = document.getElementById("errorMsg");
+
+/* 時計 */
+setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent = d.toLocaleString(); },1000);
+
+/* タブ切替 */
+Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    tab.classList.add('active-tab');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+
+/* ログイン */
+document.getElementById('loginSubmit').onclick = () => {
+  const id = document.getElementById('adminId').value.trim();
+  const pass = document.getElementById('adminPass').value.trim();
+  if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
+    loginSuccess(id);
+  } else { errorMsg.textContent = 'IDまたはパスワードが違います'; }
+};
+
 let unsubLogs = null;
 
+function loginSuccess(adminId){
+  localStorage.setItem('adminId', adminId);
+  loginDiv.style.display = 'none';
+  mainContent.style.display = 'block';
+  logAccess(adminId, 'ログイン成功', 'login');
+}
+
+/* ログアウト */
+function logout(){
+  const id = localStorage.getItem('adminId')||'不明';
+  logAccess(id, 'ログアウト', 'admin');
+  localStorage.removeItem('adminId');
+  mainContent.style.display='none';
+  loginDiv.style.display='block';
+}
+window.addEventListener("beforeunload", logout);
+
+/* アクセスログ記録 */
 async function logAccess(adminId, msg, type){
   await addDoc(collection(db,'accessLogs'),{
     adminId, msg, type, timestamp: serverTimestamp()
   });
 }
 
-// ログ認証
+/* ログ認証 */
 document.getElementById('logAuthBtn').onclick = async()=>{
   const pass=document.getElementById('logPass').value;
   if(pass==='3214'){
@@ -485,36 +656,68 @@ document.getElementById('logAuthBtn').onclick = async()=>{
   }
 };
 
-// ログリスナー開始
+/* ログリスナー（アクセス + スキャン統合） */
 function startLogsListener(){
   if(unsubLogs) unsubLogs(); // 古いリスナー解除
-  const logsQueryRef = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
-  unsubLogs = onSnapshot(logsQueryRef, snapshot => {
-    const div = document.getElementById('accessLogs');
-    const filter = document.getElementById('logFilterSelect').value;
-    div.innerHTML = '';
-    snapshot.forEach(docSnap => {
+  const accessQuery = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
+  const scanQuery = query(collection(db,'scanLogs'), orderBy('timestamp','desc'));
+
+  unsubLogs = onSnapshot(accessQuery, async accessSnap => {
+    const scanSnap = await getDocs(scanQuery);
+    const combinedLogs = [];
+
+    accessSnap.forEach(docSnap => {
       const data = docSnap.data();
-      if(filter!=='all' && data.type !== filter) return;
-      const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
-      div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
+      combinedLogs.push({
+        adminId: data.adminId || '',
+        msg: data.msg || '',
+        type: data.type || 'access',
+        timestamp: data.timestamp?.toDate?.() || new Date(0)
+      });
+    });
+
+    scanSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      combinedLogs.push({
+        adminId: data.adminId || '',
+        msg: data.msg || '',
+        type: 'scan',
+        timestamp: data.timestamp?.toDate?.() || new Date(0)
+      });
+    });
+
+    combinedLogs.sort((a,b)=>b.timestamp - a.timestamp);
+
+    const filter = document.getElementById('logFilterSelect').value;
+    const div = document.getElementById('accessLogs');
+    div.innerHTML = '';
+    combinedLogs.forEach(d=>{
+      if(filter!=='all' && d.type !== filter) return;
+      const ts = d.timestamp.toLocaleString();
+      div.innerHTML += `[${ts}] ${d.adminId} - ${d.msg}<br>`;
     });
   });
 }
 
-// フィルター変更時も再描画
+/* フィルター変更 */
 document.getElementById('logFilterSelect').onchange = ()=>{
   if(unsubLogs) startLogsListener();
-}
+};
 
-// ログ全削除
+/* ログ全削除 */
 document.getElementById('clearLogsBtn').onclick = async()=>{
   if(!confirm('本当にログを全て削除しますか？')) return;
   const snap = await getDocs(collection(db,'accessLogs'));
   const batch = writeBatch(db);
   snap.forEach(docSnap => batch.delete(docSnap.ref));
+  const scanSnap = await getDocs(collection(db,'scanLogs'));
+  scanSnap.forEach(docSnap => batch.delete(docSnap.ref));
   await batch.commit();
 };
+</script>
+</body>
+</html>
+
 
 </script>
 </body>
