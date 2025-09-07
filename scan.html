@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>プライオリティパススキャン（改良版）</title>
+<title>ファストパススキャン（改良版）</title>
 <style>
   body { font-family: sans-serif; text-align: center; padding: 10px; background-color: #f0f8ff; }
-  video { width: 100%; max-width: 480px; height: auto; border: 1px solid #ccc; margin-bottom:10px;}
+  video { width: 100%; max-width: 480px; height: auto; border: 1px solid #ccc; border-radius:8px; }
   #result { margin-top: 16px; font-size: 1.2em; font-weight: bold; color: green; }
   .error { color: red; }
   #modal { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
@@ -23,7 +23,7 @@
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Firebase設定
 const firebaseConfig = {
@@ -53,44 +53,42 @@ const loginForm = document.getElementById("loginForm");
 const logoutBtn = document.getElementById("logoutBtn");
 const logsDiv = document.getElementById("logs");
 
-let currentAdmin = null; 
-let lastScannedCode = null; // 直前にスキャンしたパスID
-
+// ---- ログ表示 ----
 function showLog(message){
   const p = document.createElement("div");
   p.textContent = message;
   logsDiv.prepend(p);
 }
 
-async function logAccess(action, page = "scan"){
-  try{
-    if(!currentAdmin) currentAdmin="未ログイン";
-    await addDoc(collection(db,"accessLogs"),{
-      adminId: currentAdmin,
-      msg: action,
-      type: page,
-      timestamp: serverTimestamp()
-    });
-    showLog(`${new Date().toLocaleString()} | ${currentAdmin} | ${page} | ${action}`);
-  }catch(e){ 
-    console.error("ログ記録失敗:", e); 
-    showLog(`ログ記録失敗: ${e.message}`);
-  }
-}
-
+// ---- Firestoreログ保存 ----
 async function logScan(passId, action){
+  const adminId = localStorage.getItem("adminId") || "不明";
   try{
-    if(!currentAdmin) currentAdmin="未ログイン";
     await addDoc(collection(db,"scanLogs"),{
-      adminId: currentAdmin,
+      adminId,
       passId,
       action,
       scannedAt: serverTimestamp()
     });
-    showLog(`${new Date().toLocaleString()} | ${currentAdmin} | ${passId} | ${action}`);
+    showLog(`${new Date().toLocaleString()} | ${adminId} | ${passId} | ${action}`);
   }catch(e){
-    console.error("スキャンログ保存失敗:",e);
-    showLog(`スキャンログ保存失敗: ${e.message}`);
+    console.error("ログ保存失敗:",e);
+    showLog(`ログ保存失敗: ${e.message}`);
+  }
+}
+
+// ---- アクセスログ保存 ----
+async function logAccess(adminId, action, page = "scan"){
+  try{
+    await addDoc(collection(db,"accessLogs"),{
+      adminId: adminId || "不明",
+      action,
+      page,
+      createdAt: serverTimestamp()
+    });
+    showLog(`${new Date().toLocaleString()} | ${adminId||"不明"} | ${page} | ${action}`);
+  }catch(e){ 
+    console.error("アクセスログ保存失敗:", e); 
   }
 }
 
@@ -99,11 +97,10 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const storedId = localStorage.getItem("adminId");
   const storedPass = localStorage.getItem("adminPass");
   if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
-    currentAdmin = storedId;
     loginDiv.style.display="none";
     mainContent.style.display="block";
     startScan();
-    logAccess("ログイン成功（自動）");
+    logAccess(storedId,"ログイン成功（自動）");
   }
 });
 
@@ -114,24 +111,21 @@ loginForm.onsubmit = e => {
   if(allowedAdmins.some(a=>a.id===inputId && a.password===inputPass)){
     localStorage.setItem("adminId", inputId);
     localStorage.setItem("adminPass", inputPass);
-    currentAdmin = inputId;
     loginDiv.style.display="none";
     mainContent.style.display="block";
     errorMsg.textContent="";
     startScan();
-    logAccess("ログイン成功");
+    logAccess(inputId,"ログイン成功");
   } else {
     errorMsg.textContent="IDまたはパスワードが違います";
-    currentAdmin = inputId;
-    logAccess("ログイン失敗");
+    logAccess(inputId,"ログイン失敗");
   }
 };
 
 logoutBtn.onclick = ()=>{
-  logAccess("ログアウト");
+  logAccess(localStorage.getItem("adminId"),"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
-  currentAdmin = null;
   loginDiv.style.display="block";
   mainContent.style.display="none";
 };
@@ -148,54 +142,72 @@ function startScan(){
   let isReading = false;
   let pendingDoc = null;
   let pendingCode = "";
+  let lastScannedCode = "";
+  let lastScanTime = 0;
 
   function showResult(msg, isError=false){
     resultEl.textContent=msg;
     resultEl.className=isError?"error":"";
   }
 
+  function parseTimeRange(rangeStr){
+    if(!rangeStr) return [null,null];
+    const [startStr,endStr]=rangeStr.split("〜");
+    const toDate=(timeStr)=>{
+      const [h,m]=timeStr.split(":").map(Number);
+      const d=new Date();
+      d.setHours(h,m,0,0);
+      return d;
+    };
+    return [toDate(startStr),toDate(endStr)];
+  }
+
   const codeReader = new ZXing.BrowserQRCodeReader();
   codeReader.decodeFromVideoDevice(null,"video", async (res,_)=>{
     if(!res||isReading) return;
     const code=res.text.trim();
-    if(code === lastScannedCode) return; // 同じパス連続スキップ
-    lastScannedCode = code;
-    isReading=true;
+    const nowTime=Date.now();
 
+    if(code===lastScannedCode && nowTime-lastScanTime<3000) return; // 3秒以内連続読み取り防止
+    lastScannedCode=code;
+    lastScanTime=nowTime;
+
+    isReading=true;
     try{
-      const q=query(collection(db,"passes"), where("id","==",code));
-      const snapshot = await getDocs(q);
-      if(snapshot.empty){
-        showResult("該当するパスが見つかりません",true);
+      const passRef = doc(db,"passes",code);
+      const docSnap = await getDoc(passRef);
+      if(!docSnap.exists()){
+        showResult("該当パスが存在しません",true);
         await logScan(code,"無効スキャン");
         isReading=false;
-      } else {
-        const docSnap = snapshot.docs[0];
-        const data = docSnap.data();
-        const now = new Date();
-        const start = data.startTime ? new Date(`${now.toDateString()}T${data.startTime}:00`) : now;
-        const end = data.endTime ? new Date(`${now.toDateString()}T${data.endTime}:00`) : now;
+        return;
+      }
+      const data = docSnap.data();
+      const [start,end] = parseTimeRange(data.time);
+      const now = new Date();
 
-        if(now < start){
-          pendingDoc = docSnap; pendingCode=code;
-          modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
-          modal.style.display="flex";
-          await logScan(code,"前倒し確認表示");
-        } else if(now > end){
-          showResult(`パス ${code} は案内時間を過ぎています`,true);
-          await logScan(code,"時間外スキャン");
-          isReading=false;
-        } else if(data.used){
-          showResult(`パス ${code} はすでに使用済みです`,true);
-          await logScan(code,"再スキャン");
-          isReading=false;
-        } else {
-          await updateDoc(doc(db,"passes",docSnap.id),{used:true});
-          showResult(`パス ${code} を使用済みにしました`);
-          await logScan(code,"使用済みにした");
-          sound.currentTime=0; sound.play().catch(()=>{});
-          isReading=false;
-        }
+      if(data.used){
+        showResult(`パス ${code} はすでに使用済みです`,true);
+        await logScan(code,"再スキャン");
+        isReading=false;
+        return;
+      }
+
+      if(start && now<start){
+        pendingDoc = docSnap; pendingCode = code;
+        modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
+        modal.style.display="flex";
+        await logScan(code,"前倒し確認表示");
+      } else if(end && now>end){
+        showResult(`パス ${code} は案内時間を過ぎています`,true);
+        await logScan(code,"時間外スキャン");
+        isReading=false;
+      } else {
+        await updateDoc(passRef,{used:true});
+        showResult(`パス ${code} を使用済みにしました`);
+        await logScan(code,"使用済みにした");
+        sound.currentTime=0; sound.play().catch(err=>console.warn(err));
+        isReading=false;
       }
     } catch(e){ 
       console.error(e); 
@@ -209,21 +221,19 @@ function startScan(){
     if(pendingDoc){
       await updateDoc(doc(db,"passes",pendingDoc.id),{used:true});
       showResult(`パス ${pendingCode} を使用済みにしました`);
-      await logScan(pendingCode,"使用済みにした（前倒し確認）");
-      sound.currentTime=0; sound.play().catch(()=>{});
+      await logScan(pendingCode,"使用済みにした（前倒し）");
+      sound.currentTime=0; sound.play().catch(err=>console.warn(err));
     }
+    pendingDoc=null; pendingCode="";
     modal.style.display="none";
-    pendingDoc = null;
-    pendingCode = "";
     isReading=false;
   };
 
   cancelBtn.onclick=async()=>{
     showResult("スキャンをキャンセルしました",true);
-    await logScan(pendingCode,"前倒しスキャンキャンセル");
+    if(pendingCode) await logScan(pendingCode,"キャンセル");
+    pendingDoc=null; pendingCode="";
     modal.style.display="none";
-    pendingDoc = null;
-    pendingCode = "";
     isReading=false;
   };
 }
@@ -241,7 +251,7 @@ function startScan(){
   </div>
 
   <div id="mainContent">
-    <h1>プライオリティパススキャン</h1>
+    <h1>ファストパススキャン</h1>
     <video id="video" autoplay muted playsinline></video>
     <div id="result">QRコードを読み取ってください</div>
     <div id="modal" style="display: none;">
