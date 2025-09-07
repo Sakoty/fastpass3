@@ -125,9 +125,7 @@ function updateUI(latestPasses,slots,limits,issueActive){
     const endDate=new Date(); endDate.setHours(eh,em,0,0);
 
     let statusText="現在案内中", cls="active";
-    if (used) {
-      statusText = '<span style="color:red;">使用済み</span>';
-    }
+    if(used){ statusText="使用済み"; cls="used"; }
     else if(now>endDate){ statusText="無効（時間切れ）"; cls="expired"; }
     else if(now<startDate){ statusText="案内時刻前です"; cls="active"; }
 
@@ -185,7 +183,7 @@ window.addEventListener("load", ()=>{
   // 発券ON/OFF
   onSnapshot(issueStatusDoc,snap=>{
     const data=snap.data();
-    issueActive=data?.enabled ?? true;
+    issueActive=data?.enabled ?? true; // ← 修正
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
@@ -203,12 +201,9 @@ window.addEventListener("load", ()=>{
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // 発券済み（Firestoreからリアルタイム取得）
+  // 発券済み
   onSnapshot(passesCol,snap=>{
-    latestPasses=snap.docs.map(d=>({
-      ...d.data(),
-      docId:d.id   // ← FirestoreのドキュメントIDも保持
-    }));
+    latestPasses=snap.docs.map(d=>d.data());
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
