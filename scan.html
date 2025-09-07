@@ -58,6 +58,8 @@ logsDiv.id = "logs";
 mainContent?.appendChild(logsDiv);
 
 let currentAdmin = null; // 現在ログインしている管理者名
+let lastScannedCode = ""; // 直前に読み込んだコード
+let lastScanTime = 0;     // 直前のスキャン時刻
 
 // ---- ログ表示 ----
 function showLog(message){
@@ -66,7 +68,7 @@ function showLog(message){
   logsDiv.prepend(p);
 }
 
-// ---- ログ書き込み（管理者名使用）----
+// ---- Firestoreにログ書き込み ----
 async function logAccess(action, page = "scan"){
   try{
     if(!currentAdmin) currentAdmin="未ログイン";
@@ -146,9 +148,17 @@ function startScan(){
   const codeReader = new ZXing.BrowserQRCodeReader();
   codeReader.decodeFromVideoDevice(null,"video", async (res,_)=>{
     if(!res||isReading) return;
-    isReading=true;
-
     const code=res.text;
+
+    // 連続スキャン防止（同じコードを1秒以内に再検出した場合は無視）
+    const nowTime = Date.now();
+    if(code===lastScannedCode && nowTime - lastScanTime < 1000){
+      return;
+    }
+    lastScannedCode = code;
+    lastScanTime = nowTime;
+
+    isReading=true;
     try{
       const q=query(collection(db,"passes"), where("id","==",code));
       const snapshot = await getDocs(q);
@@ -166,7 +176,7 @@ function startScan(){
 
         if(now < start){
           pendingDoc = docSnap; pendingCode=code;
-          modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
+          modalText.textContent=`案内時間前です。使用済みにしますか？（${code}）`;
           modal.style.display="flex";
         } else if(now > end){
           showResult(`パス ${code} は案内時間を過ぎています`,true);
