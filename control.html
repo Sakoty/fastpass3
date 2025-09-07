@@ -453,9 +453,8 @@ function getStartTime(d){
 
 document.addEventListener('keydown', e=>{ if(e.key==='Shift') shiftPressed = true; });
 document.addEventListener('keyup', e=>{ if(e.key==='Shift') shiftPressed = false; });
-</script>
 
-document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
+  document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
   if(!shiftPressed){
     alert('削除権限がありません');
     return;
