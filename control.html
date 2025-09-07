@@ -204,7 +204,7 @@
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ================= Firebase ================= */
@@ -231,7 +231,10 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 
 /* ================= 時計 ================= */
-setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent = d.toLocaleString(); },1000);
+setInterval(()=>{
+  const d=new Date(); 
+  document.getElementById("clock").textContent = d.toLocaleString();
+},1000);
 
 /* ================= タブ切替 ================= */
 Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
@@ -256,6 +259,7 @@ document.getElementById('loginSubmit').onclick = () => {
 
 let unsubPasses = null;
 let unsubIssueStatus = null;
+let unsubLogs = null;
 let shiftPressed = false;
 
 function loginSuccess(adminId){
@@ -266,6 +270,9 @@ function loginSuccess(adminId){
   startIssueStatusListener();
   loadTimeSlots();
   startPassesListener();
+  startLogsListener();
+  updatePassStatuses();          // ページロード時に一度更新
+  setInterval(updatePassStatuses,60000); // 1分ごと自動更新
 }
 
 /* ================= ログアウト処理 ================= */
@@ -275,6 +282,7 @@ function logout(){
   localStorage.removeItem('adminId');
   if (unsubPasses) { unsubPasses(); unsubPasses = null; }
   if (unsubIssueStatus) { unsubIssueStatus(); unsubIssueStatus = null; }
+  if (unsubLogs) { unsubLogs(); unsubLogs=null; }
   document.getElementById('passesTableBody').innerHTML = '';
   mainContent.style.display='none';
   loginDiv.style.display='block';
@@ -374,7 +382,6 @@ function startPassesListener(){
       const d = docSnap.data();
       passes.push({...d, _docId: docSnap.id});
     });
-
     renderPasses(passes);
     document.getElementById("sortSelect").onchange = ()=>renderPasses(passes);
   });
@@ -410,6 +417,7 @@ function renderPasses(passes){
     let statusClass = 'unused';
     if(d.status === '使用済') statusClass = 'used';
     if(d.status === '期限切れ') statusClass = 'expired';
+    if(d.status === '使用可能') statusClass = 'active';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -463,10 +471,64 @@ document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
   logAccess(localStorage.getItem('adminId'), '全パス削除', 'admin');
 };
 
-/* ================= アクセスログ ================= */
-// リアルタイム監視用 unsubscribe
-let unsubLogs = null;
+/* ================= パス自動ステータス更新 ================= */
+async function updatePassStatuses() {
+  const snap = await getDocs(collection(db,'passes'));
+  const now = new Date();
+  const batch = writeBatch(db);
+  
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    if(!d.startTime || !d.endTime) return;
+    
+    const [sh, sm] = d.startTime.split(':').map(Number);
+    const [eh, em] = d.endTime.split(':').map(Number);
+    const startDate = new Date(); startDate.setHours(sh, sm, 0, 0);
+    const endDate = new Date(); endDate.setHours(eh, em, 0, 0);
+    
+    let newStatus = d.status;
+    if(now < startDate) newStatus = '未使用';
+    else if(now >= startDate && now <= endDate) newStatus = '使用可能';
+    else if(now > endDate) newStatus = '期限切れ';
+    
+    if(newStatus !== d.status){
+      const ref = doc(db,'passes',docSnap.id);
+      batch.update(ref, {status: newStatus});
+      logAccess(localStorage.getItem('adminId')||'システム', `ステータス更新: ${d.id} → ${newStatus}`, 'scan');
+    }
+  });
+  
+  await batch.commit();
+}
 
+/* ================= スキャン時確認 ================= */
+async function scanPass(passId, scannerName){
+  const snap = await getDoc(doc(db,'passes',passId));
+  if(!snap.exists()) return alert('パスが存在しません');
+  
+  const d = snap.data();
+  const now = new Date();
+  const [sh, sm] = d.startTime.split(':').map(Number);
+  const [eh, em] = d.endTime.split(':').map(Number);
+  const startDate = new Date(); startDate.setHours(sh, sm, 0, 0);
+  const endDate = new Date(); endDate.setHours(eh, em, 0, 0);
+  
+  if(now < startDate){
+    if(!confirm(`パス ${d.id} はまだ案内時間前です。\nスキャンしますか？`)) return;
+  } else if(now > endDate){
+    if(!confirm(`パス ${d.id} は有効期限を過ぎています。\nスキャンしますか？`)) return;
+  }
+  
+  if(d.status !== '使用済'){
+    await updateDoc(doc(db,'passes',passId), {status:'使用済'});
+    logAccess(scannerName, `パススキャン: ${d.id}`, 'scan');
+    alert(`パス ${d.id} を使用済みにしました`);
+  } else {
+    alert(`パス ${d.id} は既に使用済みです`);
+  }
+}
+
+/* ================= アクセスログ ================= */
 async function logAccess(adminId, msg, type){
   await addDoc(collection(db,'accessLogs'),{
     adminId, msg, type, timestamp: serverTimestamp()
@@ -487,17 +549,17 @@ document.getElementById('logAuthBtn').onclick = async()=>{
 
 // ログリスナー開始
 function startLogsListener(){
-  if(unsubLogs) unsubLogs(); // 古いリスナー解除
+  if(unsubLogs) unsubLogs(); 
   const logsQueryRef = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
   unsubLogs = onSnapshot(logsQueryRef, snapshot => {
     const div = document.getElementById('accessLogs');
     const filter = document.getElementById('logFilterSelect').value;
     div.innerHTML = '';
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data();
-      if(filter!=='all' && data.type !== filter) return;
-      const ts = data.timestamp?.toDate?.()?.toLocaleString()||'';
-      div.innerHTML += `[${ts}] ${data.adminId||''} - ${data.msg||''}<br>`;
+    snapshot.forEach(docSnap=>{
+      const d = docSnap.data();
+      if(filter!=='all' && d.type!==filter) return;
+      const time = d.timestamp?.toDate?.().toLocaleString()||'-';
+      div.innerHTML += `<div>[${time}] [${d.type}] ${d.adminId}: ${d.msg}</div>`;
     });
   });
 }
