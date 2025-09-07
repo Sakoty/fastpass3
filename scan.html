@@ -51,15 +51,9 @@ const mainContent = document.getElementById("mainContent");
 const errorMsg = document.getElementById("errorMsg");
 const loginForm = document.getElementById("loginForm");
 const logoutBtn = document.getElementById("logoutBtn");
-
-// ログ表示用
 const logsDiv = document.createElement("div");
 logsDiv.id = "logs";
-mainContent?.appendChild(logsDiv);
-
-let currentAdmin = null;
-let lastScannedCode = "";
-let lastScanTime = 0;
+document.body.appendChild(logsDiv);
 
 // ---- ログ表示 ----
 function showLog(message){
@@ -68,20 +62,35 @@ function showLog(message){
   logsDiv.prepend(p);
 }
 
-// ---- Firestoreにログ書き込み ----
-async function logAccess(action, page = "scan"){
+// ---- Firestoreログ保存 ----
+async function logScan(passId, action){
+  const adminId = localStorage.getItem("adminId") || "不明";
   try{
-    if(!currentAdmin) currentAdmin="未ログイン";
-    await addDoc(collection(db,"accessLogs"),{
-      adminId: currentAdmin,
-      msg: action,
-      type: page,
-      timestamp: serverTimestamp()
+    await addDoc(collection(db,"scanLogs"),{
+      adminId,
+      passId,
+      action,
+      scannedAt: serverTimestamp()
     });
-    showLog(`${new Date().toLocaleString()} | ${currentAdmin} | ${page} | ${action}`);
+    showLog(`${new Date().toLocaleString()} | ${adminId} | ${passId} | ${action}`);
+  }catch(e){
+    console.error("ログ保存失敗:",e);
+    showLog(`ログ保存失敗: ${e.message}`);
+  }
+}
+
+// ---- アクセスログ保存 ----
+async function logAccess(adminId, action, page = "scan"){
+  try{
+    await addDoc(collection(db,"accessLogs"),{
+      adminId: adminId || "不明",
+      action,
+      page,
+      createdAt: serverTimestamp()
+    });
+    showLog(`${new Date().toLocaleString()} | ${adminId||"不明"} | ${page} | ${action}`);
   }catch(e){ 
-    console.error("ログ記録失敗:", e); 
-    showLog(`ログ記録失敗: ${e.message}`);
+    console.error("アクセスログ保存失敗:", e); 
   }
 }
 
@@ -90,11 +99,10 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const storedId = localStorage.getItem("adminId");
   const storedPass = localStorage.getItem("adminPass");
   if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
-    currentAdmin = storedId;
     loginDiv.style.display="none";
     mainContent.style.display="block";
     startScan();
-    logAccess("ログイン成功（自動）");
+    logAccess(storedId,"ログイン成功（自動）");
   }
 });
 
@@ -105,24 +113,21 @@ loginForm.onsubmit = e => {
   if(allowedAdmins.some(a=>a.id===inputId && a.password===inputPass)){
     localStorage.setItem("adminId", inputId);
     localStorage.setItem("adminPass", inputPass);
-    currentAdmin = inputId;
     loginDiv.style.display="none";
     mainContent.style.display="block";
     errorMsg.textContent="";
     startScan();
-    logAccess("ログイン成功");
+    logAccess(inputId,"ログイン成功");
   } else {
     errorMsg.textContent="IDまたはパスワードが違います";
-    currentAdmin = inputId;
-    logAccess("ログイン失敗");
+    logAccess(inputId,"ログイン失敗");
   }
 };
 
 logoutBtn.onclick = ()=>{
-  logAccess("ログアウト");
+  logAccess(localStorage.getItem("adminId"),"ログアウト");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
-  currentAdmin = null;
   loginDiv.style.display="block";
   mainContent.style.display="none";
 };
@@ -139,24 +144,37 @@ function startScan(){
   let isReading = false;
   let pendingDoc = null;
   let pendingCode = "";
+  let lastScannedCode = "";
+  let lastScanTime = 0;
 
   function showResult(msg, isError=false){
     resultEl.textContent=msg;
     resultEl.className=isError?"error":"";
   }
 
+  function parseTimeRange(rangeStr){
+    const [startStr,endStr]=rangeStr.split("〜");
+    const toDate=(timeStr)=>{
+      const [h,m]=timeStr.split(":").map(Number);
+      const d=new Date();
+      d.setHours(h,m,0,0);
+      return d;
+    };
+    return [toDate(startStr),toDate(endStr)];
+  }
+
   const codeReader = new ZXing.BrowserQRCodeReader();
   codeReader.decodeFromVideoDevice(null,"video", async (res,_)=>{
     if(!res||isReading) return;
-    const code=res.text;
+    const code=res.text.trim();
+    const nowTime=Date.now();
 
-    // 連続スキャン防止
-    const nowTime = Date.now();
-    if(code===lastScannedCode && nowTime - lastScanTime < 1000){
+    // 連続読み取り防止（3秒以内は無視）
+    if(code===lastScannedCode && nowTime-lastScanTime<3000){
       return;
     }
-    lastScannedCode = code;
-    lastScanTime = nowTime;
+    lastScannedCode=code;
+    lastScanTime=nowTime;
 
     isReading=true;
     try{
@@ -164,49 +182,37 @@ function startScan(){
       const snapshot = await getDocs(q);
       if(snapshot.empty){
         showResult("該当するパスが見つかりません",true);
-        logAccess(`無効スキャン: ${code}`);
+        logScan(code,"無効スキャン");
         isReading=false;
       } else {
         const docSnap = snapshot.docs[0];
         const data = docSnap.data();
-
+        const [start,end] = parseTimeRange(data.time);
         const now = new Date();
-
-        // 🔽 ここを修正： startTime/endTime が "HH:mm" 文字列で保存されている前提
-        function buildDateFromTimeStr(timeStr){
-          if(!timeStr) return null;
-          const [h,m] = timeStr.split(":").map(Number);
-          const d = new Date();
-          d.setHours(h, m, 0, 0);
-          return d;
-        }
-        const start = buildDateFromTimeStr(data.startTime);
-        const end   = buildDateFromTimeStr(data.endTime);
-
-        if(start && now < start){
+        if(now<start){
           pendingDoc = docSnap; pendingCode=code;
-          modalText.textContent=`案内時間前です。使用済みにしますか？（${code}）`;
+          modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
           modal.style.display="flex";
-        } else if(end && now > end){
+        } else if(now>end){
           showResult(`パス ${code} は案内時間を過ぎています`,true);
-          logAccess(`時間外スキャン: ${code}`);
+          logScan(code,"時間外スキャン");
           isReading=false;
         } else if(data.used){
           showResult(`パス ${code} はすでに使用済みです`,true);
-          logAccess(`再スキャン: ${code}`);
+          logScan(code,"再スキャン");
           isReading=false;
         } else {
           await updateDoc(doc(db,"passes",docSnap.id),{used:true});
           showResult(`パス ${code} を使用済みにしました`);
-          logAccess(`使用済みにした: ${code}`);
-          sound.currentTime=0; sound.play().catch(()=>{});
+          logScan(code,"使用済みにした");
+          sound.currentTime=0; sound.play().catch(err=>console.warn("音声再生エラー:",err));
           isReading=false;
         }
       }
     } catch(e){ 
       console.error(e); 
       showResult("エラーが発生しました",true); 
-      logAccess(`エラー: ${code} ${e.message}`); 
+      logScan(code,`エラー: ${e.message}`);
       isReading=false; 
     }
   });
@@ -215,8 +221,8 @@ function startScan(){
     if(pendingDoc){
       await updateDoc(doc(db,"passes",pendingDoc.id),{used:true});
       showResult(`パス ${pendingCode} を使用済みにしました`);
-      logAccess(`使用済みにした（前倒し）: ${pendingCode}`);
-      sound.currentTime=0; sound.play().catch(()=>{});
+      logScan(pendingCode,"使用済みにした（前倒し）");
+      sound.currentTime=0; sound.play().catch(err=>console.warn("音声再生エラー:",err));
     }
     modal.style.display="none";
     isReading=false;
@@ -224,7 +230,7 @@ function startScan(){
 
   cancelBtn.onclick=()=>{
     showResult("スキャンをキャンセルしました",true);
-    logAccess("スキャンキャンセル");
+    logScan(pendingCode,"キャンセル");
     modal.style.display="none";
     isReading=false;
   };
