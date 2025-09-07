@@ -365,16 +365,17 @@ document.getElementById('specialForm').onsubmit=async(e)=>{
   logAccess(localStorage.getItem('adminId'), `特別パス発券: ${passId}`, 'special');
 };
 
-/* ================= パス一覧 ================= */
+/* ================= パス一覧（リアルタイムステータス更新対応） ================= */
 function startPassesListener(){
   if(unsubPasses) unsubPasses();
-  unsubPasses = onSnapshot(collection(db,'passes'), q=>{
+  const passesCol = collection(db,'passes');
+  const q = query(passesCol, orderBy('id','asc'));
+  unsubPasses = onSnapshot(q, snapshot => {
     const passes = [];
-    q.forEach(docSnap=>{
+    snapshot.forEach(docSnap=>{
       const d = docSnap.data();
       passes.push({...d, _docId: docSnap.id});
     });
-
     renderPasses(passes);
     document.getElementById("sortSelect").onchange = ()=>renderPasses(passes);
   });
@@ -385,6 +386,7 @@ function renderPasses(passes){
   const tbody=document.getElementById('passesTableBody');
   tbody.innerHTML='';
 
+  // ソート
   if(sortType === "id"){
     passes.sort((a,b)=>{
       const na = parseInt((a.id||"FP000").replace("FP",""),10);
@@ -400,6 +402,9 @@ function renderPasses(passes){
   }
 
   passes.forEach(d=>{
+    const tr = document.createElement('tr');
+
+    // 案内時間
     let guideTime = '-';
     if(d.startTime && d.endTime){
       guideTime = `${d.startTime}〜${d.endTime}`;
@@ -407,35 +412,36 @@ function renderPasses(passes){
       guideTime = d.time;
     }
 
+    // ステータスと色
     let statusClass = 'unused';
-    if(d.status === '使用済') statusClass = 'used';
-    if(d.status === '期限切れ') statusClass = 'expired';
+    let statusText = d.status || '未使用';
+    if(statusText==='使用済') statusClass='used';
+    else if(statusText==='期限切れ') statusClass='expired';
 
-    const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${d.id}</td>
       <td>${d.name||''}</td>
       <td>${d.people||1}</td>
       <td>${guideTime}</td>
       <td>${d.type||'通常'}</td>
-      <td><span class="badge ${statusClass}">${d.status||'未使用'}</span></td>
+      <td><span class="badge ${statusClass}">${statusText}</span></td>
       <td><button class="danger w-auto">削除</button></td>
     `;
-    const btn = tr.querySelector('button');
-    btn.onclick = async ()=>{
-      if(!shiftPressed){
-        alert('削除権限がありません');
-        return;
-      }
+
+    // 削除ボタン
+    tr.querySelector('button').onclick = async ()=>{
+      if(!shiftPressed){ alert('削除権限がありません'); return; }
       if(confirm(`本当にパス ${d.id} を削除しますか？`)){
         await deleteDoc(doc(db,'passes',d._docId));
         logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
       }
     };
+
     tbody.appendChild(tr);
   });
 }
 
+/* getStartTime関数もそのまま使用 */
 function getStartTime(d){
   let t = "23:59";
   if(d.startTime) t = d.startTime;
@@ -447,6 +453,7 @@ function getStartTime(d){
 
 document.addEventListener('keydown', e=>{ if(e.key==='Shift') shiftPressed = true; });
 document.addEventListener('keyup', e=>{ if(e.key==='Shift') shiftPressed = false; });
+</script>
 
 document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
   if(!shiftPressed){
