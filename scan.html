@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>プライオリティパススキャン（ログ表示付き）</title>
+<title>プライオリティパススキャン（全ログ対応）</title>
 <style>
   body { font-family: sans-serif; text-align: center; padding: 10px; background-color: #f0f8ff; }
   video { width: 100%; max-width: 480px; height: auto; border: 1px solid #ccc; }
@@ -62,7 +62,7 @@ function showLog(message){
   logsDiv.prepend(p);
 }
 
-// ---- ログ書き込み（page付き）----
+// ---- Firestoreログ書き込み ----
 async function logAccess(adminId, action, page = "scan"){
   try{
     const docRef = await addDoc(collection(db,"accessLogs"),{
@@ -87,7 +87,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
     loginDiv.style.display="none";
     mainContent.style.display="block";
     startScan();
-    logAccess(storedId,"ログイン成功（自動）");
+    logAccess(storedId,"ログイン成功（自動）","login");
   }
 });
 
@@ -102,15 +102,16 @@ loginForm.onsubmit = e => {
     mainContent.style.display="block";
     errorMsg.textContent="";
     startScan();
-    logAccess(inputId,"ログイン成功");
+    logAccess(inputId,"ログイン成功","login");
   } else {
     errorMsg.textContent="IDまたはパスワードが違います";
-    logAccess(inputId,"ログイン失敗");
+    logAccess(inputId,"ログイン失敗","login");
   }
 };
 
 logoutBtn.onclick = ()=>{
-  logAccess(localStorage.getItem("adminId"),"ログアウト");
+  const adminId = localStorage.getItem("adminId");
+  logAccess(adminId,"ログアウト","login");
   localStorage.removeItem("adminId");
   localStorage.removeItem("adminPass");
   loginDiv.style.display="block";
@@ -152,60 +153,84 @@ function startScan(){
     isReading=true;
 
     const code=res.text;
+    const adminId = localStorage.getItem("adminId");
+
     try{
       const q=query(collection(db,"passes"), where("id","==",code));
       const snapshot = await getDocs(q);
       if(snapshot.empty){
         showResult("該当するパスが見つかりません",true);
-        logAccess(localStorage.getItem("adminId"),`無効スキャン: ${code}`);
+        logAccess(adminId, `無効スキャン: ${code}`);
         isReading=false;
-      } else {
-        const docSnap = snapshot.docs[0];
-        const data = docSnap.data();
-        const [start,end] = parseTimeRange(data.time);
-        const now = new Date();
-        if(now<start){
-          pendingDoc = docSnap; pendingCode=code;
-          modalText.textContent=`案内時間前ですが使用済みにしますか？（${code}）`;
-          modal.style.display="flex";
-        } else if(now>end){
-          showResult(`パス ${code} は案内時間を過ぎています`,true);
-          logAccess(localStorage.getItem("adminId"),`時間外スキャン: ${code}`);
-          isReading=false;
-        } else if(data.used){
-          showResult(`パス ${code} はすでに使用済みです`,true);
-          logAccess(localStorage.getItem("adminId"),`再スキャン: ${code}`);
-          isReading=false;
-        } else {
-          await updateDoc(doc(db,"passes",docSnap.id),{used:true});
-          showResult(`パス ${code} を使用済みにしました`);
-          logAccess(localStorage.getItem("adminId"),`使用済みにした: ${code}`);
-          sound.currentTime=0; sound.play().catch(err=>console.warn("音声再生エラー:",err));
-          isReading=false;
-        }
+        return;
       }
-    } catch(e){ 
+
+      const docSnap = snapshot.docs[0];
+      const data = docSnap.data();
+      const [start,end] = parseTimeRange(data.time);
+      const now = new Date();
+
+      if(now < start){
+        // 案内前（前倒しモーダル）
+        pendingDoc = docSnap;
+        pendingCode = code;
+        modalText.textContent = `案内時間前ですが使用済みにしますか？（${code}）`;
+        modal.style.display="flex";
+        logAccess(adminId, `前倒しスキャンモーダル表示: ${code}`);
+      }
+      else if(now > end){
+        showResult(`パス ${code} は案内時間を過ぎています`,true);
+        logAccess(adminId, `時間外スキャン: ${code}`);
+        isReading=false;
+      }
+      else if(data.used){
+        showResult(`パス ${code} はすでに使用済みです`,true);
+        logAccess(adminId, `再スキャン: ${code}`);
+        isReading=false;
+      }
+      else{
+        // 通常スキャン → 使用済みに
+        await updateDoc(doc(db,"passes",docSnap.id),{used:true});
+        showResult(`パス ${code} を使用済みにしました`);
+        logAccess(adminId, `通常スキャン使用済みにした: ${code}`);
+
+        sound.currentTime=0;
+        sound.play()
+          .then(()=>logAccess(adminId, `音声再生成功: ${code}`))
+          .catch(err=>logAccess(adminId, `音声再生エラー: ${err.message}`));
+
+        isReading=false;
+      }
+
+    }catch(e){ 
       console.error(e); 
       showResult("エラーが発生しました",true); 
-      logAccess(localStorage.getItem("adminId"),`エラー: ${code} ${e.message}`); 
+      logAccess(adminId, `エラー: ${code} ${e.message}`); 
       isReading=false; 
     }
   });
 
+  // ---- モーダルボタン ----
   confirmBtn.onclick=async()=>{
     if(pendingDoc){
+      const adminId = localStorage.getItem("adminId");
       await updateDoc(doc(db,"passes",pendingDoc.id),{used:true});
       showResult(`パス ${pendingCode} を使用済みにしました`);
-      logAccess(localStorage.getItem("adminId"),`使用済みにした（前倒し）: ${pendingCode}`);
-      sound.currentTime=0; sound.play().catch(err=>console.warn("音声再生エラー:",err));
+      logAccess(adminId, `前倒しスキャン使用済みにした: ${pendingCode}`);
+
+      sound.currentTime=0;
+      sound.play()
+        .then(()=>logAccess(adminId, `音声再生成功（前倒し）: ${pendingCode}`))
+        .catch(err=>logAccess(adminId, `音声再生エラー（前倒し）: ${err.message}`));
     }
     modal.style.display="none";
     isReading=false;
   };
 
   cancelBtn.onclick=()=>{
+    const adminId = localStorage.getItem("adminId");
     showResult("スキャンをキャンセルしました",true);
-    logAccess(localStorage.getItem("adminId"),"スキャンキャンセル");
+    logAccess(adminId, "スキャンキャンセル（モーダル）");
     modal.style.display="none";
     isReading=false;
   };
