@@ -80,6 +80,19 @@ async function logAccess(action){
   }
 }
 
+// --- timeパース ---
+function parseTimeRange(timeStr) {
+  if (!timeStr || !timeStr.includes("〜")) return [null, null];
+  const [startStr, endStr] = timeStr.split("〜").map(s => s.trim());
+  return [startStr, endStr];
+}
+function toTodayDate(timeStr) {
+  if (!timeStr) return null;
+  const now = new Date();
+  const [h, m] = timeStr.split(":").map(Number);
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+}
+
 // --- ログイン ---
 window.addEventListener("DOMContentLoaded", ()=>{
   const storedId = localStorage.getItem("adminId");
@@ -134,6 +147,7 @@ function startScan(){
   let isReading = false;
   let pendingDoc = null;
   let pendingCode = "";
+  let pendingTime = "";
 
   function showResult(msg, isError=false){
     resultEl.textContent=msg;
@@ -156,28 +170,30 @@ function startScan(){
         const docSnap = snapshot.docs[0];
         const data = docSnap.data();
         const now = new Date();
-        const start = data.startTime ? new Date(`${now.toDateString()}T${data.startTime}:00`) : now;
-        const end = data.endTime ? new Date(`${now.toDateString()}T${data.endTime}:00`) : now;
+
+        const [startStr, endStr] = parseTimeRange(data.time);
+        const start = toTodayDate(startStr);
+        const end   = toTodayDate(endStr);
+        const timeText = data.time || "未設定";
 
         if(data.used){
-          showResult(`パス ${code} はすでに使用済みです`,true);
+          showResult(`パス ${code} はすでに使用済みです（案内時間: ${timeText}）`,true);
           logAccess(`再スキャン: ${code}`);
-        } else if(now < start){
-          // 案内時刻前 → 確認モーダル
+        } else if(start && now < start){
           pendingDoc = docSnap;
           pendingCode = code;
-          modalText.textContent = `案内時間前です。使用済みにしますか？（${code}）`;
+          pendingTime = timeText;
+          modalText.textContent = `案内時間前です（案内時間: ${timeText}）。使用済みにしますか？`;
           modal.style.display = "flex";
-        } else if(now > end){
-          // 有効期限切れ → 確認モーダル
+        } else if(end && now > end){
           pendingDoc = docSnap;
           pendingCode = code;
-          modalText.textContent = `有効期限を過ぎています。使用済みにしますか？（${code}）`;
+          pendingTime = timeText;
+          modalText.textContent = `有効期限を過ぎています（案内時間: ${timeText}）。使用済みにしますか？`;
           modal.style.display = "flex";
         } else {
-          // 有効時間内は自動で使用済みに
           await updateDoc(doc(db,"passes",docSnap.id),{used:true});
-          showResult(`パス ${code} を使用済みにしました`);
+          showResult(`パス ${code} を使用済みにしました（案内時間: ${timeText}）`);
           logAccess(`使用済みにした: ${code}`);
           sound.currentTime=0; sound.play().catch(()=>{});
         }
@@ -193,7 +209,7 @@ function startScan(){
   modalYes.onclick = async () => {
     if(pendingDoc){
       await updateDoc(doc(db,"passes",pendingDoc.id),{used:true});
-      showResult(`パス ${pendingCode} を使用済みにしました`);
+      showResult(`パス ${pendingCode} を使用済みにしました（案内時間: ${pendingTime}）`);
       logAccess(`使用済みにした（確認モーダル）: ${pendingCode}`);
       sound.currentTime=0; sound.play().catch(()=>{});
     }
