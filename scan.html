@@ -162,11 +162,17 @@ function startScan(){
         if(data.used){
           showResult(`パス ${code} はすでに使用済みです`,true);
           logAccess(`再スキャン: ${code}`);
-        } else if(now < start || now > end){
-          // 案内前・期限切れの場合は確認モーダル表示
+        } else if(now < start){
+          // 案内時刻前 → 確認モーダル
           pendingDoc = docSnap;
           pendingCode = code;
-          modalText.textContent = now < start ? `案内時間前ですが使用済みにしますか？（${code}）` : `有効期限を過ぎていますが使用済みにしますか？（${code}）`;
+          modalText.textContent = `案内時間前です。使用済みにしますか？（${code}）`;
+          modal.style.display = "flex";
+        } else if(now > end){
+          // 有効期限切れ → 確認モーダル
+          pendingDoc = docSnap;
+          pendingCode = code;
+          modalText.textContent = `有効期限を過ぎています。使用済みにしますか？（${code}）`;
           modal.style.display = "flex";
         } else {
           // 有効時間内は自動で使用済みに
