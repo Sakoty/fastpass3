@@ -36,6 +36,26 @@ button:hover { background:#0052a3; }
 
 #qrcode { margin:20px auto; }
 .ended,.notset { color:red; font-weight:bold; }
+
+/* 🔄 リロードボタン（中央下に固定） */
+#reloadBtn {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0066cc;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+#reloadBtn:hover {
+  background: #0052a3;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
@@ -227,6 +247,11 @@ window.addEventListener("load", ()=>{
     catch(err){ alert("発券失敗:"+err.message); }
     isSubmitting=false;
   });
+
+  // 🔄 リロードボタン
+  document.getElementById("reloadBtn").addEventListener("click", ()=>{
+    location.reload();
+  });
 });
 </script>
 </head>
@@ -240,5 +265,9 @@ window.addEventListener("load", ()=>{
 </form>
 <div id="info"></div>
 <div id="qrcode"></div>
+
+<!-- 🔄 リロードボタン -->
+<button id="reloadBtn">🔄 更新</button>
+
 </body>
 </html>
