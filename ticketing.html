@@ -56,6 +56,24 @@ button:hover { background:#0052a3; }
 #reloadBtn:hover {
   background: #0052a3;
 }
+
+/* 🔽 同意モーダル */
+.modal {
+  display:none;
+  position:fixed;
+  z-index:1000;
+  left:0; top:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+}
+.modal-content {
+  background:#fff;
+  margin:10% auto;
+  padding:20px;
+  border-radius:10px;
+  max-width:400px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.3);
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
@@ -147,9 +165,8 @@ async function updateUI(latestPasses,slots,limits,issueActive){
     else if(now>endDate){ statusText="無効（時間切れ）"; cls="expired"; newStatus="期限切れ"; }
     else if(now<startDate){ statusText="案内時刻前です"; cls="active"; newStatus="未使用"; }
 
-    // Firestore の status を更新
     if(passInDb && passInDb.status!==newStatus){
-      const passDocRef = doc(db,"passes",passInDb._docId || passInDb.id); // idをキーにしてる場合は修正
+      const passDocRef = doc(db,"passes",passInDb._docId || passInDb.id);
       try { await updateDoc(passDocRef,{status:newStatus}); } catch(e){ console.warn("status更新失敗",e); }
     }
 
@@ -202,6 +219,8 @@ window.addEventListener("load", ()=>{
   let slots=[];
   let limits=[];
   let issueActive=true;
+  let isSubmitting=false;
+  let pendingSubmit=null;
 
   onSnapshot(issueStatusDoc,snap=>{
     const data=snap.data();
@@ -223,29 +242,52 @@ window.addEventListener("load", ()=>{
   });
 
   onSnapshot(passesCol,snap=>{
-    latestPasses=snap.docs.map(d=>({...d.data(),_docId:d.id})); // ✅ docIdも保存
+    latestPasses=snap.docs.map(d=>({...d.data(),_docId:d.id}));
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  let isSubmitting=false;
-  document.getElementById("form").addEventListener("submit",async(e)=>{
+  // --- 発券処理（同意モーダル対応）
+  document.getElementById("form").addEventListener("submit",(e)=>{
     e.preventDefault();
     if(isSubmitting) return;
-    isSubmitting=true;
 
     const name=document.getElementById("name").value.trim();
     const num=parseInt(document.getElementById("people").value);
     const time=document.getElementById("timeSelect").value;
-    if(!name||isNaN(num)||num<1||!time){ alert("正しい情報を入力してください"); isSubmitting=false; return; }
+    if(!name||isNaN(num)||num<1||!time){
+      alert("正しい情報を入力してください");
+      return;
+    }
 
     const lastNum=latestPasses.length>0?Math.max(...latestPasses.map(p=>p.number||0)):0;
     const number=lastNum+1;
     const id=`FP${number.toString().padStart(3,"0")}`;
-    const newPass={id,number,name,people:num,time,used:false,status:"未使用",createdAt:serverTimestamp()}; // ✅ statusを追加
+    pendingSubmit={id,number,name,people:num,time};
 
-    try{ await addDoc(passesCol,newPass); savePassToLocal(newPass); }
-    catch(err){ alert("発券失敗:"+err.message); }
+    document.getElementById("consentModal").style.display="block"; // ✅ モーダル表示
+  });
+
+  document.getElementById("agreeBtn").addEventListener("click",async()=>{
+    if(!document.getElementById("consentCheck").checked){
+      alert("同意にチェックしてください");
+      return;
+    }
+    if(!pendingSubmit) return;
+    isSubmitting=true;
+
+    const newPass={...pendingSubmit,used:false,status:"未使用",createdAt:serverTimestamp()};
+    try{
+      await addDoc(passesCol,newPass);
+      savePassToLocal(newPass);
+      document.getElementById("consentModal").style.display="none";
+      pendingSubmit=null;
+    }catch(err){ alert("発券失敗:"+err.message); }
     isSubmitting=false;
+  });
+
+  document.getElementById("cancelBtn").addEventListener("click",()=>{
+    document.getElementById("consentModal").style.display="none";
+    pendingSubmit=null;
   });
 
   // 🔄 リロードボタン
@@ -268,6 +310,28 @@ window.addEventListener("load", ()=>{
 
 <!-- 🔄 リロードボタン -->
 <button id="reloadBtn">🔄 更新</button>
+
+<!-- 🔽 同意モーダル -->
+<div id="consentModal" class="modal">
+  <div class="modal-content">
+    <h2>利用に関する同意事項</h2>
+    <p>
+      ・プライオリティパスは指定の時間のみ有効です。<br>
+      ・案内時間前や有効期限切れの場合はご利用できない場合があります。<br>
+      ・一度使用済みになったパスは再利用できません。<br>
+      ・体調のすぐれない方や、暗闇が苦手な方、骨折等のけがをしている方、心臓に疾患のある方のご利用はお控えください。<br>
+      ・小学生以下の方は、必ず保護者の方の確認が必須です。<br>
+      ・体重・体格等で安全な運行が不可能だと係員が判断した場合、ご利用をお断りする場合があります。<br>
+    </p>
+    <label style="display:block; margin-top:10px;">
+      <input type="checkbox" id="consentCheck"> 上記内容に同意します
+    </label>
+    <div style="margin-top:20px; text-align:center;">
+      <button id="agreeBtn">同意して発券</button>
+      <button id="cancelBtn">キャンセル</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
