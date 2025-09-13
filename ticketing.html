@@ -91,15 +91,38 @@ button:hover { background:#0052a3; }
   border-radius:8px;
   cursor:pointer;
 }
-#agreeBtn {
+#agreeBtn { background:#0066cc; color:#fff; font-weight:bold; }
+#cancelBtn.cancel { background:#eee; color:#333; }
+
+/* 🔽 発券不可モーダル */
+#notifyModal {
+  display:none;
+  position:fixed;
+  z-index:1100;
+  left:0; top:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+}
+#notifyModal .modal-content {
+  background:#fff;
+  margin:20% auto;
+  padding:20px;
+  border-radius:10px;
+  max-width:350px;
+  text-align:center;
+}
+#notifyCloseBtn {
+  margin-top:20px;
+  padding:12px;
+  font-size:16px;
+  border:none;
+  border-radius:8px;
   background:#0066cc;
   color:#fff;
-  font-weight:bold;
+  cursor:pointer;
 }
-#cancelBtn.cancel {
-  background:#eee;
-  color:#333;
-}
+#notifyCloseBtn:hover { background:#0052a3; }
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
@@ -118,7 +141,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- localStorage ---
+// --- localStorage --- 
 function getTodayString() {
   const now = new Date();
   return `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,"0")}-${now.getDate().toString().padStart(2,"0")}`;
@@ -152,9 +175,7 @@ function generateTimeBlocks(start,end,interval=10){
 function drawQRCode(id){
   const qrContainer=document.getElementById("qrcode");
   qrContainer.innerHTML="";
-  QRCode.toCanvas(document.createElement("canvas"),id,{width:200},(err,canvas)=>{
-    if(!err) qrContainer.appendChild(canvas);
-  });
+  QRCode.toCanvas(document.createElement("canvas"),id,{width:200},(err,canvas)=>{ if(!err) qrContainer.appendChild(canvas); });
 }
 
 // --- UI更新 ---
@@ -164,7 +185,6 @@ async function updateUI(latestPasses,slots,limits,issueActive){
   const saved=loadPassFromLocal();
   const now=new Date();
 
-  // ✅ 修正：停止中でも発券済みパスは表示
   if(!issueActive && !saved){
     form.style.display="none";
     info.innerHTML='<p class="ended">現在プライオリティパスの発券は一時中止中です</p>';
@@ -242,12 +262,8 @@ window.addEventListener("load", ()=>{
   const timeSlotsDoc=doc(db,"settings","timeSlots");
   const issueStatusDoc=doc(db,"settings","issueStatus");
 
-  let latestPasses=[];
-  let slots=[];
-  let limits=[];
-  let issueActive=true;
-  let isSubmitting=false;
-  let pendingSubmit=null;
+  let latestPasses=[]; let slots=[]; let limits=[]; let issueActive=true;
+  let isSubmitting=false; let pendingSubmit=null;
 
   onSnapshot(issueStatusDoc,snap=>{
     const data=snap.data();
@@ -273,7 +289,7 @@ window.addEventListener("load", ()=>{
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // --- 発券処理（同意モーダル対応）
+  // --- 発券処理 ---
   document.getElementById("form").addEventListener("submit",(e)=>{
     e.preventDefault();
     if(isSubmitting) return;
@@ -291,10 +307,10 @@ window.addEventListener("load", ()=>{
     const id=`FP${number.toString().padStart(3,"0")}`;
     pendingSubmit={id,number,name,people:num,time};
 
-    document.getElementById("consentModal").style.display="block"; // ✅ モーダル表示
+    document.getElementById("consentModal").style.display="block";
   });
 
-  document.getElementById("agreeBtn").addEventListener("click",async()=>{
+  document.getElementById("agreeBtn").addEventListener("click", async()=>{
     if(!document.getElementById("consentCheck").checked){
       alert("同意にチェックしてください");
       return;
@@ -302,25 +318,50 @@ window.addEventListener("load", ()=>{
     if(!pendingSubmit) return;
     isSubmitting=true;
 
-    const newPass={...pendingSubmit,used:false,status:"未使用",createdAt:serverTimestamp()};
-    try{
-      await addDoc(passesCol,newPass);
-      savePassToLocal(newPass);
-      document.getElementById("consentModal").style.display="none";
+    const selectedTime = pendingSubmit.time;
+    const slotIndex = slots.indexOf(selectedTime);
+    const limit = limits[slotIndex] || 1;
+    const currentCount = latestPasses.filter(p => p.time === selectedTime).length;
+
+    try {
+      if(currentCount < limit){
+        const newPass = { ...pendingSubmit, used:false, status:"未使用", createdAt:serverTimestamp() };
+        await addDoc(passesCol,newPass);
+        savePassToLocal(newPass);
+        document.getElementById("consentModal").style.display="none";
+      } else {
+        // 枠オーバー → ランダム選出
+        const existingPasses = latestPasses.filter(p=>p.time===selectedTime);
+        const totalCandidates = [...existingPasses, pendingSubmit];
+        const shuffled = totalCandidates.sort(()=>Math.random()-0.5);
+        const winners = shuffled.slice(0,limit);
+        const isWinner = winners.some(p => p.id===pendingSubmit.id || p===pendingSubmit);
+
+        if(isWinner){
+          const newPass = { ...pendingSubmit, used:false, status:"未使用", createdAt:serverTimestamp() };
+          await addDoc(passesCol,newPass);
+          savePassToLocal(newPass);
+        } else {
+          document.getElementById("notifyModal").style.display="block";
+        }
+        document.getElementById("consentModal").style.display="none";
+      }
       pendingSubmit=null;
-    }catch(err){ alert("発券失敗:"+err.message); }
+    } catch(err){ alert("発券失敗:" + err.message); }
     isSubmitting=false;
   });
 
-  document.getElementById("cancelBtn").addEventListener("click",()=>{
+  document.getElementById("cancelBtn").addEventListener("click", ()=>{
     document.getElementById("consentModal").style.display="none";
     pendingSubmit=null;
   });
 
-  // 🔄 リロードボタン
-  document.getElementById("reloadBtn").addEventListener("click", ()=>{
-    location.reload();
+  document.getElementById("notifyCloseBtn")?.addEventListener("click", ()=>{
+    document.getElementById("notifyModal").style.display="none";
   });
+
+  // 🔄 リロードボタン
+  document.getElementById("reloadBtn").addEventListener("click", ()=>{ location.reload(); });
 });
 </script>
 </head>
@@ -357,6 +398,14 @@ window.addEventListener("load", ()=>{
       <button id="agreeBtn">同意して発券</button>
       <button id="cancelBtn" class="cancel">キャンセル</button>
     </div>
+  </div>
+</div>
+
+<!-- 🔽 発券不可モーダル -->
+<div id="notifyModal" class="modal">
+  <div class="modal-content">
+    <p>残念ながら、今回の時間帯は発券枠がいっぱいです。</p>
+    <button id="notifyCloseBtn">閉じる</button>
   </div>
 </div>
 </body>
