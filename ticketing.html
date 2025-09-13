@@ -91,46 +91,20 @@ button:hover { background:#0052a3; }
   border-radius:8px;
   cursor:pointer;
 }
-#agreeBtn { background:#0066cc; color:#fff; font-weight:bold; }
-#cancelBtn.cancel { background:#eee; color:#333; }
-
-/* 🔽 発券不可モーダル */
-#notifyModal {
-  display:none;
-  position:fixed;
-  z-index:1100;
-  left:0; top:0;
-  width:100%; height:100%;
-  background:rgba(0,0,0,0.5);
-}
-#notifyModal .modal-content {
-  background:#fff;
-  margin:20% auto;
-  padding:20px;
-  border-radius:10px;
-  max-width:350px;
-  text-align:center;
-}
-#notifyCloseBtn {
-  margin-top:20px;
-  padding:12px;
-  font-size:16px;
-  border:none;
-  border-radius:8px;
+#agreeBtn {
   background:#0066cc;
   color:#fff;
-  cursor:pointer;
+  font-weight:bold;
 }
-#notifyCloseBtn:hover { background:#0052a3; }
-
+#cancelBtn.cancel {
+  background:#eee;
+  color:#333;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { 
-  getFirestore, collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction, query, where, getDocs 
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import QRCode from "https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js";
+import { getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Firebase設定
 const firebaseConfig = {
@@ -178,7 +152,9 @@ function generateTimeBlocks(start,end,interval=10){
 function drawQRCode(id){
   const qrContainer=document.getElementById("qrcode");
   qrContainer.innerHTML="";
-  QRCode.toCanvas(document.createElement("canvas"),id,{width:200},(err,canvas)=>{ if(!err) qrContainer.appendChild(canvas); });
+  QRCode.toCanvas(document.createElement("canvas"),id,{width:200},(err,canvas)=>{
+    if(!err) qrContainer.appendChild(canvas);
+  });
 }
 
 // --- UI更新 ---
@@ -188,6 +164,7 @@ async function updateUI(latestPasses,slots,limits,issueActive){
   const saved=loadPassFromLocal();
   const now=new Date();
 
+  // ✅ 修正：停止中でも発券済みパスは表示
   if(!issueActive && !saved){
     form.style.display="none";
     info.innerHTML='<p class="ended">現在プライオリティパスの発券は一時中止中です</p>';
@@ -260,13 +237,17 @@ async function updateUI(latestPasses,slots,limits,issueActive){
 }
 
 // --- 初期処理 ---
-window.addEventListener("load", async ()=>{
+window.addEventListener("load", ()=>{
   const passesCol=collection(db,"passes");
   const timeSlotsDoc=doc(db,"settings","timeSlots");
   const issueStatusDoc=doc(db,"settings","issueStatus");
 
-  let latestPasses=[]; let slots=[]; let limits=[]; let issueActive=true;
-  let isSubmitting=false; let pendingSubmit=null;
+  let latestPasses=[];
+  let slots=[];
+  let limits=[];
+  let issueActive=true;
+  let isSubmitting=false;
+  let pendingSubmit=null;
 
   onSnapshot(issueStatusDoc,snap=>{
     const data=snap.data();
@@ -292,7 +273,7 @@ window.addEventListener("load", async ()=>{
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  // --- 発券処理 ---
+  // --- 発券処理（同意モーダル対応）
   document.getElementById("form").addEventListener("submit",(e)=>{
     e.preventDefault();
     if(isSubmitting) return;
@@ -305,67 +286,41 @@ window.addEventListener("load", async ()=>{
       return;
     }
 
-    pendingSubmit={name,people:num,time};
-    document.getElementById("consentModal").style.display="flex";
+    const lastNum=latestPasses.length>0?Math.max(...latestPasses.map(p=>p.number||0)):0;
+    const number=lastNum+1;
+    const id=`FP${number.toString().padStart(3,"0")}`;
+    pendingSubmit={id,number,name,people:num,time};
+
+    document.getElementById("consentModal").style.display="block"; // ✅ モーダル表示
   });
 
-  document.getElementById("agreeBtn").addEventListener("click", async()=>{
+  document.getElementById("agreeBtn").addEventListener("click",async()=>{
     if(!document.getElementById("consentCheck").checked){
-      alert("同意にチェックしてください"); return;
+      alert("同意にチェックしてください");
+      return;
     }
     if(!pendingSubmit) return;
     isSubmitting=true;
 
-    try {
-      const counterDoc = doc(db, "counters", "fpNumber");
-      const passesCol = collection(db, "passes");
-
-      await runTransaction(db, async (t)=>{
-        const counterSnap = await t.get(counterDoc);
-        const lastNum = counterSnap.exists() ? counterSnap.data().lastNum : 0;
-        const newNum = lastNum + 1;
-        const id = `FP${newNum.toString().padStart(3,"0")}`;
-
-        // 枠チェック
-        const qSnap = await getDocs(query(passesCol, where("time","==",pendingSubmit.time)));
-        const slotPasses = qSnap.docs.map(d=>d.data());
-        const slotIndex = slots.indexOf(pendingSubmit.time);
-        const limit = limits[slotIndex] || 1;
-
-        let isWinner=true;
-        if(slotPasses.length >= limit){
-          const candidates = [...slotPasses,{...pendingSubmit,id}];
-          const shuffled = candidates.sort(()=>Math.random()-0.5);
-          const winners = shuffled.slice(0,limit);
-          isWinner = winners.some(p=>p.id===id);
-        }
-
-        if(isWinner){
-          const newPass = {...pendingSubmit,id,number:newNum,used:false,status:"未使用",createdAt:serverTimestamp()};
-          const docRef = doc(passesCol);
-          t.set(docRef,newPass);
-          t.set(counterDoc,{lastNum:newNum},{merge:true});
-          savePassToLocal(newPass);
-        } else {
-          document.getElementById("notifyModal").style.display="flex";
-        }
-      });
-
+    const newPass={...pendingSubmit,used:false,status:"未使用",createdAt:serverTimestamp()};
+    try{
+      await addDoc(passesCol,newPass);
+      savePassToLocal(newPass);
       document.getElementById("consentModal").style.display="none";
       pendingSubmit=null;
-    } catch(err){
-      alert("発券失敗:" + err.message);
-      console.error(err);
-    }
-
+    }catch(err){ alert("発券失敗:"+err.message); }
     isSubmitting=false;
   });
 
-  // モーダル閉じる
-  document.getElementById("cancelBtn").addEventListener("click",()=>{document.getElementById("consentModal").style.display="none"; pendingSubmit=null;});
-  document.getElementById("notifyCloseBtn").addEventListener("click",()=>{document.getElementById("notifyModal").style.display="none";});
+  document.getElementById("cancelBtn").addEventListener("click",()=>{
+    document.getElementById("consentModal").style.display="none";
+    pendingSubmit=null;
+  });
 
-  document.getElementById("reloadBtn").addEventListener("click", ()=>{ location.reload(); });
+  // 🔄 リロードボタン
+  document.getElementById("reloadBtn").addEventListener("click", ()=>{
+    location.reload();
+  });
 });
 </script>
 </head>
@@ -380,26 +335,29 @@ window.addEventListener("load", async ()=>{
 <div id="info"></div>
 <div id="qrcode"></div>
 
+<!-- 🔄 リロードボタン -->
 <button id="reloadBtn">🔄 更新</button>
 
-<!-- 同意モーダル -->
+<!-- 🔽 同意モーダル -->
 <div id="consentModal" class="modal">
   <div class="modal-content">
     <h2>利用に関する同意事項</h2>
-    <p>・プライオリティパスは指定の時間のみ有効です。<br>・案内時間前や有効期限切れの場合はご利用できない場合があります。<br>・一度使用済みになったパスは再利用できません。<br>・体調のすぐれない方や、暗闇が苦手な方、骨折等のけがをしている方、心臓に疾患のある方のご利用はお控えください。<br>・小学生以下の方は、必ず保護者の方の確認が必須です。<br>・体重・体格等で安全な運行が不可能だと係員が判断した場合、ご利用をお断りする場合があります。</p>
-    <label><input type="checkbox" id="consentCheck"> 上記内容に同意します</label>
+    <p>
+      ・プライオリティパスは指定の時間のみ有効です。<br>
+      ・案内時間前や有効期限切れの場合はご利用できない場合があります。<br>
+      ・一度使用済みになったパスは再利用できません。<br>
+      ・グループの方は、代表者がまとめて発券してください。
+      ・体調のすぐれない方や、暗闇が苦手な方、骨折等のけがをしている方、心臓に疾患のある方のご利用はお控えください。<br>
+      ・小学生以下の方は、必ず保護者の方の確認が必須です。<br>
+      ・体重・体格等で安全な運行が不可能だと係員が判断した場合、ご利用をお断りする場合があります。
+    </p>
+    <label style="display:block; margin-top:10px;">
+      <input type="checkbox" id="consentCheck"> 上記内容に同意します
+    </label>
     <div class="modal-buttons">
       <button id="agreeBtn">同意して発券</button>
       <button id="cancelBtn" class="cancel">キャンセル</button>
     </div>
-  </div>
-</div>
-
-<!-- 発券不可モーダル -->
-<div id="notifyModal" class="modal">
-  <div class="modal-content">
-    <p>残念ながら、今回の時間帯は発券枠がいっぱいです。</p>
-    <button id="notifyCloseBtn">閉じる</button>
   </div>
 </div>
 </body>
