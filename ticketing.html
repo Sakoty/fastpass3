@@ -127,7 +127,10 @@ button:hover { background:#0052a3; }
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { 
+  getFirestore, collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, runTransaction, query, where, getDocs 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import QRCode from "https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js";
 
 // Firebase設定
 const firebaseConfig = {
@@ -141,7 +144,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- localStorage --- 
+// --- localStorage ---
 function getTodayString() {
   const now = new Date();
   return `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,"0")}-${now.getDate().toString().padStart(2,"0")}`;
@@ -257,7 +260,7 @@ async function updateUI(latestPasses,slots,limits,issueActive){
 }
 
 // --- 初期処理 ---
-window.addEventListener("load", ()=>{
+window.addEventListener("load", async ()=>{
   const passesCol=collection(db,"passes");
   const timeSlotsDoc=doc(db,"settings","timeSlots");
   const issueStatusDoc=doc(db,"settings","issueStatus");
@@ -289,90 +292,79 @@ window.addEventListener("load", ()=>{
     updateUI(latestPasses,slots,limits,issueActive);
   });
 
- // --- 発券処理 ---
-document.getElementById("form").addEventListener("submit",(e)=>{
-  e.preventDefault();
-  if(isSubmitting) return;
+  // --- 発券処理 ---
+  document.getElementById("form").addEventListener("submit",(e)=>{
+    e.preventDefault();
+    if(isSubmitting) return;
 
-  const name=document.getElementById("name").value.trim();
-  const num=parseInt(document.getElementById("people").value);
-  const time=document.getElementById("timeSelect").value;
-  if(!name||isNaN(num)||num<1||!time){
-    alert("正しい情報を入力してください");
-    return;
-  }
+    const name=document.getElementById("name").value.trim();
+    const num=parseInt(document.getElementById("people").value);
+    const time=document.getElementById("timeSelect").value;
+    if(!name||isNaN(num)||num<1||!time){
+      alert("正しい情報を入力してください");
+      return;
+    }
 
-  pendingSubmit={name,people:num,time};
+    pendingSubmit={name,people:num,time};
+    document.getElementById("consentModal").style.display="flex";
+  });
 
-  document.getElementById("consentModal").style.display="block";
-});
+  document.getElementById("agreeBtn").addEventListener("click", async()=>{
+    if(!document.getElementById("consentCheck").checked){
+      alert("同意にチェックしてください"); return;
+    }
+    if(!pendingSubmit) return;
+    isSubmitting=true;
 
-document.getElementById("agreeBtn").addEventListener("click", async()=>{
-  if(!document.getElementById("consentCheck").checked){
-    alert("同意にチェックしてください");
-    return;
-  }
-  if(!pendingSubmit) return;
-  isSubmitting=true;
+    try {
+      const counterDoc = doc(db, "counters", "fpNumber");
+      const passesCol = collection(db, "passes");
 
-  try {
-    // 🔹 Firestoreトランザクションで番号重複防止
-    const counterDoc = doc(db, "counters", "fpNumber");
-    const passesCol = collection(db, "passes");
+      await runTransaction(db, async (t)=>{
+        const counterSnap = await t.get(counterDoc);
+        const lastNum = counterSnap.exists() ? counterSnap.data().lastNum : 0;
+        const newNum = lastNum + 1;
+        const id = `FP${newNum.toString().padStart(3,"0")}`;
 
-    await db.runTransaction(async (t)=>{
-      const counterSnap = await t.get(counterDoc);
-      const lastNum = counterSnap.exists() ? counterSnap.data().lastNum : 0;
-      const newNum = lastNum + 1;
-      const id = `FP${newNum.toString().padStart(3,"0")}`;
+        // 枠チェック
+        const qSnap = await getDocs(query(passesCol, where("time","==",pendingSubmit.time)));
+        const slotPasses = qSnap.docs.map(d=>d.data());
+        const slotIndex = slots.indexOf(pendingSubmit.time);
+        const limit = limits[slotIndex] || 1;
 
-      // 枠チェック（抽選）
-      const q = await passesCol.where("time","==",pendingSubmit.time).get();
-      const slotPasses = q.docs.map(d=>d.data());
-      const slotIndex = slots.indexOf(pendingSubmit.time);
-      const limit = limits[slotIndex] || 1;
+        let isWinner=true;
+        if(slotPasses.length >= limit){
+          const candidates = [...slotPasses,{...pendingSubmit,id}];
+          const shuffled = candidates.sort(()=>Math.random()-0.5);
+          const winners = shuffled.slice(0,limit);
+          isWinner = winners.some(p=>p.id===id);
+        }
 
-      let isWinner = true;
-      if(slotPasses.length >= limit){
-        // 抽選
-        const candidates = [...slotPasses, {...pendingSubmit, id}];
-        const shuffled = candidates.sort(()=>Math.random()-0.5);
-        const winners = shuffled.slice(0, limit);
-        isWinner = winners.some(p => p.id===id);
-      }
+        if(isWinner){
+          const newPass = {...pendingSubmit,id,number:newNum,used:false,status:"未使用",createdAt:serverTimestamp()};
+          const docRef = doc(passesCol);
+          t.set(docRef,newPass);
+          t.set(counterDoc,{lastNum:newNum},{merge:true});
+          savePassToLocal(newPass);
+        } else {
+          document.getElementById("notifyModal").style.display="flex";
+        }
+      });
 
-      if(isWinner){
-        const newPass = {
-          ...pendingSubmit,
-          id,
-          number:newNum,
-          used:false,
-          status:"未使用",
-          createdAt:serverTimestamp()
-        };
-        const docRef = doc(passesCol);
-        t.set(docRef, newPass);
-        t.set(counterDoc, { lastNum: newNum }, { merge:true });
+      document.getElementById("consentModal").style.display="none";
+      pendingSubmit=null;
+    } catch(err){
+      alert("発券失敗:" + err.message);
+      console.error(err);
+    }
 
-        savePassToLocal(newPass);
-      } else {
-        // 外れの場合はモーダル表示
-        document.getElementById("notifyModal").style.display="block";
-      }
-    });
+    isSubmitting=false;
+  });
 
-    document.getElementById("consentModal").style.display="none";
-    pendingSubmit=null;
-  } catch(err){
-    alert("発券失敗:" + err.message);
-    console.error(err);
-  }
+  // モーダル閉じる
+  document.getElementById("cancelBtn").addEventListener("click",()=>{document.getElementById("consentModal").style.display="none"; pendingSubmit=null;});
+  document.getElementById("notifyCloseBtn").addEventListener("click",()=>{document.getElementById("notifyModal").style.display="none";});
 
-  isSubmitting=false;
-});
-
-
-  // 🔄 リロードボタン
   document.getElementById("reloadBtn").addEventListener("click", ()=>{ location.reload(); });
 });
 </script>
@@ -388,24 +380,14 @@ document.getElementById("agreeBtn").addEventListener("click", async()=>{
 <div id="info"></div>
 <div id="qrcode"></div>
 
-<!-- 🔄 リロードボタン -->
 <button id="reloadBtn">🔄 更新</button>
 
-<!-- 🔽 同意モーダル -->
+<!-- 同意モーダル -->
 <div id="consentModal" class="modal">
   <div class="modal-content">
     <h2>利用に関する同意事項</h2>
-    <p>
-      ・プライオリティパスは指定の時間のみ有効です。<br>
-      ・案内時間前や有効期限切れの場合はご利用できない場合があります。<br>
-      ・一度使用済みになったパスは再利用できません。<br>
-      ・体調のすぐれない方や、暗闇が苦手な方、骨折等のけがをしている方、心臓に疾患のある方のご利用はお控えください。<br>
-      ・小学生以下の方は、必ず保護者の方の確認が必須です。<br>
-      ・体重・体格等で安全な運行が不可能だと係員が判断した場合、ご利用をお断りする場合があります。
-    </p>
-    <label style="display:block; margin-top:10px;">
-      <input type="checkbox" id="consentCheck"> 上記内容に同意します
-    </label>
+    <p>・プライオリティパスは指定の時間のみ有効です。<br>・案内時間前や有効期限切れの場合はご利用できない場合があります。<br>・一度使用済みになったパスは再利用できません。<br>・体調のすぐれない方や、暗闇が苦手な方、骨折等のけがをしている方、心臓に疾患のある方のご利用はお控えください。<br>・小学生以下の方は、必ず保護者の方の確認が必須です。<br>・体重・体格等で安全な運行が不可能だと係員が判断した場合、ご利用をお断りする場合があります。</p>
+    <label><input type="checkbox" id="consentCheck"> 上記内容に同意します</label>
     <div class="modal-buttons">
       <button id="agreeBtn">同意して発券</button>
       <button id="cancelBtn" class="cancel">キャンセル</button>
@@ -413,7 +395,7 @@ document.getElementById("agreeBtn").addEventListener("click", async()=>{
   </div>
 </div>
 
-<!-- 🔽 発券不可モーダル -->
+<!-- 発券不可モーダル -->
 <div id="notifyModal" class="modal">
   <div class="modal-content">
     <p>残念ながら、今回の時間帯は発券枠がいっぱいです。</p>
