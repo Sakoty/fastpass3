@@ -294,13 +294,6 @@ window.addEventListener("load", ()=>{
     document.getElementById("consentModal").style.display="block"; // ✅ モーダル表示
   });
 
-  document.getElementById("agreeBtn").addEventListener("click",async()=>{
-    if(!document.getElementById("consentCheck").checked){
-      alert("同意にチェックしてください");
-      return;
-    }
-    if(!pendingSubmit) return;
-    isSubmitting=true;
 
     const newPass={...pendingSubmit,used:false,status:"未使用",createdAt:serverTimestamp()};
     try{
@@ -321,6 +314,54 @@ window.addEventListener("load", ()=>{
   document.getElementById("reloadBtn").addEventListener("click", ()=>{
     location.reload();
   });
+});
+  // --- 毎秒 UI 更新 ---
+setInterval(()=>updateUI(latestPasses, slots, limits, issueActive), 1000);
+
+// --- 発券処理（同意モーダル + 上限ランダム制御） ---
+document.getElementById("agreeBtn").addEventListener("click", async () => {
+  if (!document.getElementById("consentCheck").checked) {
+    alert("同意にチェックしてください");
+    return;
+  }
+  if (!pendingSubmit) return;
+  isSubmitting = true;
+
+  const selectedTime = pendingSubmit.time;
+  const slotIndex = slots.indexOf(selectedTime);
+  const limit = limits[slotIndex] || 1;
+
+  // 現在の発券数を取得
+  const count = latestPasses.filter(p => p.time === selectedTime).length;
+
+  try {
+    if (count < limit) {
+      // 枠に余裕あり
+      const newPass = { ...pendingSubmit, used: false, status: "未使用", createdAt: serverTimestamp() };
+      await addDoc(passesCol, newPass);
+      savePassToLocal(newPass);
+      pendingSubmit = null;
+      document.getElementById("consentModal").style.display = "none";
+    } else {
+      // 枠オーバー → ランダムで1人当選
+      if (Math.random() < 0.5) {
+        const newPass = { ...pendingSubmit, used: false, status: "未使用", createdAt: serverTimestamp() };
+        await addDoc(passesCol, newPass);
+        savePassToLocal(newPass);
+        pendingSubmit = null;
+        document.getElementById("consentModal").style.display = "none";
+      } else {
+        // 発券できなかった人向けモーダル表示
+        alert("残念ながらこの時間帯の枠はいっぱいです。別の時間帯を選んでください。");
+        document.getElementById("consentModal").style.display = "none";
+        pendingSubmit = null;
+      }
+    }
+  } catch (err) {
+    alert("発券失敗:" + err.message);
+  }
+
+  isSubmitting = false;
 });
 </script>
 </head>
