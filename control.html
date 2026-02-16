@@ -220,8 +220,13 @@
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+ import {
+  getAuth,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
@@ -234,20 +239,7 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-/* =============== ローカル管理者（簡易） =============== */
-const allowedAdmins = [
-  {id:"Sakoty", password:"3214"},
-  {id:"seseguchi914", password:"0914"},
-  {id:"Soichiro", password:"35th"},
-  {id:"Sakura", password:"35th"},
-  {id:"Sae", password:"35th"},
-  {id:"Kyosuke", password:"35th"},
-  {id:"Yoichiro", password:"35th"},
-  {id:"Tatsuki", password:"35th"},
-  {id:"Haruki", password:"35th"},
-  {id:"Syosei", password:"35th"}
-];
+const auth = getAuth(app);
 
 /* ================= DOM ================= */
 const loginDiv = document.getElementById("loginDiv");
@@ -271,15 +263,39 @@ Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
 });
 
 /* ================= ログイン処理 ================= */
-document.getElementById('loginSubmit').onclick = () => {
-  const id = document.getElementById('adminId').value.trim();
-  const pass = document.getElementById('adminPass').value.trim();
-  if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
-    loginSuccess(id);
-  } else {
-    errorMsg.textContent = 'IDまたはパスワードが違います';
+document.getElementById('loginSubmit').onclick = async () => {
+
+  const email = document.getElementById('adminId').value.trim();
+  const password = document.getElementById('adminPass').value.trim();
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (e) {
+    errorMsg.textContent = "ログイン失敗";
   }
 };
+
+  onAuthStateChanged(auth, async(user)=>{
+
+  if(!user){
+    loginDiv.style.display='block';
+    mainContent.style.display='none';
+    return;
+  }
+
+  // 管理者チェック
+  const adminRef = doc(db,"admins",user.uid);
+  const adminSnap = await getDoc(adminRef);
+
+  if(!adminSnap.exists()){
+    alert("管理者権限がありません");
+    await signOut(auth);
+    return;
+  }
+
+  loginSuccess(user.email);
+});
+
 
 let unsubPasses = null;
 let unsubIssueStatus = null;
@@ -300,19 +316,9 @@ function loginSuccess(adminId){
 }
 
 /* ================= ログアウト処理 ================= */
-function logout(){
-  const id = localStorage.getItem('adminId')||'不明';
-  logAccess(id, 'ログアウト', 'admin');
-  localStorage.removeItem('adminId');
-  if (unsubPasses) { unsubPasses(); unsubPasses = null; }
-  if (unsubIssueStatus) { unsubIssueStatus(); unsubIssueStatus = null; }
-  if (unsubLogs) { unsubLogs(); unsubLogs=null; }
-  document.getElementById('passesTableBody').innerHTML = '';
-  mainContent.style.display='none';
-  loginDiv.style.display='block';
+async function logout(){
+  await signOut(auth);
 }
-document.getElementById('logoutBtn').onclick = logout;
-window.addEventListener("beforeunload", logout);
 
 /* ================= 発券ステータス ================= */
 async function setIssueStatus(status){
