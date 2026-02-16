@@ -220,13 +220,32 @@
 </div>
 
 <script type="module">
- import {
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  addDoc,
+  getDocs,
+  writeBatch,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+import {
   getAuth,
   signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
@@ -303,7 +322,9 @@ let unsubLogs = null;
 let shiftPressed = false;
 
 function loginSuccess(adminId){
-  localStorage.setItem('adminId', adminId);
+ const adminData = adminSnap.data();
+loginSuccess(adminData.name);
+
   loginDiv.style.display = 'none';
   mainContent.style.display = 'block';
   logAccess(adminId, 'ログイン成功', 'login');
@@ -319,6 +340,7 @@ function loginSuccess(adminId){
 async function logout(){
   await signOut(auth);
 }
+document.getElementById("logoutBtn").onclick = logout;
 
 /* ================= 発券ステータス ================= */
 async function setIssueStatus(status){
@@ -527,7 +549,10 @@ async function updatePassStatuses() {
       logAccess(localStorage.getItem('adminId')||'システム', `ステータス更新: ${d.id} → ${newStatus}`, 'scan');
     }
   });
-  
+  if(newStatus !== d.status){
+  batch.update(ref, {status: newStatus});
+}
+
   await batch.commit();
 }
 
@@ -564,6 +589,7 @@ async function logAccess(adminId, msg, type){
     adminId, msg, type, timestamp: serverTimestamp()
   });
 }
+<option value="admin">管理操作</option>
 
 // ログ認証
 document.getElementById('logAuthBtn').onclick = async()=>{
