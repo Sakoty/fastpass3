@@ -12,10 +12,6 @@ body{
     padding:20px;
 }
 
-.hidden{
-    display:none;
-}
-
 .panel{
     background:#222;
     padding:20px;
@@ -23,12 +19,23 @@ body{
     border-radius:10px;
 }
 
+input,button{
+    padding:8px;
+    margin:5px;
+}
+
 button{
-    padding:10px;
     background:#00c3ff;
     border:none;
     color:white;
     cursor:pointer;
+}
+
+.row{
+    display:flex;
+    justify-content:space-between;
+    padding:8px;
+    border-bottom:1px solid #444;
 }
 </style>
 </head>
@@ -36,12 +43,6 @@ button{
 <body>
 
 <h1>🎫 FastPass 管理画面</h1>
-
-<div id="loginArea">
-    <button id="loginBtn">Googleでログイン</button>
-</div>
-
-<div id="adminArea" class="hidden">
 
 <div class="panel">
 <h2>新しいパス作成</h2>
@@ -58,15 +59,10 @@ button{
 <div id="list"></div>
 </div>
 
-</div>
-
 <script type="module">
 
-// =====================
-// Firebase読み込み
-// =====================
-import { initializeApp }
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 
 import {
 getFirestore,
@@ -75,80 +71,24 @@ addDoc,
 getDocs,
 updateDoc,
 doc,
-getDoc,
 Timestamp
-}
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+} from
+"https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-import {
-getAuth,
-GoogleAuthProvider,
-signInWithPopup,
-onAuthStateChanged
-}
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-
-
-// =====================
-// Firebase設定
-// =====================
 const firebaseConfig = {
-  // ←あなたの設定
+  // ← 自分のFirebase設定
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
 
-const provider = new GoogleAuthProvider();
-
-const loginBtn = document.getElementById("loginBtn");
-const adminArea = document.getElementById("adminArea");
-const loginArea = document.getElementById("loginArea");
 const listDiv = document.getElementById("list");
 
 
-// =====================
-// ログイン処理
-// =====================
-loginBtn.onclick = async ()=>{
-    await signInWithPopup(auth,provider);
-};
-
-
-// =====================
-// ログイン状態監視
-// =====================
-onAuthStateChanged(auth, async(user)=>{
-
-    if(!user){
-        adminArea.classList.add("hidden");
-        loginArea.classList.remove("hidden");
-        return;
-    }
-
-    // 管理者チェック
-    const adminRef = doc(db,"admins",user.uid);
-    const adminSnap = await getDoc(adminRef);
-
-    if(!adminSnap.exists()){
-        alert("管理者権限がありません");
-        adminArea.classList.add("hidden");
-        return;
-    }
-
-    // 管理者OK
-    loginArea.classList.add("hidden");
-    adminArea.classList.remove("hidden");
-
-    loadPasswords();
-});
-
-
-// =====================
+// =========================
 // パス作成
-// =====================
-window.createPassword = async ()=>{
+// =========================
+window.createPassword = async () => {
 
     const password =
         document.getElementById("password").value;
@@ -160,24 +100,24 @@ window.createPassword = async ()=>{
         new Date(document.getElementById("expire").value);
 
     await addDoc(collection(db,"passwords"),{
-        password,
-        enabled:true,
-        maxUses,
-        usedCount:0,
-        expireAt:Timestamp.fromDate(expire),
-        createdAt:Timestamp.now()
+        password: password,
+        enabled: true,
+        maxUses: maxUses,
+        usedCount: 0,
+        expireAt: Timestamp.fromDate(expire),
+        createdAt: Timestamp.now()
     });
 
     loadPasswords();
 };
 
 
-// =====================
-// 一覧表示
-// =====================
+// =========================
+// 一覧読み込み
+// =========================
 async function loadPasswords(){
 
-    listDiv.innerHTML="";
+    listDiv.innerHTML = "";
 
     const snap = await getDocs(collection(db,"passwords"));
 
@@ -185,14 +125,20 @@ async function loadPasswords(){
 
         const data = d.data();
 
-        const div=document.createElement("div");
+        const div = document.createElement("div");
+        div.className="row";
 
-        div.innerHTML=`
-        ${data.password}
-        | ${data.enabled?"有効":"無効"}
-        | 使用 ${data.usedCount}/${data.maxUses}
+        div.innerHTML = `
+        <div>
+            ${data.password}
+            |
+            ${data.enabled ? "有効" : "無効"}
+            |
+            使用 ${data.usedCount}/${data.maxUses}
+        </div>
+
         <button onclick="toggle('${d.id}',${data.enabled})">
-        ${data.enabled?"停止":"有効化"}
+            ${data.enabled ? "停止" : "有効化"}
         </button>
         `;
 
@@ -201,17 +147,20 @@ async function loadPasswords(){
 }
 
 
-// =====================
-// 有効切替
-// =====================
+// =========================
+// 有効/無効切り替え
+// =========================
 window.toggle = async(id,current)=>{
 
     await updateDoc(doc(db,"passwords",id),{
-        enabled:!current
+        enabled: !current
     });
 
     loadPasswords();
 };
+
+
+loadPasswords();
 
 </script>
 
