@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>FastPass 管理画面</title>
+
+<style>
+body{
+    font-family:sans-serif;
+    background:#111;
+    color:white;
+    padding:20px;
+}
+
+.hidden{
+    display:none;
+}
+
+.panel{
+    background:#222;
+    padding:20px;
+    margin-bottom:20px;
+    border-radius:10px;
+}
+
+button{
+    padding:10px;
+    background:#00c3ff;
+    border:none;
+    color:white;
+    cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🎫 FastPass 管理画面</h1>
+
+<div id="loginArea">
+    <button id="loginBtn">Googleでログイン</button>
+</div>
+
+<div id="adminArea" class="hidden">
+
+<div class="panel">
+<h2>新しいパス作成</h2>
+
+<input id="password" placeholder="パスワード">
+<input id="maxUses" type="number" placeholder="最大人数">
+<input id="expire" type="datetime-local">
+
+<button onclick="createPassword()">作成</button>
+</div>
+
+<div class="panel">
+<h2>現在のパス一覧</h2>
+<div id="list"></div>
+</div>
+
+</div>
+
+<script type="module">
+
+// =====================
+// Firebase読み込み
+// =====================
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+import {
+getFirestore,
+collection,
+addDoc,
+getDocs,
+updateDoc,
+doc,
+getDoc,
+Timestamp
+}
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+import {
+getAuth,
+GoogleAuthProvider,
+signInWithPopup,
+onAuthStateChanged
+}
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+
+// =====================
+// Firebase設定
+// =====================
+const firebaseConfig = {
+  // ←あなたの設定
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const provider = new GoogleAuthProvider();
+
+const loginBtn = document.getElementById("loginBtn");
+const adminArea = document.getElementById("adminArea");
+const loginArea = document.getElementById("loginArea");
+const listDiv = document.getElementById("list");
+
+
+// =====================
+// ログイン処理
+// =====================
+loginBtn.onclick = async ()=>{
+    await signInWithPopup(auth,provider);
+};
+
+
+// =====================
+// ログイン状態監視
+// =====================
+onAuthStateChanged(auth, async(user)=>{
+
+    if(!user){
+        adminArea.classList.add("hidden");
+        loginArea.classList.remove("hidden");
+        return;
+    }
+
+    // 管理者チェック
+    const adminRef = doc(db,"admins",user.uid);
+    const adminSnap = await getDoc(adminRef);
+
+    if(!adminSnap.exists()){
+        alert("管理者権限がありません");
+        adminArea.classList.add("hidden");
+        return;
+    }
+
+    // 管理者OK
+    loginArea.classList.add("hidden");
+    adminArea.classList.remove("hidden");
+
+    loadPasswords();
+});
+
+
+// =====================
+// パス作成
+// =====================
+window.createPassword = async ()=>{
+
+    const password =
+        document.getElementById("password").value;
+
+    const maxUses =
+        Number(document.getElementById("maxUses").value);
+
+    const expire =
+        new Date(document.getElementById("expire").value);
+
+    await addDoc(collection(db,"passwords"),{
+        password,
+        enabled:true,
+        maxUses,
+        usedCount:0,
+        expireAt:Timestamp.fromDate(expire),
+        createdAt:Timestamp.now()
+    });
+
+    loadPasswords();
+};
+
+
+// =====================
+// 一覧表示
+// =====================
+async function loadPasswords(){
+
+    listDiv.innerHTML="";
+
+    const snap = await getDocs(collection(db,"passwords"));
+
+    snap.forEach(d=>{
+
+        const data = d.data();
+
+        const div=document.createElement("div");
+
+        div.innerHTML=`
+        ${data.password}
+        | ${data.enabled?"有効":"無効"}
+        | 使用 ${data.usedCount}/${data.maxUses}
+        <button onclick="toggle('${d.id}',${data.enabled})">
+        ${data.enabled?"停止":"有効化"}
+        </button>
+        `;
+
+        listDiv.appendChild(div);
+    });
+}
+
+
+// =====================
+// 有効切替
+// =====================
+window.toggle = async(id,current)=>{
+
+    await updateDoc(doc(db,"passwords",id),{
+        enabled:!current
+    });
+
+    loadPasswords();
+};
+
+</script>
+
+</body>
+</html>
