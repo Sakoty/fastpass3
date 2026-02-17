@@ -643,6 +643,12 @@ document.getElementById('clearLogsBtn').onclick = async()=>{
   await batch.commit();
 };
 
-<script defer src="control.js"></script>
+  window.addEventListener("DOMContentLoaded", () => {
+
+  document.getElementById("loginBtn").onclick = login;
+
+});
+
+</script>
 </body>
 </html>
