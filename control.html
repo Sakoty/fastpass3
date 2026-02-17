@@ -220,9 +220,18 @@
 </div>
 
 <script type="module">
-import { initializeApp }
-from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+/* ===== Firebase App (これが必須) ===== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 
+/* ===== Firebase Auth ===== */
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+/* ===== Firestore（← 今まで無かった） ===== */
 import {
   getFirestore,
   doc,
@@ -231,21 +240,15 @@ import {
   updateDoc,
   deleteDoc,
   collection,
-  addDoc,
   getDocs,
-  writeBatch,
+  addDoc,
+  onSnapshot,
   query,
   orderBy,
-  onSnapshot,
+  writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
