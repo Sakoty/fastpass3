@@ -315,7 +315,9 @@ document.getElementById('loginSubmit').onclick = async () => {
     return;
   }
 
-  loginSuccess(user.email);
+  const adminData = adminSnap.data();
+loginSuccess(adminData.name);
+
 });
 
 
@@ -324,9 +326,22 @@ let unsubIssueStatus = null;
 let unsubLogs = null;
 let shiftPressed = false;
 
-function loginSuccess(adminId){
- const adminData = adminSnap.data();
-loginSuccess(adminData.name);
+function loginSuccess(adminName){
+
+  loginDiv.style.display = 'none';
+  mainContent.style.display = 'block';
+
+  // 管理者名を保存（ログ用）
+  localStorage.setItem('adminId', adminName);
+
+  logAccess(adminName, 'ログイン成功', 'login');
+
+  startIssueStatusListener();
+  loadTimeSlots();
+  startPassesListener();
+  updatePassStatuses();
+  setInterval(updatePassStatuses,60000);
+}
 
   loginDiv.style.display = 'none';
   mainContent.style.display = 'block';
@@ -552,9 +567,6 @@ async function updatePassStatuses() {
       logAccess(localStorage.getItem('adminId')||'システム', `ステータス更新: ${d.id} → ${newStatus}`, 'scan');
     }
   });
-  if(newStatus !== d.status){
-  batch.update(ref, {status: newStatus});
-}
 
   await batch.commit();
 }
@@ -592,7 +604,6 @@ async function logAccess(adminId, msg, type){
     adminId, msg, type, timestamp: serverTimestamp()
   });
 }
-<option value="admin">管理操作</option>
 
 // ログ認証
 document.getElementById('logAuthBtn').onclick = async()=>{
