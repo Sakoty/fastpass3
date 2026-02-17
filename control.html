@@ -343,15 +343,6 @@ function loginSuccess(adminName){
   setInterval(updatePassStatuses,60000);
 }
 
-  loginDiv.style.display = 'none';
-  mainContent.style.display = 'block';
-  logAccess(adminId, 'ログイン成功', 'login');
-  startIssueStatusListener();
-  loadTimeSlots();
-  startPassesListener();
-  startLogsListener();
-  updatePassStatuses();          // ページロード時に一度更新
-  setInterval(updatePassStatuses,60000); // 1分ごと自動更新}
 
 /* ================= ログアウト処理 ================= */
 async function logout(){
