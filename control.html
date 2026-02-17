@@ -598,13 +598,13 @@ async function scanPass(passId, scannerName){
 }
 
 /* ================= アクセスログ ================= */
-async function logAccess(adminId, msg, type){
+async function logAccess(adminId, action, detail){
   await addDoc(collection(db,"accessLogs"),{
-  adminId: adminIdInput.value,
-  action: action,
-  detail: detail,
-  timestamp: serverTimestamp()
-});
+    adminId: adminId,
+    action: action,
+    detail: detail,
+    timestamp: serverTimestamp()
+  });
 }
 
 // ログ認証
