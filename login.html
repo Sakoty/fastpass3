@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>コントロールログイン</title>
+</head>
+
+<body>
+
+<h2>Control Login</h2>
+
+<input id="loginId" placeholder="ID"><br>
+<input id="password" type="password" placeholder="パスワード"><br>
+
+<button onclick="login()">ログイン</button>
+
+<p id="msg"></p>
+
+<script type="module">
+
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+ getFirestore,
+ collection,
+ query,
+ where,
+ getDocs
+} from
+"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey:"XXXX",
+  authDomain:"XXXX",
+  projectId:"XXXX"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+function expiredCheck(date){
+ if(!date) return false;
+ return date.toDate() < new Date();
+}
+
+window.login = async function(){
+
+ msg.textContent="確認中...";
+
+ const id = loginId.value.trim();
+ const pw = password.value;
+
+ const q = query(
+   collection(db,"users"),
+   where("loginId","==",id)
+ );
+
+ const snap = await getDocs(q);
+
+ if(snap.empty){
+   msg.textContent="IDが存在しません";
+   return;
+ }
+
+ const user = snap.docs[0].data();
+
+ // パスワード確認
+ if(user.password !== pw){
+   msg.textContent="パスワードが違います";
+   return;
+ }
+
+ // 期限確認
+ if(expiredCheck(user.idExpire)){
+   msg.textContent="ID期限切れ";
+   return;
+ }
+
+ if(expiredCheck(user.passwordExpire)){
+   msg.textContent="パスワード期限切れ";
+   return;
+ }
+
+ // ✅ ログイン成功
+ sessionStorage.setItem("controlLogin", id);
+
+ location.href="control.html";
+};
+
+</script>
+
+</body>
+</html>
