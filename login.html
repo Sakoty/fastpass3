@@ -12,14 +12,14 @@
 <input id="loginId" placeholder="ID"><br>
 <input id="password" type="password" placeholder="パスワード"><br>
 
-<button onclick="login()">ログイン</button>
+<button id="loginBtn">ログイン</button>
 
 <p id="msg"></p>
 
 <script type="module">
 
-import { initializeApp } from
-"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 
 import {
  getFirestore,
@@ -27,65 +27,108 @@ import {
  query,
  where,
  getDocs
-} from
-"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+}
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+
+// ======================
+// Firebase設定
+// ======================
 const firebaseConfig = {
-  apiKey:"XXXX",
-  authDomain:"XXXX",
-  projectId:"XXXX"
+  apiKey:"AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain:"fastpass-system.firebaseapp.com",
+  projectId:"fastpass-system"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-function expiredCheck(date){
- if(!date) return false;
- return date.toDate() < new Date();
+
+// ======================
+// 要素取得（安全版）
+// ======================
+const idInput = document.getElementById("loginId");
+const pwInput = document.getElementById("password");
+const msg = document.getElementById("msg");
+const loginBtn = document.getElementById("loginBtn");
+
+
+// ======================
+// 期限チェック（Firestore対応版）
+// ======================
+function expiredCheck(timestamp){
+
+ if(!timestamp) return false;
+
+ // Timestamp型のみ処理
+ if(typeof timestamp.toDate === "function"){
+   return timestamp.toDate() < new Date();
+ }
+
+ return false;
 }
 
-window.login = async function(){
 
- msg.textContent="確認中...";
+// ======================
+// ログイン処理
+// ======================
+loginBtn.onclick = async () => {
 
- const id = loginId.value.trim();
- const pw = password.value;
+ msg.textContent = "確認中...";
 
- const q = query(
-   collection(db,"users"),
-   where("loginId","==",id)
- );
+ const id = idInput.value.trim();
+ const pw = pwInput.value;
 
- const snap = await getDocs(q);
-
- if(snap.empty){
-   msg.textContent="IDが存在しません";
+ if(!id || !pw){
+   msg.textContent = "IDとパスワードを入力してください";
    return;
  }
 
- const user = snap.docs[0].data();
+ try{
 
- // パスワード確認
- if(user.password !== pw){
-   msg.textContent="パスワードが違います";
-   return;
+   const q = query(
+     collection(db,"users"),
+     where("loginId","==",id)
+   );
+
+   const snap = await getDocs(q);
+
+   if(snap.empty){
+     msg.textContent="IDが存在しません";
+     return;
+   }
+
+   const userDoc = snap.docs[0];
+   const user = userDoc.data();
+
+   // ===== パスワード確認 =====
+   if(user.password !== pw){
+     msg.textContent="パスワードが違います";
+     return;
+   }
+
+   // ===== 有効期限確認 =====
+   if(expiredCheck(user.idExpire)){
+     msg.textContent="ID期限切れ";
+     return;
+   }
+
+   if(expiredCheck(user.passwordExpire)){
+     msg.textContent="パスワード期限切れ";
+     return;
+   }
+
+   // ===== ログイン成功 =====
+   sessionStorage.setItem("controlLogin", id);
+   sessionStorage.setItem("controlDocId", userDoc.id);
+
+   location.href="control.html";
+
+ }catch(e){
+   console.error(e);
+   msg.textContent="通信エラー";
  }
 
- // 期限確認
- if(expiredCheck(user.idExpire)){
-   msg.textContent="ID期限切れ";
-   return;
- }
-
- if(expiredCheck(user.passwordExpire)){
-   msg.textContent="パスワード期限切れ";
-   return;
- }
-
- // ✅ ログイン成功
- sessionStorage.setItem("controlLogin", id);
-
- location.href="control.html";
 };
 
 </script>
