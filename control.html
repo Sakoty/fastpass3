@@ -50,17 +50,8 @@
 </head>
 <body>
 
-<!-- ログイン画面 -->
-<div id="loginDiv">
-  <h1>管理者ログイン</h1>
-  <input type="text" id="adminId" placeholder="管理者ID" />
-  <input type="password" id="adminPass" placeholder="パスワード" />
-  <button id="loginSubmit" class="primary">ログイン</button>
-  <div id="errorMsg"></div>
-</div>
-
 <!-- 管理コンテンツ -->
-<div class="container" id="mainContent" style="display:none;">
+<div class="container" id="mainContent">
   <h1>ファストパス管理</h1>
   <div id="clock"></div>
   <div style="text-align:center;">
@@ -220,16 +211,20 @@
 </div>
 
 <script type="module">
+/* ===========================
+   login.html 通過チェック
+=========================== */
+
+const loginId = sessionStorage.getItem("controlLogin");
+
+if(!loginId){
+  // ログインしていない → 強制戻し
+  location.replace("login.html");
+  throw new Error("Not authenticated");
+}
+
 /* ===== Firebase App (これが必須) ===== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-
-/* ===== Firebase Auth ===== */
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* ===== Firestore（← 今まで無かった） ===== */
 import {
@@ -261,7 +256,6 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
 
 /* ================= DOM ================= */
 const loginDiv = document.getElementById("loginDiv");
@@ -284,26 +278,6 @@ Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
   });
 });
 
-/* ================= ログイン処理 ================= */
-document.getElementById('loginSubmit').onclick = async () => {
-
-  const email = document.getElementById('adminId').value.trim();
-  const password = document.getElementById('adminPass').value.trim();
-
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-  } catch (e) {
-    errorMsg.textContent = "ログイン失敗";
-  }
-};
-
-  onAuthStateChanged(auth, async(user)=>{
-
-  if(!user){
-    loginDiv.style.display='block';
-    mainContent.style.display='none';
-    return;
-  }
 
   // 管理者チェック
   const adminRef = doc(db,"admins",user.uid);
@@ -332,7 +306,8 @@ function loginSuccess(adminName){
   mainContent.style.display = 'block';
 
   // 管理者名を保存（ログ用）
-  localStorage.setItem('adminId', adminName);
+  const adminName = sessionStorage.getItem("controlLogin");
+localStorage.setItem("adminId", adminName);
 
   logAccess(adminName, 'ログイン成功', 'login');
 
@@ -345,8 +320,9 @@ function loginSuccess(adminName){
 
 
 /* ================= ログアウト処理 ================= */
-async function logout(){
-  await signOut(auth);
+function logout(){
+  sessionStorage.removeItem("controlLogin");
+  location.href = "login.html";
 }
 document.getElementById("logoutBtn").onclick = logout;
 
