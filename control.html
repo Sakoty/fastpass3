@@ -279,20 +279,21 @@ Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
 });
 
 
-  // 管理者チェック
-  const adminRef = doc(db,"admins",user.uid);
-  const adminSnap = await getDoc(adminRef);
+ /* ================= ログイン確定 ================= */
 
-  if(!adminSnap.exists()){
-    alert("管理者権限がありません");
-    await signOut(auth);
-    return;
-  }
+const adminName = sessionStorage.getItem("controlLogin");
 
-  const adminData = adminSnap.data();
-loginSuccess(adminData.name);
+localStorage.setItem("adminId", adminName);
 
-});
+// 画面初期化開始
+startIssueStatusListener();
+loadTimeSlots();
+startPassesListener();
+updatePassStatuses();
+setInterval(updatePassStatuses,60000);
+
+logAccess(adminName,'ログイン成功','login');
+
 
 
 let unsubPasses = null;
