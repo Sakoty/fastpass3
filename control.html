@@ -299,10 +299,23 @@ let unsubIssueStatus = null;
 let unsubLogs = null;
 let shiftPressed = false;
 
-function loginSuccess(adminName){
-
+function loginSuccess(){
   loginDiv.style.display = 'none';
   mainContent.style.display = 'block';
+
+  const adminName =
+    sessionStorage.getItem("controlLogin");
+
+  localStorage.setItem("adminId", adminName);
+
+  logAccess(adminName,'ログイン成功','login');
+
+  startIssueStatusListener();
+  loadTimeSlots();
+  startPassesListener();
+  updatePassStatuses();
+  setInterval(updatePassStatuses,60000);
+}
 
   // 管理者名を保存（ログ用）
   const adminName = sessionStorage.getItem("controlLogin");
@@ -588,18 +601,32 @@ document.getElementById('logAuthBtn').onclick = async()=>{
 // ログリスナー開始
 function startLogsListener(){
   if(unsubLogs) unsubLogs(); 
-  const logsQueryRef = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
+
+  const logsQueryRef =
+    query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
+
   unsubLogs = onSnapshot(logsQueryRef, snapshot => {
+
     const div = document.getElementById('accessLogs');
-    const typeFilter = document.getElementById('logFilterSelect').value;
-    const adminFilter = document.getElementById('adminFilterSelect').value;
+    const typeFilter =
+      document.getElementById('logFilterSelect').value;
+    const adminFilter =
+      document.getElementById('adminFilterSelect').value;
+
     div.innerHTML = '';
+
     snapshot.forEach(docSnap=>{
       const d = docSnap.data();
-      if(typeFilter!=='all' && d.type!==typeFilter) return;
+
+      // ★ フィールド名修正
+      if(typeFilter!=='all' && d.detail!==typeFilter) return;
       if(adminFilter!=='all' && d.adminId!==adminFilter) return;
-      const time = d.timestamp?.toDate?.().toLocaleString()||'-';
-      div.innerHTML += `<div>[${time}] [${d.type}] ${d.adminId}: ${d.msg}</div>`;
+
+      const time =
+        d.timestamp?.toDate?.().toLocaleString() || '-';
+
+      div.innerHTML +=
+        `<div>[${time}] [${d.detail}] ${d.adminId}: ${d.action}</div>`;
     });
   });
 }
