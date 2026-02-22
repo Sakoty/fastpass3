@@ -317,20 +317,6 @@ function loginSuccess(){
   setInterval(updatePassStatuses,60000);
 }
 
-  // 管理者名を保存（ログ用）
-  const adminName = sessionStorage.getItem("controlLogin");
-localStorage.setItem("adminId", adminName);
-
-  logAccess(adminName, 'ログイン成功', 'login');
-
-  startIssueStatusListener();
-  loadTimeSlots();
-  startPassesListener();
-  updatePassStatuses();
-  setInterval(updatePassStatuses,60000);
-}
-
-
 /* ================= ログアウト処理 ================= */
 function logout(){
   sessionStorage.removeItem("controlLogin");
