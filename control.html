@@ -46,6 +46,9 @@
   .w-auto { width:auto; }
   .muted { color:#6b7280; font-size:0.9rem; }
   #logFilterSelect { width:auto; display:inline-block; margin-bottom:8px; }
+  .available {
+  color:#065f46;
+}
 </style>
 </head>
 <body>
@@ -396,16 +399,21 @@ document.getElementById('specialForm').onsubmit=async(e)=>{
 /* ================= パス一覧 ================= */
 function startPassesListener(){
   if(unsubPasses) unsubPasses();
-  unsubPasses = onSnapshot(collection(db,'passes'), q=>{
-    const passes = [];
-    q.forEach(docSnap=>{
-      const d = docSnap.data();
-      passes.push({...d, _docId: docSnap.id});
-    });
-    renderPasses(passes);
-    document.getElementById("sortSelect").onchange = ()=>renderPasses(passes);
+  unsubPasses = onSnapshot(collection(db,'passes'), snapshot=>{
+  const passes = [];
+
+  snapshot.forEach(docSnap=>{
+    const d = docSnap.data();
+    passes.push({...d, _docId: docSnap.id});
   });
-}
+
+  renderPasses(passes);
+
+  const sortSelect = document.getElementById("sortSelect");
+  if(sortSelect){
+    sortSelect.onchange = ()=>renderPasses(passes);
+  }
+});
 
 function renderPasses(passes){
 
@@ -439,8 +447,7 @@ function renderPasses(passes){
     let statusClass = 'unused';
     if(d.status === '使用済') statusClass = 'used';
     if(d.status === '期限切れ') statusClass = 'expired';
-    if(d.status === '使用可能') statusClass = 'active';
-
+    if(d.status === '使用可能') statusClass = 'available';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${d.id}</td>
