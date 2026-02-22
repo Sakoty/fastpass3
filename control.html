@@ -408,7 +408,9 @@ function startPassesListener(){
 }
 
 function renderPasses(passes){
-  const sortType = document.getElementById("sortSelect").value;
+
+  const sortSelect = document.getElementById("sortSelect");
+  const sortType = sortSelect ? sortSelect.value : "id";
   const tbody=document.getElementById('passesTableBody');
   tbody.innerHTML='';
 
