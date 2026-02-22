@@ -45,7 +45,7 @@ const db = getFirestore(app);
 
 
 // ======================
-// 要素取得（安全版）
+// 要素取得
 // ======================
 const idInput = document.getElementById("loginId");
 const pwInput = document.getElementById("password");
@@ -54,18 +54,27 @@ const loginBtn = document.getElementById("loginBtn");
 
 
 // ======================
-// 期限チェック（Firestore対応版）
+// 有効期間チェック（NEW）
 // ======================
-function expiredCheck(timestamp){
+function checkValidity(validFrom, validUntil){
 
- if(!timestamp) return false;
+ const now = new Date();
 
- // Timestamp型のみ処理
- if(typeof timestamp.toDate === "function"){
-   return timestamp.toDate() < new Date();
+ // 開始前
+ if(validFrom && typeof validFrom.toDate === "function"){
+   if(now < validFrom.toDate()){
+     return "notyet";
+   }
  }
 
- return false;
+ // 期限切れ
+ if(validUntil && typeof validUntil.toDate === "function"){
+   if(now > validUntil.toDate()){
+     return "expired";
+   }
+ }
+
+ return "valid";
 }
 
 
@@ -107,14 +116,19 @@ loginBtn.onclick = async () => {
      return;
    }
 
-   // ===== 有効期限確認 =====
-   if(expiredCheck(user.idExpire)){
-     msg.textContent="ID期限切れ";
+   // ===== 有効期間チェック =====
+   const status = checkValidity(
+     user.validFrom,
+     user.validUntil
+   );
+
+   if(status === "notyet"){
+     msg.textContent="まだ利用開始前のIDです";
      return;
    }
 
-   if(expiredCheck(user.passwordExpire)){
-     msg.textContent="パスワード期限切れ";
+   if(status === "expired"){
+     msg.textContent="有効期限が切れています";
      return;
    }
 
@@ -122,7 +136,7 @@ loginBtn.onclick = async () => {
    sessionStorage.setItem("controlLogin", id);
    sessionStorage.setItem("controlDocId", userDoc.id);
 
-   location.href="control.html";
+   location.href = "control.html";
 
  }catch(e){
    console.error(e);
