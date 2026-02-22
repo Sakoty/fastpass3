@@ -399,23 +399,25 @@ document.getElementById('specialForm').onsubmit=async(e)=>{
 /* ================= パス一覧 ================= */
 function startPassesListener(){
   if(unsubPasses) unsubPasses();
+
   unsubPasses = onSnapshot(collection(db,'passes'), snapshot=>{
-  const passes = [];
+    const passes = [];
 
-  snapshot.forEach(docSnap=>{
-    const d = docSnap.data();
-    passes.push({...d, _docId: docSnap.id});
-  });
+    snapshot.forEach(docSnap=>{
+      const d = docSnap.data();
+      passes.push({...d, _docId: docSnap.id});
+    });
 
-  renderPasses(passes);
+    renderPasses(passes);
 
-  const sortSelect = document.getElementById("sortSelect");
-  if(sortSelect){
-    sortSelect.onchange = ()=>renderPasses(passes);
-  }
-});
+    const sortSelect = document.getElementById("sortSelect");
+    if(sortSelect){
+      sortSelect.onchange = ()=>renderPasses(passes);
+    }
+  }); // ← onSnapshot終了
+}     // ← ★これを追加（関数終了）
 
-function renderPasses(passes){
+  function renderPasses(passes){
 
   const sortSelect = document.getElementById("sortSelect");
   const sortType = sortSelect ? sortSelect.value : "id";
