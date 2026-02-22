@@ -257,20 +257,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* ================= ログイン確定 ================= */
-
-const adminName = sessionStorage.getItem("controlLogin");
-
-localStorage.setItem("adminId", adminName);
-
-// 画面初期化開始
-startIssueStatusListener();
-loadTimeSlots();
-startPassesListener();
-updatePassStatuses();
-setInterval(updatePassStatuses,60000);
-
-logAccess(adminName,'ログイン成功','login');
 
 /* ================= DOM ================= */
 const loginDiv = document.getElementById("loginDiv");
