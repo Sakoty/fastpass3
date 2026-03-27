@@ -6,175 +6,584 @@
 <title>プライオリティパス管理</title>
 <meta name="theme-color" content="#007bff">
 <style>
-:root {
-  --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333;
-}
-*{box-sizing:border-box}
-body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
-.container { max-width:980px; margin:auto; padding:14px; }
-h1 { text-align:center; }
-#clock { text-align:center; margin-bottom:10px; }
-.status-badge { padding:6px 14px; border-radius:16px; font-weight:700; }
-.active { background:var(--success); color:white; }
-.inactive { background:var(--danger); color:white; }
-.card { background:white; border-radius:12px; padding:16px; margin-top:12px; }
-button { padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; width:100%; }
-button.primary { background:var(--primary); color:white; }
-button.success { background:var(--success); color:white; }
-button.danger { background:var(--danger); color:white; }
-.row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-.tabs { display:flex; gap:6px; margin:10px 0; }
-.tab { flex:1; padding:12px; text-align:center; cursor:pointer; background:#e7e9ee; border-radius:10px; font-weight:700; }
-.tab.active-tab { background:var(--primary); color:#fff; }
-.tab-content { display:none; }
-.tab-content.active { display:block; }
-table { width:100%; border-collapse: collapse; }
-th, td { border:1px solid #e5e7eb; padding:10px; text-align:center; }
-.badge { padding:2px 8px; border-radius:999px; font-size:0.8rem; font-weight:700; }
-.used { color:#0a7b26; }
-.unused { color:#b91c1c; }
-.expired { color:#b45309; }
+  :root {
+    --primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333;
+  }
+  *{box-sizing:border-box}
+  body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
+  .container { max-width:980px; margin:auto; padding:14px; }
+  h1 { text-align:center; margin:10px 0 4px; }
+  #clock { text-align:center; font-weight:600; color:#555; margin-bottom:10px; }
+  .status-badge { display:inline-block; padding:6px 14px; border-radius:16px; font-weight:700; font-size:0.95rem; margin-top:6px; }
+  .active { background-color:var(--success); color:white; }
+  .inactive { background-color:var(--danger); color:white; }
+  .card { background:white; border-radius:12px; padding:16px; margin-top:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  label { font-weight:600; display:block; margin-top:10px; font-size:0.9rem; }
+  input, select { width:100%; padding:10px; margin-top:6px; border-radius:8px; border:1px solid #ccc; font-size:1rem; }
+  button { padding:12px; margin:6px 0; border:none; border-radius:10px; font-weight:700; cursor:pointer; width:100%; font-size:1rem; }
+  button.primary { background:var(--primary); color:white; }
+  button.success { background:var(--success); color:white; }
+  button.danger { background:var(--danger); color:white; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media(max-width:640px){ .row { grid-template-columns:1fr; } }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+  .tab { flex:1; padding:12px; text-align:center; cursor:pointer; background:#e7e9ee; border-radius:10px; font-weight:700; }
+  .tab.active-tab { background:var(--primary); color:#fff; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  table { width:100%; border-collapse: collapse; margin-top:10px; background:white; border-radius:10px; overflow:hidden; }
+  th, td { border:1px solid #e5e7eb; padding:10px; text-align:center; color:#111; font-size:0.95rem; }
+  th { background:#f0f3ff; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.8rem; font-weight:700; }
+  .used { color:#0a7b26; }
+  .unused { color:#b91c1c; }
+  .expired { color:#b45309; }
 </style>
 </head>
 <body>
 
-<div class="container">
-<h1>ファストパス管理</h1>
-<div id="clock"></div>
-<div style="text-align:center;">
-  <span id="statusBadge" class="status-badge inactive">停止中</span>
-</div>
+<!-- 管理コンテンツ（ログインなしで表示） -->
+<div class="container" id="mainContent">
+  <h1>ファストパス管理</h1>
+  <div id="clock"></div>
+  <div style="text-align:center;">
+    <span id="statusBadge" class="status-badge inactive">停止中</span>
+  </div>
 
-<div class="tabs">
-  <div class="tab active-tab" data-tab="controlTab">発券制御</div>
-  <div class="tab" data-tab="timeTab">時間帯設定</div>
-  <div class="tab" data-tab="specialTab">特別パス発券</div>
-  <div class="tab" data-tab="passesTab">パス一覧</div>
-</div>
+  <div class="tabs">
+    <div class="tab active-tab" data-tab="controlTab">発券制御</div>
+    <div class="tab" data-tab="timeTab">時間帯設定</div>
+    <div class="tab" data-tab="specialTab">特別パス発券</div>
+    <div class="tab" data-tab="passesTab">パス一覧</div>
+  </div>
 
-<!-- 発券制御 -->
-<div class="tab-content active" id="controlTab">
+  <!-- 発券制御 -->
+  <div class="tab-content active" id="controlTab">
+    <div class="card">
+      <div class="row">
+        <button id="startBtn" class="success">発券開始</button>
+        <button id="stopBtn" class="danger">発券停止</button>
+      </div>
+      <div class="row" style="align-items:end;">
+        <div>
+          <button id="logoutBtn" class="danger">ログアウト</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 時間帯設定 -->
+  <div class="tab-content" id="timeTab">
+    <div class="card">
+      <form id="setTimeSlots">
+        <p style="margin:0 0 6px;">開始・終了、間隔(分)・上限人数を各枠で設定</p>
+        <div class="row">
+          <div>
+            <label>1枠目</label>
+            <div class="row"><input type="time" id="start1"><input type="time" id="end1"></div>
+            <div class="row"><input type="number" id="interval1" value="10" min="1" placeholder="間隔(分)"><input type="number" id="limit1" value="1" min="1" placeholder="上限人数"></div>
+          </div>
+          <div>
+            <label>2枠目</label>
+            <div class="row"><input type="time" id="start2"><input type="time" id="end2"></div>
+            <div class="row"><input type="number" id="interval2" value="10" min="1" placeholder="間隔(分)"><input type="number" id="limit2" value="1" min="1" placeholder="上限人数"></div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>3枠目</label>
+            <div class="row"><input type="time" id="start3"><input type="time" id="end3"></div>
+            <div class="row"><input type="number" id="interval3" value="10" min="1" placeholder="間隔(分)"><input type="number" id="limit3" value="1" min="1" placeholder="上限人数"></div>
+          </div>
+          <div>
+            <label>既存設定の読み込み</label>
+            <button type="button" id="reloadTimeBtn" class="w-auto primary">読み込み</button>
+          </div>
+        </div>
+        <button type="submit" class="primary">時間設定を保存</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 特別パス発券 -->
+  <div class="tab-content" id="specialTab">
+    <div class="card">
+      <form id="specialForm">
+        <div class="row">
+          <input type="text" id="specialName" placeholder="名前" required>
+          <input type="number" id="specialPeople" placeholder="人数" min="1" required>
+        </div>
+        <div class="row">
+          <input type="time" id="specialStartTime" required>
+          <input type="time" id="specialEndTime" required>
+        </div>
+        <button type="submit" class="success">特別パス発行</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- パス一覧 -->
+<div class="tab-content" id="passesTab">
   <div class="card">
-    <div class="row">
-      <button id="startBtn" class="success">発券開始</button>
-      <button id="stopBtn" class="danger">発券停止</button>
+    <div style="text-align:right; margin-bottom:6px;">
+      <button id="deleteAllPassesBtn" class="danger w-auto">全削除</button>
+    </div>
+    <div style="margin:10px 0;">
+      <label>並び替え:
+        <select id="sortSelect">
+          <option value="id">パスID順</option>
+          <option value="time">案内時間順</option>
+        </select>
+      </label>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>発券ID</th>
+            <th>名前</th>
+            <th>人数</th>
+            <th>案内時間</th>
+            <th>種別</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="passesTableBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<!-- 時間帯設定 -->
-<div class="tab-content" id="timeTab">
-  <div class="card">
-    <form id="setTimeSlots">
-      <div class="row">
-        <div>
-          <input type="time" id="start1">
-          <input type="time" id="end1">
-        </div>
-        <div>
-          <input type="number" id="interval1" value="10">
-          <input type="number" id="limit1" value="1">
-        </div>
-      </div>
-      <button type="submit" class="primary">保存</button>
-    </form>
+  <!-- アクセスログ -->
+<div class="tab-content" id="logTab">
+  <div class="card" id="logAuthCard">
+    <div class="row">
+      <input type="password" id="logPass" placeholder="ログ閲覧パスワード">
+      <button id="logAuthBtn" class="primary w-auto">認証</button>
+    </div>
+    <div id="logAuthMsg"></div>
   </div>
+  <div class="card" id="logContent" style="display:none;">
+    <div style="margin-bottom:6px;">
+  <label>ログ種別フィルタ:
+    <select id="logFilterSelect">
+      <option value="all">全て</option>
+      <option value="login">ログイン</option>
+      <option value="control">発券制御</option>
+      <option value="time">時間帯設定</option>
+      <option value="special">特別パス</option>
+      <option value="scan">スキャンログ</option>
+    </select>
+  </label>
+
+  <label>管理者フィルタ:
+    <select id="adminFilterSelect">
+      <option value="all">全員</option>
+      <option value="Sakoty">Sakoty</option>
+      <option value="seseguchi914">seseguchi914</option>
+      <option value="Soichiro">Soichiro</option>
+      <option value="Sakura">Sakura</option>
+      <option value="Sae">Sae</option>
+      <option value="Kyosuke">Kyosuke</option>
+      <option value="Yoichiro">Yoichiro</option>
+      <option value="Tatsuki">Tatsuki</option>
+      <option value="Haruki">Haruki</option>
+      <option value="Syosei">Syosei</option>
+    </select>
+  </label>
+
+  <button id="reloadLogsBtn" class="primary w-auto">ログ読み込み</button>
 </div>
 
-<!-- 特別パス -->
-<div class="tab-content" id="specialTab">
-  <div class="card">
-    <form id="specialForm">
-      <input type="text" id="specialName" placeholder="名前">
-      <input type="number" id="specialPeople" placeholder="人数">
-      <input type="time" id="specialStartTime">
-      <input type="time" id="specialEndTime">
-      <button type="submit" class="success">発行</button>
-    </form>
-  </div>
-</div>
-
-<!-- パス一覧 -->
-<div class="tab-content" id="passesTab">
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th><th>名前</th><th>人数</th><th>時間</th><th>状態</th>
-        </tr>
-      </thead>
-      <tbody id="passesTableBody"></tbody>
-    </table>
+    <button id="clearLogsBtn" class="danger">ログ全削除</button>
+    <div id="accessLogs" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;max-height:360px;overflow:auto;background:#fff;color:#111;margin-top:10px;"></div>
   </div>
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, deleteDoc, onSnapshot, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, orderBy, deleteDoc, onSnapshot, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+/* ================= Firebase ================= */
 const firebaseConfig = {
-  apiKey: "AIza...",
+  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
   authDomain: "fastpass-system.firebaseapp.com",
-  projectId: "fastpass-system"
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.appspot.com",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* 時計 */
+/* =============== ローカル管理者（簡易） =============== */
+const allowedAdmins = [
+  {id:"Sakoty", password:"3214"},
+  {id:"seseguchi914", password:"0914"},
+  {id:"Soichiro", password:"35th"},
+  {id:"Sakura", password:"35th"},
+  {id:"Sae", password:"35th"},
+  {id:"Kyosuke", password:"35th"},
+  {id:"Yoichiro", password:"35th"},
+  {id:"Tatsuki", password:"35th"},
+  {id:"Haruki", password:"35th"},
+  {id:"Syosei", password:"35th"}
+];
+
+/* ================= DOM ================= */
+const loginDiv = document.getElementById("loginDiv");
+const mainContent = document.getElementById("mainContent");
+const errorMsg = document.getElementById("errorMsg");
+
+/* ================= 時計 ================= */
 setInterval(()=>{
-  document.getElementById("clock").textContent = new Date().toLocaleString();
+  const d=new Date(); 
+  document.getElementById("clock").textContent = d.toLocaleString();
 },1000);
 
-/* タブ */
-document.querySelectorAll('.tab').forEach(tab=>{
-  tab.onclick=()=>{
+/* ================= タブ切替 ================= */
+Array.from(document.querySelectorAll('.tab')).forEach(tab=>{
+  tab.addEventListener('click', ()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
     document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
     tab.classList.add('active-tab');
     document.getElementById(tab.dataset.tab).classList.add('active');
-  }
+  });
 });
 
-/* 発券制御 */
-async function setIssueStatus(status){
-  await setDoc(doc(db,'settings','issueStatus'), { enabled: status });
+/* ================= ログイン処理 ================= */
+document.getElementById('loginSubmit').onclick = () => {
+  const id = document.getElementById('adminId').value.trim();
+  const pass = document.getElementById('adminPass').value.trim();
+  if(allowedAdmins.some(a=>a.id===id && a.password===pass)){
+    loginSuccess(id);
+  } else {
+    errorMsg.textContent = 'IDまたはパスワードが違います';
+  }
+};
+
+let unsubPasses = null;
+let unsubIssueStatus = null;
+let unsubLogs = null;
+let shiftPressed = false;
+
+function loginSuccess(adminId){
+  localStorage.setItem('adminId', adminId);
+  loginDiv.style.display = 'none';
+  mainContent.style.display = 'block';
+  logAccess(adminId, 'ログイン成功', 'login');
+  startIssueStatusListener();
+  loadTimeSlots();
+  startPassesListener();
+  startLogsListener();
+  updatePassStatuses();          // ページロード時に一度更新
+  setInterval(updatePassStatuses,60000); // 1分ごと自動更新
 }
 
-document.getElementById('startBtn').onclick=()=>setIssueStatus(true);
-document.getElementById('stopBtn').onclick=()=>setIssueStatus(false);
+/* ================= ログアウト処理 ================= */
+function logout(){
+  const id = localStorage.getItem('adminId')||'不明';
+  logAccess(id, 'ログアウト', 'admin');
+  localStorage.removeItem('adminId');
+  if (unsubPasses) { unsubPasses(); unsubPasses = null; }
+  if (unsubIssueStatus) { unsubIssueStatus(); unsubIssueStatus = null; }
+  if (unsubLogs) { unsubLogs(); unsubLogs=null; }
+  document.getElementById('passesTableBody').innerHTML = '';
+  mainContent.style.display='none';
+  loginDiv.style.display='block';
+}
+document.getElementById('logoutBtn').onclick = logout;
+window.addEventListener("beforeunload", logout);
 
-/* パス一覧 */
-onSnapshot(collection(db,'passes'), snap=>{
-  const tbody=document.getElementById('passesTableBody');
-  tbody.innerHTML='';
-  snap.forEach(docSnap=>{
-    const d=docSnap.data();
-    const tr=document.createElement('tr');
-    tr.innerHTML=`
-      <td>${d.id}</td>
-      <td>${d.name}</td>
-      <td>${d.people}</td>
-      <td>${d.startTime}〜${d.endTime}</td>
-      <td>${d.status}</td>
-    `;
-    tbody.appendChild(tr);
+/* ================= 発券ステータス ================= */
+async function setIssueStatus(status){
+  await setDoc(doc(db,'settings','issueStatus'), { enabled: status, updatedAt: serverTimestamp() });
+  logAccess(localStorage.getItem('adminId'), status?'発券開始':'発券停止','control');
+}
+
+function startIssueStatusListener(){
+  if (unsubIssueStatus) unsubIssueStatus();
+  unsubIssueStatus = onSnapshot(doc(db,'settings','issueStatus'), (snap)=>{
+    const badge = document.getElementById('statusBadge');
+    if(snap.exists() && snap.data().enabled){
+      badge.textContent='発券中'; badge.classList.remove('inactive'); badge.classList.add('active');
+    } else {
+      badge.textContent='停止中'; badge.classList.remove('active'); badge.classList.add('inactive');
+    }
   });
-});
+}
 
-/* 特別パス */
+document.getElementById('startBtn').onclick = async()=>{ await setIssueStatus(true); };
+document.getElementById('stopBtn').onclick = async()=>{ await setIssueStatus(false); };
+
+/* ================= 時間帯設定 ================= */
+function pad2(n){ return n.toString().padStart(2,'0'); }
+function timeToMinutes(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+function minutesToTime(m){ return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`; }
+
+document.getElementById('setTimeSlots').onsubmit=async(e)=>{
+  e.preventDefault();
+  const slots=[];
+  for(let i=1;i<=3;i++){
+    const start=document.getElementById('start'+i).value;
+    const end=document.getElementById('end'+i).value;
+    const interval=parseInt(document.getElementById('interval'+i).value)||10;
+    const limit=parseInt(document.getElementById('limit'+i).value)||1;
+    if(start && end){
+      slots.push({start,end,interval,limit});
+    }
+  }
+  await setDoc(doc(db,'settings','timeSlots'),{ slots, updatedAt:serverTimestamp() });
+  alert('時間帯設定を保存しました');
+  logAccess(localStorage.getItem('adminId'),'時間帯設定更新','time');
+};
+
+document.getElementById('reloadTimeBtn').onclick = loadTimeSlots;
+
+async function loadTimeSlots(){
+  const snap = await getDoc(doc(db,'settings','timeSlots'));
+  if(!snap.exists()) return;
+  const data = snap.data();
+  if(!data.slots) return;
+  data.slots.forEach((s,i)=>{
+    const idx=i+1;
+    document.getElementById('start'+idx).value=s.start||'';
+    document.getElementById('end'+idx).value=s.end||'';
+    document.getElementById('interval'+idx).value=s.interval||10;
+    document.getElementById('limit'+idx).value=s.limit||1;
+  });
+}
+
+/* ================= 特別パス発券 ================= */
 document.getElementById('specialForm').onsubmit=async(e)=>{
   e.preventDefault();
-  const id="FP"+Math.floor(Math.random()*1000);
-  await setDoc(doc(db,'passes',id),{
-    id,
-    name:specialName.value,
-    people:specialPeople.value,
-    startTime:specialStartTime.value,
-    endTime:specialEndTime.value,
-    status:"未使用"
+  const name=document.getElementById('specialName').value.trim();
+  const people=parseInt(document.getElementById('specialPeople').value)||1;
+  const start=document.getElementById('specialStartTime').value;
+  const end=document.getElementById('specialEndTime').value;
+  if(!name || !start || !end) return alert('全て入力してください');
+  const idNum = String(Math.floor(Math.random()*900+100));
+  const passId = 'FP' + idNum;
+  await setDoc(doc(db,'passes',passId),{
+    id: passId,
+    name,
+    people,
+    startTime: start,
+    endTime: end,
+    type: '特別',
+    status: '未使用',
+    createdAt: serverTimestamp()
   });
-  alert("発行完了");
+  alert(`特別パス発券完了: ${passId}`);
+  logAccess(localStorage.getItem('adminId'), `特別パス発券: ${passId}`, 'special');
+};
+
+/* ================= パス一覧 ================= */
+function startPassesListener(){
+  if(unsubPasses) unsubPasses();
+  unsubPasses = onSnapshot(collection(db,'passes'), q=>{
+    const passes = [];
+    q.forEach(docSnap=>{
+      const d = docSnap.data();
+      passes.push({...d, _docId: docSnap.id});
+    });
+    renderPasses(passes);
+    document.getElementById("sortSelect").onchange = ()=>renderPasses(passes);
+  });
+}
+
+function renderPasses(passes){
+  const sortType = document.getElementById("sortSelect").value;
+  const tbody=document.getElementById('passesTableBody');
+  tbody.innerHTML='';
+
+  if(sortType === "id"){
+    passes.sort((a,b)=>{
+      const na = parseInt((a.id||"FP000").replace("FP",""),10);
+      const nb = parseInt((b.id||"FP000").replace("FP",""),10);
+      return na-nb;
+    });
+  } else if(sortType === "time"){
+    passes.sort((a,b)=>{
+      const ta = getStartTime(a);
+      const tb = getStartTime(b);
+      return ta-tb;
+    });
+  }
+
+  passes.forEach(d=>{
+    let guideTime = '-';
+    if(d.startTime && d.endTime){
+      guideTime = `${d.startTime}〜${d.endTime}`;
+    } else if(d.time){
+      guideTime = d.time;
+    }
+
+    let statusClass = 'unused';
+    if(d.status === '使用済') statusClass = 'used';
+    if(d.status === '期限切れ') statusClass = 'expired';
+    if(d.status === '使用可能') statusClass = 'active';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d.id}</td>
+      <td>${d.name||''}</td>
+      <td>${d.people||1}</td>
+      <td>${guideTime}</td>
+      <td>${d.type||'通常'}</td>
+      <td><span class="badge ${statusClass}">${d.status||'未使用'}</span></td>
+      <td><button class="danger w-auto">削除</button></td>
+    `;
+    const btn = tr.querySelector('button');
+    btn.onclick = async ()=>{
+      if(!shiftPressed){
+        alert('削除権限がありません');
+        return;
+      }
+      if(confirm(`本当にパス ${d.id} を削除しますか？`)){
+        await deleteDoc(doc(db,'passes',d._docId));
+        logAccess(localStorage.getItem('adminId'), `パス削除: ${d.id}`, 'admin');
+      }
+    };
+    tbody.appendChild(tr);
+  });
+}
+
+function getStartTime(d){
+  let t = "23:59";
+  if(d.startTime) t = d.startTime;
+  else if(d.time) t = d.time.split("〜")[0];
+  const [h,m] = t.split(":").map(Number);
+  const date = new Date(); date.setHours(h||0,m||0,0,0);
+  return date.getTime();
+}
+
+document.addEventListener('keydown', e=>{ if(e.key==='Shift') shiftPressed = true; });
+document.addEventListener('keyup', e=>{ if(e.key==='Shift') shiftPressed = false; });
+
+document.getElementById('deleteAllPassesBtn').onclick = async ()=>{
+  if(!shiftPressed){
+    alert('削除権限がありません');
+    return;
+  }
+  if(!confirm('本当に全てのパスを削除しますか？')) return;
+
+  const snap = await getDocs(collection(db,'passes'));
+  const batch = writeBatch(db);
+  snap.forEach(docSnap => batch.delete(docSnap.ref));
+  await batch.commit();
+  alert('全てのパスを削除しました');
+  logAccess(localStorage.getItem('adminId'), '全パス削除', 'admin');
+};
+
+/* ================= パス自動ステータス更新 ================= */
+async function updatePassStatuses() {
+  const snap = await getDocs(collection(db,'passes'));
+  const now = new Date();
+  const batch = writeBatch(db);
+  
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    if(!d.startTime || !d.endTime) return;
+    
+    const [sh, sm] = d.startTime.split(':').map(Number);
+    const [eh, em] = d.endTime.split(':').map(Number);
+    const startDate = new Date(); startDate.setHours(sh, sm, 0, 0);
+    const endDate = new Date(); endDate.setHours(eh, em, 0, 0);
+    
+    let newStatus = d.status;
+    if(now < startDate) newStatus = '未使用';
+    else if(now >= startDate && now <= endDate) newStatus = '使用可能';
+    else if(now > endDate) newStatus = '期限切れ';
+    
+    if(newStatus !== d.status){
+      const ref = doc(db,'passes',docSnap.id);
+      batch.update(ref, {status: newStatus});
+      logAccess(localStorage.getItem('adminId')||'システム', `ステータス更新: ${d.id} → ${newStatus}`, 'scan');
+    }
+  });
+  
+  await batch.commit();
+}
+
+/* ================= スキャン時確認 ================= */
+async function scanPass(passId, scannerName){
+  const snap = await getDoc(doc(db,'passes',passId));
+  if(!snap.exists()) return alert('パスが存在しません');
+  
+  const d = snap.data();
+  const now = new Date();
+  const [sh, sm] = d.startTime.split(':').map(Number);
+  const [eh, em] = d.endTime.split(':').map(Number);
+  const startDate = new Date(); startDate.setHours(sh, sm, 0, 0);
+  const endDate = new Date(); endDate.setHours(eh, em, 0, 0);
+  
+  if(now < startDate){
+    if(!confirm(`パス ${d.id} はまだ案内時間前です。\nスキャンしますか？`)) return;
+  } else if(now > endDate){
+    if(!confirm(`パス ${d.id} は有効期限を過ぎています。\nスキャンしますか？`)) return;
+  }
+  
+  if(d.status !== '使用済'){
+    await updateDoc(doc(db,'passes',passId), {status:'使用済'});
+    logAccess(scannerName, `パススキャン: ${d.id}`, 'scan');
+    alert(`パス ${d.id} を使用済みにしました`);
+  } else {
+    alert(`パス ${d.id} は既に使用済みです`);
+  }
+}
+
+/* ================= アクセスログ ================= */
+async function logAccess(adminId, msg, type){
+  await addDoc(collection(db,'accessLogs'),{
+    adminId, msg, type, timestamp: serverTimestamp()
+  });
+}
+
+// ログ認証
+document.getElementById('logAuthBtn').onclick = async()=>{
+  const pass=document.getElementById('logPass').value;
+  if(pass==='3214'){
+    document.getElementById('logContent').style.display='block';
+    document.getElementById('logAuthMsg').textContent='';
+    startLogsListener();
+  } else {
+    document.getElementById('logAuthMsg').textContent='パスワードが違います';
+  }
+};
+
+// ログリスナー開始
+function startLogsListener(){
+  if(unsubLogs) unsubLogs(); 
+  const logsQueryRef = query(collection(db,'accessLogs'), orderBy('timestamp','desc'));
+  unsubLogs = onSnapshot(logsQueryRef, snapshot => {
+    const div = document.getElementById('accessLogs');
+    const typeFilter = document.getElementById('logFilterSelect').value;
+    const adminFilter = document.getElementById('adminFilterSelect').value;
+    div.innerHTML = '';
+    snapshot.forEach(docSnap=>{
+      const d = docSnap.data();
+      if(typeFilter!=='all' && d.type!==typeFilter) return;
+      if(adminFilter!=='all' && d.adminId!==adminFilter) return;
+      const time = d.timestamp?.toDate?.().toLocaleString()||'-';
+      div.innerHTML += `<div>[${time}] [${d.type}] ${d.adminId}: ${d.msg}</div>`;
+    });
+  });
+}
+
+// フィルター変更時も再描画
+document.getElementById('logFilterSelect').onchange = startLogsListener;
+document.getElementById('adminFilterSelect').onchange = startLogsListener;
+document.getElementById('reloadLogsBtn').onclick = startLogsListener;
+
+// ログ全削除
+document.getElementById('clearLogsBtn').onclick = async()=>{
+  if(!confirm('本当にログを全て削除しますか？')) return;
+  const snap = await getDocs(collection(db,'accessLogs'));
+  const batch = writeBatch(db);
+  snap.forEach(docSnap => batch.delete(docSnap.ref));
+  await batch.commit();
 };
 
 </script>
