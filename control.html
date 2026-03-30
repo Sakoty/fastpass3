@@ -60,7 +60,13 @@ input{margin:5px;padding:8px}
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getFirestore,collection,addDoc,setDoc,doc,getDocs,onSnapshot,deleteDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const firebaseConfig={/* 自分の設定 */};
+const firebaseConfig={apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
+  authDomain: "fastpass-system.firebaseapp.com",
+  projectId: "fastpass-system",
+  storageBucket: "fastpass-system.firebasestorage.app",
+  messagingSenderId: "858745521872",
+  appId: "1:858745521872:web:29289b673855097e1200d5",
+  measurementId: "G-SLPKMCNY53"};
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
 
