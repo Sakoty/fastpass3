@@ -1,91 +1,86 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>プライオリティパス管理（最終完全版）</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>プライオリティパス管理（最終統合版）</title>
 <meta name="theme-color" content="#007bff">
 <style>
-:root{--primary:#007bff;--success:#28a745;--danger:#dc3545;--bg:#f5f7fa}
-body{margin:0;font-family:sans-serif;background:var(--bg)}
-.container{max-width:1100px;margin:auto;padding:12px}
-.card{background:#fff;padding:16px;border-radius:12px;margin-top:10px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
-button{padding:10px;border:none;border-radius:8px;margin:5px 0;width:100%;cursor:pointer}
-.primary{background:var(--primary);color:#fff}
-.success{background:var(--success);color:#fff}
-.danger{background:var(--danger);color:#fff}
-.tabs{display:flex;gap:5px;margin:10px 0}
-.tab{flex:1;background:#ddd;padding:10px;text-align:center;cursor:pointer;border-radius:8px}
-.active-tab{background:var(--primary);color:#fff}
-.tab-content{display:none}
-.tab-content.active{display:block}
-table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #ccc;padding:8px;text-align:center}
-.status-ok{color:green;font-weight:bold}
-.status-ng{color:red;font-weight:bold}
+:root {--primary:#007bff; --success:#28a745; --danger:#dc3545; --bg:#f5f7fa; --text:#333;}
+*{box-sizing:border-box}
+body { font-family:"Segoe UI", sans-serif; background:var(--bg); margin:0; color:var(--text); }
+.container { max-width:980px; margin:auto; padding:14px; }
+h1 { text-align:center; }
+.card { background:white; border-radius:12px; padding:16px; margin-top:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+button { padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; width:100%; }
+.primary { background:var(--primary); color:white; }
+.success { background:var(--success); color:white; }
+.danger { background:var(--danger); color:white; }
+.tabs { display:flex; gap:6px; margin:10px 0; }
+.tab { flex:1; padding:12px; text-align:center; cursor:pointer; background:#e7e9ee; border-radius:10px; }
+.tab.active-tab { background:var(--primary); color:#fff; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+table { width:100%; border-collapse: collapse; }
+th, td { border:1px solid #ccc; padding:8px; text-align:center; }
 </style>
 </head>
 <body>
 
 <div id="loginDiv" class="card">
-<h2>ログイン</h2>
+<h2>Firestoreログイン</h2>
 <input id="loginId" placeholder="ID"><br>
 <input id="password" type="password" placeholder="PW"><br>
 <button id="loginBtn" class="primary">ログイン</button>
 <p id="msg"></p>
 </div>
 
-<div id="mainContent" class="container" style="display:none">
-<h2>管理画面（最終版）</h2>
+<div id="mainContent" class="container" style="display:none;">
+<h1>管理画面</h1>
 
 <div class="tabs">
-<div class="tab active-tab" data-tab="control">制御</div>
-<div class="tab" data-tab="time">時間設定</div>
-<div class="tab" data-tab="special">特別発券</div>
-<div class="tab" data-tab="list">一覧</div>
+<div class="tab active-tab" data-tab="controlTab">制御</div>
+<div class="tab" data-tab="timeTab">時間設定</div>
+<div class="tab" data-tab="specialTab">特別発券</div>
+<div class="tab" data-tab="listTab">一覧</div>
 </div>
 
-<div id="control" class="tab-content active">
+<div id="controlTab" class="tab-content active">
 <div class="card">
-<button id="startBtn" class="success">発券ON</button>
-<button id="stopBtn" class="danger">発券OFF</button>
+<button id="startBtn" class="success">発券開始</button>
+<button id="stopBtn" class="danger">発券停止</button>
 <button id="logoutBtn" class="danger">ログアウト</button>
 </div>
 </div>
 
-<div id="time" class="tab-content">
+<div id="timeTab" class="tab-content">
 <div class="card">
 <form id="timeForm">
-開始 <input type="time" id="start1"> 終了 <input type="time" id="end1"><br>
-間隔(分) <input type="number" id="interval1"> 上限 <input type="number" id="limit1"><br>
+<input type="time" id="start1"><input type="time" id="end1">
+<input type="number" id="interval1" placeholder="間隔">
+<input type="number" id="limit1" placeholder="上限">
 <button class="primary">保存</button>
 </form>
 </div>
 </div>
 
-<div id="special" class="tab-content">
+<div id="specialTab" class="tab-content">
 <div class="card">
 <form id="specialForm">
-名前 <input id="name"><br>
-人数 <input id="people" type="number"><br>
-開始 <input id="s" type="time"> 終了 <input id="e" type="time"><br>
-<button class="success">発券</button>
+<input id="name" placeholder="名前">
+<input id="people" type="number" placeholder="人数">
+<input id="s" type="time"><input id="e" type="time">
+<button class="success">発行</button>
 </form>
 </div>
 </div>
 
-<div id="list" class="tab-content">
+<div id="listTab" class="tab-content">
 <div class="card">
-<select id="sort">
-<option value="id">ID順</option>
-<option value="time">時間順</option>
-<option value="status">状態順</option>
-</select>
 <table>
 <thead><tr><th>ID</th><th>名前</th><th>人数</th><th>時間</th><th>状態</th><th>削除</th></tr></thead>
 <tbody id="tbody"></tbody>
 </table>
-<button id="deleteAll" class="danger">全削除（Shift必須）</button>
 </div>
 </div>
 
@@ -93,7 +88,7 @@ th,td{border:1px solid #ccc;padding:8px;text-align:center}
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,collection,query,where,getDocs,doc,setDoc,addDoc,onSnapshot,deleteDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,query,where,getDocs,doc,setDoc,addDoc,onSnapshot,deleteDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app=initializeApp({apiKey:"AIzaSy...",projectId:"fastpass-system"});
 const db=getFirestore(app);
@@ -108,13 +103,13 @@ for(const t of document.querySelectorAll('.tab')){
  }
 }
 
-// ログイン
+// 🔥 Firestoreログイン（ここが変更点）
 loginBtn.onclick=async()=>{
  const q=query(collection(db,'users'),where('loginId','==',loginId.value));
  const s=await getDocs(q);
- if(s.empty)return msg.textContent='IDなし';
+ if(s.empty) return msg.textContent='IDなし';
  const u=s.docs[0].data();
- if(u.password!==password.value)return msg.textContent='PW違う';
+ if(u.password!==password.value) return msg.textContent='PW違う';
  loginDiv.style.display='none';
  mainContent.style.display='block';
 };
@@ -124,11 +119,11 @@ startBtn.onclick=()=>setDoc(doc(db,'settings','issue'),{on:true});
 stopBtn.onclick=()=>setDoc(doc(db,'settings','issue'),{on:false});
 
 // 時間設定
-let timeSetting={};
 timeForm.onsubmit=async e=>{
  e.preventDefault();
- timeSetting={start:start1.value,end:end1.value,interval:+interval1.value,limit:+limit1.value};
- await setDoc(doc(db,'settings','time'),timeSetting);
+ await setDoc(doc(db,'settings','time'),{
+  start:start1.value,end:end1.value,interval:interval1.value,limit:limit1.value
+ });
 };
 
 // 特別発券
@@ -137,67 +132,25 @@ specialForm.onsubmit=async e=>{
  await addDoc(collection(db,'passes'),{
   id:'FP'+Date.now(),
   name:name.value,
-  people:+people.value,
+  people:people.value,
   start:s.value,end:e.value,
-  created:Date.now()
+  status:'未使用'
  });
 };
-
-// 状態判定
-function getStatus(p){
- const now=new Date();
- const t=now.getHours()*60+now.getMinutes();
- const s=+p.start.split(':')[0]*60+ +p.start.split(':')[1];
- const e=+p.end.split(':')[0]*60+ +p.end.split(':')[1];
- if(t<s) return '未使用';
- if(t>=s && t<=e) return '使用可能';
- return '期限切れ';
-}
 
 // 一覧
-let cache=[];
 onSnapshot(collection(db,'passes'),snap=>{
- cache=[];
+ tbody.innerHTML='';
  snap.forEach(d=>{
   const p=d.data();
-  p.docId=d.id;
-  p.status=getStatus(p);
-  cache.push(p);
- });
- render();
-});
-
-function render(){
- const type=sort.value;
- if(type==='id')cache.sort((a,b)=>a.id.localeCompare(b.id));
- if(type==='time')cache.sort((a,b)=>a.start.localeCompare(b.start));
- if(type==='status')cache.sort((a,b)=>a.status.localeCompare(b.status));
- tbody.innerHTML='';
- cache.forEach(p=>{
   const tr=document.createElement('tr');
-  const cls=p.status==='使用可能'?'status-ok':'status-ng';
-  tr.innerHTML=`<td>${p.id}</td><td>${p.name}</td><td>${p.people}</td><td>${p.start}-${p.end}</td><td class="${cls}">${p.status}</td><td><button>削除</button></td>`;
-  tr.querySelector('button').onclick=e=>{
-   if(!e.shiftKey)return alert('Shift押しながら削除');
-   deleteDoc(doc(db,'passes',p.docId));
-  };
+  tr.innerHTML=`<td>${p.id}</td><td>${p.name}</td><td>${p.people}</td><td>${p.start}-${p.end}</td><td>${p.status}</td><td><button>削除</button></td>`;
+  tr.querySelector('button').onclick=()=>deleteDoc(doc(db,'passes',d.id));
   tbody.appendChild(tr);
  });
-}
-
-sort.onchange=render;
-
-// 全削除
-deleteAll.onclick=async e=>{
- if(!e.shiftKey)return alert('Shift押しながら');
- const snap=await getDocs(collection(db,'passes'));
- const b=writeBatch(db);
- snap.forEach(d=>b.delete(d.ref));
- await b.commit();
-};
+});
 
 logoutBtn.onclick=()=>location.reload();
-
 </script>
 </body>
 </html>
