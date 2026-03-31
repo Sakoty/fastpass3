@@ -1,69 +1,116 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>プライオリティパス管理（ログイン＋権限完全版）</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>プライオリティパス管理</title>
 <style>
-body{font-family:sans-serif;background:#0f172a;color:white;padding:20px}
-.card{background:#1e293b;padding:15px;margin-bottom:15px;border-radius:10px}
-button{padding:8px;border:none;border-radius:6px;background:#2563eb;color:#fff}
-input,select{margin:5px;padding:8px}
-.pass{border-bottom:1px solid #444;padding:5px}
+body{font-family:sans-serif;background:#f5f7fa;margin:0}
+.container{max-width:1000px;margin:auto;padding:12px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tab{flex:1;padding:10px;text-align:center;background:#ddd;cursor:pointer;border-radius:8px}
+.active-tab{background:#007bff;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.card{background:#fff;padding:14px;border-radius:10px;margin-top:10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+input{width:100%;padding:8px}
+button{width:100%;padding:10px;margin-top:6px;border:none;border-radius:8px}
+.success{background:#28a745;color:#fff}
+.danger{background:#dc3545;color:#fff}
+.primary{background:#007bff;color:#fff}
+video{width:100%;max-width:480px;border:1px solid #ccc}
+#error{color:red}
+table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #ddd;padding:6px;text-align:center}
+th{background:#eef2ff}
 .hidden{display:none}
 </style>
 </head>
 <body>
+<div class="container">
 
-<h2>ログイン</h2>
-<div class="card">
-<input id="id" placeholder="ID">
-<input id="pw" type="password" placeholder="PW">
-<button id="loginBtn">ログイン</button>
+<!-- ログイン画面 -->
+<div id="loginView" class="card">
+  <h2>ログイン</h2>
+  <input id="loginId" placeholder="Id">
+  <input id="password" type="password" placeholder="パスワード">
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="error"></div>
 </div>
 
-<div id="app" class="hidden">
+<!-- 管理画面 -->
+<div id="mainView" class="hidden">
 
-<h2>発券制御</h2>
-<div class="card">
-<button id="startBtn">発券開始</button>
-<button id="stopBtn">発券停止</button>
-
-<br>
-
-<input id="time1" placeholder="時間1">
-<input id="time2" placeholder="時間2">
-<input id="time3" placeholder="時間3">
-
-<button id="setTimeBtn">時間設定</button>
-
-<br><br>
-<button id="specialBtn">特別発券</button>
+<div class="tabs">
+  <div class="tab active-tab" data-tab="controlTab">発券制御</div>
+  <div class="tab" data-tab="timeTab">時間設定</div>
+  <div class="tab" data-tab="passesTab">パス一覧</div>
+  <div class="tab" data-tab="scanTab">スキャン</div>
 </div>
 
-<h2>パス一覧</h2>
-<div class="card" id="list"></div>
-
+<div id="controlTab" class="tab-content active">
+  <div class="card">
+    <button id="startBtn" class="success">発券開始</button>
+    <button id="stopBtn" class="danger">発券停止</button>
+    <div id="statusText">状態: 不明</div>
+  </div>
 </div>
 
+<div id="timeTab" class="tab-content">
+  <div class="card">
+    <form id="timeForm">
+      <h3>①</h3>
+      <div class="row"><input type="time" id="start1"><input type="time" id="end1"></div>
+      <div class="row"><input type="number" id="interval1"><input type="number" id="limit1"></div>
+      <h3>②</h3>
+      <div class="row"><input type="time" id="start2"><input type="time" id="end2"></div>
+      <div class="row"><input type="number" id="interval2"><input type="number" id="limit2"></div>
+      <h3>③</h3>
+      <div class="row"><input type="time" id="start3"><input type="time" id="end3"></div>
+      <div class="row"><input type="number" id="interval3"><input type="number" id="limit3"></div>
+      <button class="primary">保存</button>
+    </form>
+  </div>
+</div>
+
+<div id="passesTab" class="tab-content">
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>名前</th>
+          <th>人数</th>
+          <th>時間</th>
+          <th>状態</th>
+        </tr>
+      </thead>
+      <tbody id="passesTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="scanTab" class="tab-content">
+  <div class="card">
+    <video id="video" autoplay muted playsinline></video>
+    <div id="result">読み取り待機中</div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,collection,addDoc,setDoc,doc,getDocs,onSnapshot,deleteDoc,query,where,updateDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-const firebaseConfig={
-  apiKey:"AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain:"fastpass-system.firebaseapp.com",
-  projectId:"fastpass-system"
-};
+const app = initializeApp({projectId:"fastpass-system"});
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-const app=initializeApp(firebaseConfig);
-const db=getFirestore(app);
-
-let currentRole="user";
-
-const appDiv=document.getElementById('app');
-
-// =====================
 // ログイン（修正版）
 // =====================
 document.getElementById('loginBtn').onclick = async ()=>{
@@ -103,101 +150,89 @@ document.getElementById('loginBtn').onclick = async ()=>{
   applyRoleControl();
  }
 };
-
-// =====================
-// 権限UI制御
-// =====================
-function applyRoleControl(){
-
- if(currentRole !== 'admin'){
-  document.getElementById('startBtn').style.display='none';
-  document.getElementById('stopBtn').style.display='none';
-  document.getElementById('setTimeBtn').style.display='none';
+/* タブ */
+document.querySelectorAll(".tab").forEach(tab=>{
+ tab.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active-tab"));
+  document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
+  tab.classList.add("active-tab");
+  document.getElementById(tab.dataset.tab).classList.add("active");
+  if(tab.dataset.tab==="scanTab") startScan();
  }
+});
 
- if(currentRole === 'user'){
-  document.getElementById('specialBtn').style.display='none';
+/* 発券制御 */
+document.getElementById("startBtn").onclick=()=>setDoc(doc(db,"settings","issueStatus"),{enabled:true});
+document.getElementById("stopBtn").onclick=()=>setDoc(doc(db,"settings","issueStatus"),{enabled:false});
+
+onSnapshot(doc(db,"settings","issueStatus"),snap=>{
+ if(snap.exists()){
+  document.getElementById("statusText").textContent = "状態: " + (snap.data().enabled?"発券中":"停止中");
  }
-}
+});
 
-// =====================
-// 発券制御
-// =====================
-document.getElementById('startBtn').onclick = async ()=>{
- if(currentRole!=='admin') return alert('権限なし');
- await setDoc(doc(db,'config','status'),{running:true});
- alert('開始');
-};
-
-document.getElementById('stopBtn').onclick = async ()=>{
- if(currentRole!=='admin') return alert('権限なし');
- await setDoc(doc(db,'config','status'),{running:false});
- alert('停止');
-};
-
-// =====================
-// 時間設定
-// =====================
-document.getElementById('setTimeBtn').onclick = async ()=>{
- if(currentRole!=='admin') return alert('権限なし');
-
- const t1=time1.value;
- const t2=time2.value;
- const t3=time3.value;
-
- await setDoc(doc(db,'config','time'),{
-  t1,t2,t3
- });
-
- alert('時間設定完了');
-};
-
-// =====================
-// 特別発券
-// =====================
-document.getElementById('specialBtn').onclick = async ()=>{
- if(currentRole==='user') return alert('権限なし');
-
- await addDoc(collection(db,'passes'),{
-  name:'特別',
-  time:new Date().toLocaleTimeString(),
-  special:true
- });
-
- alert('特別発券');
-};
-
-// =====================
-// パス一覧
-// =====================
-onSnapshot(collection(db,'passes'),snap=>{
-
- const list=document.getElementById('list');
- list.innerHTML='';
-
- snap.forEach(d=>{
-  const p=d.data();
-
-  const div=document.createElement('div');
-  div.className='pass';
-
-  let delBtn='';
-  if(currentRole==='admin'){
-   delBtn=`<button onclick="del('${d.id}')">削除</button>`;
+/* 時間保存 */
+document.getElementById("timeForm").onsubmit=async(e)=>{
+ e.preventDefault();
+ const slots=[];
+ for(let i=1;i<=3;i++){
+  const start=document.getElementById(`start${i}`).value;
+  const end=document.getElementById(`end${i}`).value;
+  const interval=document.getElementById(`interval${i}`).value;
+  const limit=document.getElementById(`limit${i}`).value;
+  if(start&&end&&interval&&limit){
+   slots.push({start,end,interval,limit});
   }
+ }
+ await setDoc(doc(db,"settings","timeSlots"),{slots});
+ alert("保存完了");
+};
 
-  div.innerHTML=`${p.name || ''} ${p.time || ''} ${delBtn}`;
-  list.appendChild(div);
+/* パス一覧 */
+onSnapshot(collection(db,"passes"),snap=>{
+ const tbody=document.getElementById("passesTableBody");
+ tbody.innerHTML="";
+ snap.forEach(d=>{
+  const data=d.data();
+  tbody.innerHTML+=`<tr>
+    <td>${data.id||""}</td>
+    <td>${data.name||""}</td>
+    <td>${data.people||1}</td>
+    <td>${data.startTime||""}〜${data.endTime||""}</td>
+    <td>${data.used?"使用済":"未使用"}</td>
+  </tr>`;
  });
 });
 
-// =====================
-// 削除
-// =====================
-window.del = async function(id){
- if(currentRole!=='admin') return alert('権限なし');
- await deleteDoc(doc(db,'passes',id));
-};
+/* スキャン */
+let started=false;
+function startScan(){
+ if(started) return;
+ started=true;
+ const resultEl=document.getElementById("result");
+ let reading=false;
+ const reader=new ZXing.BrowserQRCodeReader();
+ reader.decodeFromVideoDevice(null,"video",async(res)=>{
+  if(!res||reading) return;
+  reading=true;
+  try{
+   const code=res.text;
+   const q=query(collection(db,"passes"),where("id","==",code));
+   const snap=await getDocs(q);
+   if(snap.empty){ resultEl.textContent="無効"; resultEl.className="error"; }
+   else{
+    const docSnap=snap.docs[0];
+    const data=docSnap.data();
+    if(data.used){ resultEl.textContent="使用済"; resultEl.className="error"; }
+    else{
+     await updateDoc(doc(db,"passes",docSnap.id),{used:true});
+     resultEl.textContent="OK"; resultEl.className="";
+    }
+   }
+  }catch{ resultEl.textContent="エラー"; resultEl.className="error"; }
+  setTimeout(()=>reading=false,1500);
+ });
+}
 
 </script>
 </body>
