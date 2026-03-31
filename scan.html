@@ -2,262 +2,191 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>プライオリティパススキャン</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>プライオリティパス管理</title>
 <style>
-  body { font-family: sans-serif; text-align: center; padding: 10px; background-color: #f0f8ff; }
-  video { width: 100%; max-width: 480px; height: auto; border: 1px solid #ccc; }
-  #result { margin-top: 16px; font-size: 1.2em; font-weight: bold; color: green; }
-  .error { color: red; }
-  #loginDiv { max-width:400px; margin:auto; padding:20px; background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
-  #loginDiv input { width:100%; padding:10px; margin:8px 0; box-sizing:border-box; }
-  #loginDiv button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer; }
-  #errorMsg { color:red; margin-top:10px; text-align:center; }
-  #mainContent { display:none; }
-  #logoutBtn { margin-top:10px; padding:8px 16px; background:#e74c3c; color:white; border:none; border-radius:5px; cursor:pointer; }
-  #logs { max-width:480px; margin:auto; margin-top:20px; background:#fff; padding:10px; border-radius:8px; text-align:left; font-size:0.9em; color:black; max-height:200px; overflow-y:auto; border:1px solid #ccc; }
-
-  /* モーダル */
-  #modal { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 9999; }
-  .modal-content { background:white; padding:20px; border-radius:12px; max-width:300px; text-align:center; }
-  .modal-content button { margin:10px; padding:10px 20px; font-size:1em; cursor:pointer; }
+body{font-family:sans-serif;background:#f5f7fa;margin:0}
+.container{max-width:1000px;margin:auto;padding:12px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tab{flex:1;padding:10px;text-align:center;background:#ddd;cursor:pointer;border-radius:8px}
+.active-tab{background:#007bff;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.card{background:#fff;padding:14px;border-radius:10px;margin-top:10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+input{width:100%;padding:8px}
+button{width:100%;padding:10px;margin-top:6px;border:none;border-radius:8px}
+.success{background:#28a745;color:#fff}
+.danger{background:#dc3545;color:#fff}
+.primary{background:#007bff;color:#fff}
+video{width:100%;max-width:480px;border:1px solid #ccc}
+#result{margin-top:10px;font-weight:bold}
+.error{color:red}
+table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #ddd;padding:6px;text-align:center}
+th{background:#eef2ff}
 </style>
+</head>
+<body>
+<div class="container">
+
+<div class="tabs">
+  <div class="tab active-tab" data-tab="controlTab">発券制御</div>
+  <div class="tab" data-tab="timeTab">時間設定</div>
+  <div class="tab" data-tab="passesTab">パス一覧</div>
+  <div class="tab" data-tab="scanTab">スキャン</div>
+</div>
+
+<!-- 発券制御（復活） -->
+<div id="controlTab" class="tab-content active">
+  <div class="card">
+    <button id="startBtn" class="success">発券開始</button>
+    <button id="stopBtn" class="danger">発券停止</button>
+    <div id="statusText" style="text-align:center;margin-top:8px;font-weight:bold">状態: 不明</div>
+  </div>
+</div>
+
+<!-- 時間設定（3枠） -->
+<div id="timeTab" class="tab-content">
+  <div class="card">
+    <form id="timeForm">
+      <h3>①</h3>
+      <div class="row"><input type="time" id="start1"><input type="time" id="end1"></div>
+      <div class="row"><input type="number" id="interval1"><input type="number" id="limit1"></div>
+
+      <h3>②</h3>
+      <div class="row"><input type="time" id="start2"><input type="time" id="end2"></div>
+      <div class="row"><input type="number" id="interval2"><input type="number" id="limit2"></div>
+
+      <h3>③</h3>
+      <div class="row"><input type="time" id="start3"><input type="time" id="end3"></div>
+      <div class="row"><input type="number" id="interval3"><input type="number" id="limit3"></div>
+
+      <button class="primary">保存</button>
+    </form>
+  </div>
+</div>
+
+<!-- パス一覧（元UIに近い形） -->
+<div id="passesTab" class="tab-content">
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>名前</th>
+          <th>人数</th>
+          <th>時間</th>
+          <th>状態</th>
+        </tr>
+      </thead>
+      <tbody id="passesTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- スキャン -->
+<div id="scanTab" class="tab-content">
+  <div class="card">
+    <video id="video" autoplay muted playsinline></video>
+    <div id="result">読み取り待機中</div>
+  </div>
+</div>
+
+</div>
+
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
-  authDomain: "fastpass-system.firebaseapp.com",
-  projectId: "fastpass-system",
-  storageBucket: "fastpass-system.appspot.com",
-  messagingSenderId: "858745521872",
-  appId: "1:858745521872:web:29289b673855097e1200d5"
-};
-const app = initializeApp(firebaseConfig);
+const app = initializeApp({projectId:"fastpass-system"});
 const db = getFirestore(app);
 
-const allowedAdmins = [
-  {id:"Sakoty", password:"3214"},
-  {id:"seseguchi914", password:"0914"},
-  {id:"Soichiro", password:"35th"},
-  {id:"Sakura", password:"35th"},
-  {id:"Sae", password:"35th"},
-  {id:"Kyosuke", password:"35th"},
-  {id:"Yoichiro", password:"35th"},
-  {id:"Tatsuki", password:"35th"},
-  {id:"Haruki", password:"35th"},
-  {id:"Syosei", password:"35th"}
-];
-
-const loginDiv = document.getElementById("loginDiv");
-const mainContent = document.getElementById("mainContent");
-const errorMsg = document.getElementById("errorMsg");
-const loginForm = document.getElementById("loginForm");
-const logoutBtn = document.getElementById("logoutBtn");
-
-const logsDiv = document.createElement("div");
-logsDiv.id = "logs";
-mainContent?.appendChild(logsDiv);
-
-let currentAdmin = null;
-
-function showLog(message){
-  const p = document.createElement("div");
-  p.textContent = message;
-  logsDiv.prepend(p);
-}
-
-async function logAccess(action){
-  try{
-    if(!currentAdmin) currentAdmin="未ログイン";
-    await addDoc(collection(db,"accessLogs"),{
-      adminId: currentAdmin,
-      msg: action,
-      type: "scan",
-      timestamp: serverTimestamp()
-    });
-    showLog(`${new Date().toLocaleString()} | ${currentAdmin} | scan | ${action}`);
-  }catch(e){ 
-    console.error("ログ記録失敗:", e); 
-    showLog(`ログ記録失敗: ${e.message}`);
-  }
-}
-
-// --- timeパース ---
-function parseTimeRange(timeStr) {
-  if (!timeStr || !timeStr.includes("〜")) return [null, null];
-  const [startStr, endStr] = timeStr.split("〜").map(s => s.trim());
-  return [startStr, endStr];
-}
-function toTodayDate(timeStr) {
-  if (!timeStr) return null;
-  const now = new Date();
-  const [h, m] = timeStr.split(":").map(Number);
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
-}
-
-// --- ログイン ---
-window.addEventListener("DOMContentLoaded", ()=>{
-  const storedId = localStorage.getItem("adminId");
-  const storedPass = localStorage.getItem("adminPass");
-  if(storedId && storedPass && allowedAdmins.some(a=>a.id===storedId && a.password===storedPass)){
-    currentAdmin = storedId;
-    loginDiv.style.display="none";
-    mainContent.style.display="block";
-    startScan();
-    logAccess("ログイン成功（自動）");
-  }
+/* タブ */
+document.querySelectorAll(".tab").forEach(tab=>{
+ tab.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active-tab"));
+  document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
+  tab.classList.add("active-tab");
+  document.getElementById(tab.dataset.tab).classList.add("active");
+  if(tab.dataset.tab==="scanTab") startScan();
+ }
 });
 
-loginForm.onsubmit = e => {
-  e.preventDefault();
-  const inputId = document.getElementById("adminId").value.trim();
-  const inputPass = document.getElementById("adminPass").value;
-  if(allowedAdmins.some(a=>a.id===inputId && a.password===inputPass)){
-    localStorage.setItem("adminId", inputId);
-    localStorage.setItem("adminPass", inputPass);
-    currentAdmin = inputId;
-    loginDiv.style.display="none";
-    mainContent.style.display="block";
-    errorMsg.textContent="";
-    startScan();
-    logAccess("ログイン成功");
-  } else {
-    errorMsg.textContent="IDまたはパスワードが違います";
-    currentAdmin = inputId;
-    logAccess("ログイン失敗");
+/* 発券制御 */
+document.getElementById("startBtn").onclick=()=>setDoc(doc(db,"settings","issueStatus"),{enabled:true});
+document.getElementById("stopBtn").onclick=()=>setDoc(doc(db,"settings","issueStatus"),{enabled:false});
+
+onSnapshot(doc(db,"settings","issueStatus"),snap=>{
+ if(snap.exists()){
+  document.getElementById("statusText").textContent = "状態: " + (snap.data().enabled?"発券中":"停止中");
+ }
+});
+
+/* 時間保存 */
+document.getElementById("timeForm").onsubmit=async(e)=>{
+ e.preventDefault();
+ const slots=[];
+ for(let i=1;i<=3;i++){
+  const start=document.getElementById(`start${i}`).value;
+  const end=document.getElementById(`end${i}`).value;
+  const interval=document.getElementById(`interval${i}`).value;
+  const limit=document.getElementById(`limit${i}`).value;
+  if(start&&end&&interval&&limit){
+   slots.push({start,end,interval,limit});
   }
+ }
+ await setDoc(doc(db,"settings","timeSlots"),{slots});
+ alert("保存完了");
 };
 
-logoutBtn.onclick = ()=>{
-  logAccess("ログアウト");
-  localStorage.removeItem("adminId");
-  localStorage.removeItem("adminPass");
-  currentAdmin = null;
-  loginDiv.style.display="block";
-  mainContent.style.display="none";
-};
+/* パス一覧 */
+onSnapshot(collection(db,"passes"),snap=>{
+ const tbody=document.getElementById("passesTableBody");
+ tbody.innerHTML="";
+ snap.forEach(d=>{
+  const data=d.data();
+  tbody.innerHTML+=`<tr>
+    <td>${data.id||""}</td>
+    <td>${data.name||""}</td>
+    <td>${data.people||1}</td>
+    <td>${data.startTime||""}〜${data.endTime||""}</td>
+    <td>${data.used?"使用済":"未使用"}</td>
+  </tr>`;
+ });
+});
 
-// --- QRスキャン ---
+/* スキャン */
+let started=false;
 function startScan(){
-  const resultEl = document.getElementById("result");
-  const sound = document.getElementById("sound");
-  const modal = document.getElementById("modal");
-  const modalText = document.getElementById("modalText");
-  const modalYes = document.getElementById("modalYes");
-  const modalCancel = document.getElementById("modalCancel");
-
-  let isReading = false;
-  let pendingDoc = null;
-  let pendingCode = "";
-  let pendingTime = "";
-
-  function showResult(msg, isError=false){
-    resultEl.textContent=msg;
-    resultEl.className=isError?"error":"";
-  }
-
-  const codeReader = new ZXing.BrowserQRCodeReader();
-  codeReader.decodeFromVideoDevice(null,"video", async (res,_)=>{
-    if(!res||isReading) return;
-    isReading=true;
-
-    const code=res.text;
-    try{
-      const q=query(collection(db,"passes"), where("id","==",code));
-      const snapshot = await getDocs(q);
-      if(snapshot.empty){
-        showResult("該当するパスが見つかりません",true);
-        logAccess(`無効スキャン: ${code}`);
-      } else {
-        const docSnap = snapshot.docs[0];
-        const data = docSnap.data();
-        const now = new Date();
-
-        const [startStr, endStr] = parseTimeRange(data.time);
-        const start = toTodayDate(startStr);
-        const end   = toTodayDate(endStr);
-        const timeText = data.time || "未設定";
-
-        if(data.used){
-          showResult(`パス ${code} はすでに使用済みです（案内時間: ${timeText}）`,true);
-          logAccess(`再スキャン: ${code}`);
-        } else if(start && now < start){
-          pendingDoc = docSnap;
-          pendingCode = code;
-          pendingTime = timeText;
-          modalText.textContent = `案内時間前です（案内時間: ${timeText}）。使用済みにしますか？`;
-          modal.style.display = "flex";
-        } else if(end && now > end){
-          pendingDoc = docSnap;
-          pendingCode = code;
-          pendingTime = timeText;
-          modalText.textContent = `有効期限を過ぎています（案内時間: ${timeText}）。使用済みにしますか？`;
-          modal.style.display = "flex";
-        } else {
-          await updateDoc(doc(db,"passes",docSnap.id),{used:true});
-          showResult(`パス ${code} を使用済みにしました（案内時間: ${timeText}）`);
-          logAccess(`使用済みにした: ${code}`);
-          sound.currentTime=0; sound.play().catch(()=>{});
-        }
-      }
-    } catch(e){
-      console.error(e);
-      showResult("エラーが発生しました",true);
-      logAccess(`エラー: ${code} ${e.message}`);
+ if(started) return;
+ started=true;
+ const resultEl=document.getElementById("result");
+ let reading=false;
+ const reader=new ZXing.BrowserQRCodeReader();
+ reader.decodeFromVideoDevice(null,"video",async(res)=>{
+  if(!res||reading) return;
+  reading=true;
+  try{
+   const code=res.text;
+   const q=query(collection(db,"passes"),where("id","==",code));
+   const snap=await getDocs(q);
+   if(snap.empty){ resultEl.textContent="無効"; resultEl.className="error"; }
+   else{
+    const docSnap=snap.docs[0];
+    const data=docSnap.data();
+    if(data.used){ resultEl.textContent="使用済"; resultEl.className="error"; }
+    else{
+     await updateDoc(doc(db,"passes",docSnap.id),{used:true});
+     resultEl.textContent="OK"; resultEl.className="";
     }
-    isReading=false;
-  });
-
-  modalYes.onclick = async () => {
-    if(pendingDoc){
-      await updateDoc(doc(db,"passes",pendingDoc.id),{used:true});
-      showResult(`パス ${pendingCode} を使用済みにしました（案内時間: ${pendingTime}）`);
-      logAccess(`使用済みにした（確認モーダル）: ${pendingCode}`);
-      sound.currentTime=0; sound.play().catch(()=>{});
-    }
-    modal.style.display="none";
-  };
-  modalCancel.onclick = () => {
-    showResult("スキャンをキャンセルしました",true);
-    logAccess("スキャンキャンセル（確認モーダル）");
-    modal.style.display="none";
-  };
+   }
+  }catch{ resultEl.textContent="エラー"; resultEl.className="error"; }
+  setTimeout(()=>reading=false,1500);
+ });
 }
+
 </script>
-</head>
-<body>
-  <div id="loginDiv">
-    <h1>管理者ログイン</h1>
-    <form id="loginForm">
-      <input type="text" id="adminId" placeholder="管理者ID" required>
-      <input type="password" id="adminPass" placeholder="パスワード" required>
-      <button type="submit">ログイン</button>
-      <div id="errorMsg"></div>
-    </form>
-  </div>
-
-  <div id="mainContent">
-    <h1>プライオリティパススキャン</h1>
-    <video id="video" autoplay muted playsinline></video>
-    <div id="result">QRコードを読み取ってください</div>
-
-    <!-- 確認モーダル -->
-    <div id="modal">
-      <div class="modal-content">
-        <p id="modalText"></p>
-        <button id="modalYes">使用済みにする</button>
-        <button id="modalCancel">キャンセル</button>
-      </div>
-    </div>
-
-    <audio id="sound" src="ファストパス読み取り時音源.mp3" preload="auto"></audio>
-    <button id="logoutBtn">ログアウト</button>
-  </div>
 </body>
 </html>
-
-
-
