@@ -76,7 +76,7 @@ async function login(){
   let ok=false;
   q.forEach(d=>{
     const data=d.data();
-    if(data.id===id.value && data.pw===pw.value) ok=true;
+    if(data.loginId===loginId.value && data.password===password.value) ok=true;
   });
   if(ok){
     appDiv.style.display='block';
