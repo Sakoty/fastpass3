@@ -70,21 +70,49 @@ const firebaseConfig={apiKey: "AIzaSyDibHDpFtKBSCScK0QmB5xjKdBniS2EI1Y",
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
 
-// ログイン
 async function login(){
-  const q=await getDocs(collection(db,'users'));
-  let ok=false;
-  q.forEach(d=>{
-    const data=d.data();
-    if(data.loginId===loginId.value && data.password===password.value) ok=true;
-  });
-  if(ok){
-    appDiv.style.display='block';
-  }else alert('NG');
-}
-window.login=login;
 
-const appDiv=document.getElementById('app');
+  const inputId = id.value.trim();
+  const inputPw = pw.value.trim();
+
+  const snap = await getDocs(collection(db,'users'));
+
+  let ok = false;
+
+  snap.forEach(d=>{
+
+    const u = d.data();
+
+// 🔥 ID/PW一致チェック
+    if(
+      u.loginId === inputId &&
+      u.password === inputPw
+    ){
+
+      const now = new Date();
+
+  // 🔥 有効期間チェック
+      if(u.validFrom && now < u.validFrom.toDate()){
+        alert("まだ使用できません");
+        return;
+      }
+
+      if(u.validUntil && now > u.validUntil.toDate()){
+        alert("期限切れです");
+        return;
+      }
+
+      ok = true;
+    }
+
+  });
+
+  if(ok){
+    appDiv.style.display = 'block';
+  }else{
+    alert("IDまたはパスワードが違う");
+  }
+}
 
 // 発券ON/OFF
 async function toggle(v){
