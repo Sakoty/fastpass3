@@ -105,18 +105,18 @@ th{background:#eef2ff}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const app = initializeApp({projectId:"fastpass-system"});
 const db = getFirestore(app);
-const auth = getAuth(app);
 
-// ログイン（修正版）
+let currentRole = null;
+
+// =====================
+// ログイン（完全修正）
 // =====================
 document.getElementById('loginBtn').onclick = async ()=>{
-
- const inputId = document.getElementById('id').value.trim();
- const inputPw = document.getElementById('pw').value.trim();
+ const inputId = document.getElementById('loginId').value.trim();
+ const inputPw = document.getElementById('password').value.trim();
 
  const q = query(
   collection(db,'users'),
@@ -127,7 +127,7 @@ document.getElementById('loginBtn').onclick = async ()=>{
  const snap = await getDocs(q);
 
  if(snap.empty){
-  alert('NG');
+  document.getElementById('error').textContent = 'ログイン失敗';
   return;
  }
 
@@ -145,11 +145,25 @@ document.getElementById('loginBtn').onclick = async ()=>{
  });
 
  if(valid){
-  appDiv.classList.remove('hidden');
-  alert('ログイン成功：'+currentRole);
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('mainView').classList.remove('hidden');
   applyRoleControl();
+ }else{
+  document.getElementById('error').textContent = '有効期限外';
  }
 };
+
+// =====================
+// 権限制御（追加）
+// =====================
+function applyRoleControl(){
+ if(currentRole === 'staff'){
+  document.querySelector('[data-tab="controlTab"]').style.display='none';
+  document.querySelector('[data-tab="timeTab"]').style.display='none';
+  document.querySelector('[data-tab="passesTab"]').style.display='none';
+ }
+}
+
 /* タブ */
 document.querySelectorAll(".tab").forEach(tab=>{
  tab.onclick=()=>{
