@@ -42,6 +42,8 @@ th{background:#eef2ff}
 <!-- 管理画面 -->
 <div id="mainView" class="hidden">
 
+<div id="roleLabel"></div>
+
 <div class="tabs">
   <div class="tab active-tab" data-tab="controlTab">発券制御</div>
   <div class="tab" data-tab="timeTab">時間設定</div>
@@ -84,6 +86,7 @@ th{background:#eef2ff}
           <th>人数</th>
           <th>時間</th>
           <th>状態</th>
+          <th id="deleteHeader">削除</th>
         </tr>
       </thead>
       <tbody id="passesTableBody"></tbody>
@@ -104,7 +107,7 @@ th{background:#eef2ff}
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app = initializeApp({projectId:"fastpass-system"});
 const db = getFirestore(app);
@@ -112,7 +115,7 @@ const db = getFirestore(app);
 let currentRole = null;
 
 // =====================
-// ログイン（完全修正）
+// ログイン
 // =====================
 document.getElementById('loginBtn').onclick = async ()=>{
  const inputId = document.getElementById('loginId').value.trim();
@@ -140,13 +143,14 @@ document.getElementById('loginBtn').onclick = async ()=>{
   if(u.validFrom && now < u.validFrom.toDate()) return;
   if(u.validUntil && now > u.validUntil.toDate()) return;
 
-  currentRole = u.role || 'user';
+  currentRole = u.role || 'staff';
   valid=true;
  });
 
  if(valid){
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('mainView').classList.remove('hidden');
+  document.getElementById('roleLabel').textContent = "権限: " + currentRole;
   applyRoleControl();
  }else{
   document.getElementById('error').textContent = '有効期限外';
@@ -154,13 +158,26 @@ document.getElementById('loginBtn').onclick = async ()=>{
 };
 
 // =====================
-// 権限制御（追加）
+// 🔥 権限制御（完全強化）
 // =====================
 function applyRoleControl(){
+
+ // staff → タブ切替のみ
  if(currentRole === 'staff'){
-  document.querySelector('[data-tab="controlTab"]').style.display='none';
-  document.querySelector('[data-tab="timeTab"]').style.display='none';
-  document.querySelector('[data-tab="passesTab"]').style.display='none';
+  document.getElementById("startBtn").style.display="none";
+  document.getElementById("stopBtn").style.display="none";
+  document.getElementById("timeForm").style.display="none";
+  document.getElementById("passesTab").style.display="none";
+ }
+
+ // master → 発券 + 時間設定OK
+ if(currentRole === 'master'){
+  document.getElementById("deleteHeader").style.display="none";
+ }
+
+ // superviser → 全権限（削除あり）
+ if(currentRole === 'superviser'){
+  // 何も制限しない
  }
 }
 
@@ -202,21 +219,34 @@ document.getElementById("timeForm").onsubmit=async(e)=>{
  alert("保存完了");
 };
 
-/* パス一覧 */
+/* パス一覧（削除機能追加） */
 onSnapshot(collection(db,"passes"),snap=>{
  const tbody=document.getElementById("passesTableBody");
  tbody.innerHTML="";
  snap.forEach(d=>{
   const data=d.data();
+
+  let deleteBtn = "";
+
+  if(currentRole === 'superviser'){
+    deleteBtn = `<button onclick="deletePass('${d.id}')">削除</button>`;
+  }
+
   tbody.innerHTML+=`<tr>
     <td>${data.id||""}</td>
     <td>${data.name||""}</td>
     <td>${data.people||1}</td>
     <td>${data.startTime||""}〜${data.endTime||""}</td>
     <td>${data.used?"使用済":"未使用"}</td>
+    <td>${deleteBtn}</td>
   </tr>`;
  });
 });
+
+// 🔥 パス削除
+window.deletePass = async function(id){
+ await deleteDoc(doc(db,"passes",id));
+};
 
 /* スキャン */
 let started=false;
@@ -233,17 +263,17 @@ function startScan(){
    const code=res.text;
    const q=query(collection(db,"passes"),where("id","==",code));
    const snap=await getDocs(q);
-   if(snap.empty){ resultEl.textContent="無効"; resultEl.className="error"; }
+   if(snap.empty){ resultEl.textContent="無効"; }
    else{
     const docSnap=snap.docs[0];
     const data=docSnap.data();
-    if(data.used){ resultEl.textContent="使用済"; resultEl.className="error"; }
+    if(data.used){ resultEl.textContent="使用済"; }
     else{
      await updateDoc(doc(db,"passes",docSnap.id),{used:true});
-     resultEl.textContent="OK"; resultEl.className="";
+     resultEl.textContent="OK";
     }
    }
-  }catch{ resultEl.textContent="エラー"; resultEl.className="error"; }
+  }catch{ resultEl.textContent="エラー"; }
   setTimeout(()=>reading=false,1500);
  });
 }
