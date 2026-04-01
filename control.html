@@ -21,6 +21,7 @@ button{width:100%;padding:10px;margin-top:6px;border:none;border-radius:8px}
 .primary{background:#007bff;color:#fff}
 video{width:100%;max-width:480px;border:1px solid #ccc}
 #error{color:red}
+#roleInfo{margin-top:6px;font-weight:bold}
 table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #ddd;padding:6px;text-align:center}
 th{background:#eef2ff}
@@ -41,8 +42,7 @@ th{background:#eef2ff}
 
 <!-- 管理画面 -->
 <div id="mainView" class="hidden">
-
-<div id="roleLabel"></div>
+<div id="roleInfo"></div>
 
 <div class="tabs">
   <div class="tab active-tab" data-tab="controlTab">発券制御</div>
@@ -114,6 +114,10 @@ const db = getFirestore(app);
 
 let currentRole = null;
 
+function noAuth(){
+ alert("権限がありません");
+}
+
 // =====================
 // ログイン
 // =====================
@@ -150,7 +154,7 @@ document.getElementById('loginBtn').onclick = async ()=>{
  if(valid){
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('mainView').classList.remove('hidden');
-  document.getElementById('roleLabel').textContent = "権限: " + currentRole;
+  document.getElementById('roleInfo').textContent = '権限: ' + currentRole;
   applyRoleControl();
  }else{
   document.getElementById('error').textContent = '有効期限外';
@@ -158,32 +162,26 @@ document.getElementById('loginBtn').onclick = async ()=>{
 };
 
 // =====================
-// 🔥 権限制御（完全強化）
+// 権限制御
 // =====================
 function applyRoleControl(){
-
- // staff → タブ切替のみ
  if(currentRole === 'staff'){
-  document.getElementById("startBtn").style.display="none";
-  document.getElementById("stopBtn").style.display="none";
-  document.getElementById("timeForm").style.display="none";
-  document.getElementById("passesTab").style.display="none";
+  document.querySelector('[data-tab="controlTab"]').onclick=noAuth;
+  document.querySelector('[data-tab="timeTab"]').onclick=noAuth;
+  document.querySelector('[data-tab="passesTab"]').onclick=noAuth;
  }
 
- // master → 発券 + 時間設定OK
  if(currentRole === 'master'){
-  document.getElementById("deleteHeader").style.display="none";
- }
-
- // superviser → 全権限（削除あり）
- if(currentRole === 'superviser'){
-  // 何も制限しない
+  document.getElementById('deleteHeader').style.display='none';
  }
 }
 
 /* タブ */
 document.querySelectorAll(".tab").forEach(tab=>{
  tab.onclick=()=>{
+  if(currentRole==='staff' && tab.dataset.tab!=='scanTab'){
+    noAuth(); return;
+  }
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active-tab"));
   document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
   tab.classList.add("active-tab");
@@ -193,8 +191,15 @@ document.querySelectorAll(".tab").forEach(tab=>{
 });
 
 /* 発券制御 */
-document.getElementById("startBtn").onclick=()=>setDoc(doc(db,"settings","issueStatus"),{enabled:true});
-document.getElementById("stopBtn").onclick=()=>setDoc(doc(db,"settings","issueStatus"),{enabled:false});
+document.getElementById("startBtn").onclick=()=>{
+ if(currentRole!=='master' && currentRole!=='superviser') return noAuth();
+ setDoc(doc(db,"settings","issueStatus"),{enabled:true});
+};
+
+document.getElementById("stopBtn").onclick=()=>{
+ if(currentRole!=='master' && currentRole!=='superviser') return noAuth();
+ setDoc(doc(db,"settings","issueStatus"),{enabled:false});
+};
 
 onSnapshot(doc(db,"settings","issueStatus"),snap=>{
  if(snap.exists()){
@@ -205,6 +210,7 @@ onSnapshot(doc(db,"settings","issueStatus"),snap=>{
 /* 時間保存 */
 document.getElementById("timeForm").onsubmit=async(e)=>{
  e.preventDefault();
+ if(currentRole!=='master' && currentRole!=='superviser') return noAuth();
  const slots=[];
  for(let i=1;i<=3;i++){
   const start=document.getElementById(`start${i}`).value;
@@ -219,38 +225,37 @@ document.getElementById("timeForm").onsubmit=async(e)=>{
  alert("保存完了");
 };
 
-/* パス一覧（削除機能追加） */
+/* パス削除（superviserのみ） */
+window.deletePass = async function(id){
+ if(currentRole!=='superviser') return noAuth();
+ await deleteDoc(doc(db,"passes",id));
+};
+
+/* パス一覧 */
 onSnapshot(collection(db,"passes"),snap=>{
  const tbody=document.getElementById("passesTableBody");
  tbody.innerHTML="";
  snap.forEach(d=>{
   const data=d.data();
-
-  let deleteBtn = "";
-
-  if(currentRole === 'superviser'){
-    deleteBtn = `<button onclick="deletePass('${d.id}')">削除</button>`;
+  let delBtn="";
+  if(currentRole==='superviser'){
+    delBtn=`<button onclick="deletePass('${d.id}')">削除</button>`;
   }
-
   tbody.innerHTML+=`<tr>
     <td>${data.id||""}</td>
     <td>${data.name||""}</td>
     <td>${data.people||1}</td>
     <td>${data.startTime||""}〜${data.endTime||""}</td>
     <td>${data.used?"使用済":"未使用"}</td>
-    <td>${deleteBtn}</td>
+    <td>${delBtn}</td>
   </tr>`;
  });
 });
 
-// 🔥 パス削除
-window.deletePass = async function(id){
- await deleteDoc(doc(db,"passes",id));
-};
-
 /* スキャン */
 let started=false;
 function startScan(){
+ if(currentRole!=='master' && currentRole!=='superviser') return noAuth();
  if(started) return;
  started=true;
  const resultEl=document.getElementById("result");
