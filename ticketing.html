@@ -108,7 +108,6 @@ import {
   onSnapshot, serverTimestamp, getDocs, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* 既存そのまま */
 const app = initializeApp({
   apiKey:"AIza...",
   authDomain:"fastpass-system.firebaseapp.com",
@@ -117,28 +116,43 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 /* =====================
-   🔥 追加：制限状態管理
+   🔥 安全な時間ブロック生成
 ===================== */
-let limitInfo = {
-  active: false,
-  remaining: 0,
-  resetInSec: 0
-};
+function generateTimeBlocks(start,end,interval=10){
+  if(!start || !end) return [];
+  interval = Number(interval);
+
+  const blocks=[];
+  const [sh,sm]=start.split(":").map(Number);
+  const [eh,em]=end.split(":").map(Number);
+
+  let s=new Date(); s.setHours(sh,sm,0,0);
+  const e=new Date(); e.setHours(eh,em,0,0);
+
+  while(s<e){
+    const next=new Date(s.getTime()+interval*60000);
+    if(next>e) break;
+
+    const pad=n=>n.toString().padStart(2,"0");
+
+    blocks.push(`${pad(s.getHours())}:${pad(s.getMinutes())}〜${pad(next.getHours())}:${pad(next.getMinutes())}`);
+    s=next;
+  }
+  return blocks;
+}
 
 /* =====================
    🔥 現在の時間帯取得
 ===================== */
 async function getCurrentSlot(){
-  const snap = await getDoc(doc(db,"settings","timeSlots"));
+  const snap=await getDoc(doc(db,"settings","timeSlots"));
   if(!snap.exists()) return null;
 
-  const now = new Date();
-  const current = now.toTimeString().slice(0,5);
+  const now=new Date();
+  const current=now.toTimeString().slice(0,5);
 
-  const slots = snap.data().slots || [];
-
-  for(const s of slots){
-    if(s.start <= current && current <= s.end){
+  for(const s of snap.data().slots || []){
+    if(s.start<=current && current<=s.end){
       return s;
     }
   }
@@ -149,107 +163,142 @@ async function getCurrentSlot(){
    🔥 発券制限チェック
 ===================== */
 async function checkLimit(){
-  const slot = await getCurrentSlot();
-  if(!slot) return {ok:false, reason:"時間外"};
+  const slot=await getCurrentSlot();
+  if(!slot) return {ok:false,reason:"時間外"};
 
-  const intervalMin = Number(slot.interval);
-  const limit = Number(slot.limit);
+  const interval=Number(slot.interval)||10;
+  const limit=Number(slot.limit)||1;
 
-  const now = Date.now();
-  const since = new Date(now - intervalMin * 60000);
+  const now=Date.now();
+  const since=new Date(now-interval*60000);
 
-  const snap = await getDocs(collection(db,"passes"));
+  const snap=await getDocs(collection(db,"passes"));
 
-  let count = 0;
+  let count=0;
   snap.forEach(d=>{
     const data=d.data();
     if(!data.createdAt) return;
-    const t = data.createdAt.toDate();
-    if(t >= since) count++;
+    if(data.createdAt.toDate()>=since) count++;
   });
 
-  const remaining = limit - count;
-  const resetInSec = Math.ceil((intervalMin*60) - ((now - since.getTime())/1000));
+  const remaining=limit-count;
+  const resetSec=Math.ceil(interval*60 - (now-since.getTime())/1000);
 
-  limitInfo = {
-    active: true,
-    remaining: remaining,
-    resetInSec: resetInSec
+  return {
+    ok:count<limit,
+    remaining,
+    resetSec
   };
-
-  if(count >= limit){
-    return {ok:false, reason:"制限中"};
-  }
-
-  return {ok:true};
 }
 
 /* =====================
-   🔥 UIに制限表示追加
+   🔥 UI更新（強化版）
 ===================== */
-function renderLimitInfo(){
-  const info = document.getElementById("info");
+async function updateUI(latestPasses,slots,limits,issueActive){
 
-  if(!limitInfo.active) return;
+  const info=document.getElementById("info");
+  const form=document.getElementById("form");
+  const select=document.getElementById("timeSelect");
 
-  if(limitInfo.remaining <= 0){
-    info.innerHTML = `
+  const now=new Date();
+
+  select.innerHTML="";
+
+  let allFull=true;
+
+  slots.forEach((slot,i)=>{
+    const [sh,sm]=slot.split("〜")[0].split(":").map(Number);
+
+    const slotStart=new Date();
+    slotStart.setHours(sh,sm,0,0);
+
+    if(slotStart<now) return;
+
+    const count=latestPasses.filter(p=>p.time===slot).length;
+    const limit=Number(limits[i])||1;
+    const left=limit-count;
+
+    // 🔥 満員非表示
+    if(left<=0) return;
+
+    const opt=document.createElement("option");
+    opt.value=slot;
+    opt.textContent=`${slot}（残り${left}枚）`;
+
+    select.appendChild(opt);
+    allFull=false;
+  });
+
+  /* 発券制限 */
+  const limitCheck=await checkLimit();
+
+  if(!limitCheck.ok){
+    form.style.display="none";
+    info.innerHTML=`
       <p class="ended">
         発券制限中<br>
-        あと ${limitInfo.resetInSec} 秒で再開
+        あと${limitCheck.resetSec}秒で再開
       </p>`;
+    return;
+  }
+
+  if(allFull){
+    form.style.display="none";
+    info.innerHTML='<p class="ended">本日は終了しました</p>';
+  }else{
+    form.style.display="block";
+    info.innerHTML="";
   }
 }
 
 /* =====================
-   🔥 updateUI拡張
+   🔥 初期処理
 ===================== */
-const originalUpdateUI = updateUI;
+window.addEventListener("load",()=>{
 
-updateUI = async function(latestPasses,slots,limits,issueActive){
-  await originalUpdateUI(latestPasses,slots,limits,issueActive);
+  const passesCol=collection(db,"passes");
+  const timeSlotsDoc=doc(db,"settings","timeSlots");
+  const issueStatusDoc=doc(db,"settings","issueStatus");
 
-  await checkLimit();
-  renderLimitInfo();
-};
+  let latestPasses=[];
+  let slots=[];
+  let limits=[];
+  let issueActive=true;
 
-/* =====================
-   🔥 発券処理に組み込み
-===================== */
-document.getElementById("agreeBtn").addEventListener("click",async()=>{
-  if(!document.getElementById("consentCheck").checked){
-    alert("同意にチェックしてください");
-    return;
-  }
+  onSnapshot(issueStatusDoc,s=>{
+    issueActive=s.data()?.enabled ?? true;
+    updateUI(latestPasses,slots,limits,issueActive);
+  });
 
-  if(!pendingSubmit) return;
+  onSnapshot(timeSlotsDoc,snap=>{
+    const data=snap.data();
 
-  const check = await checkLimit();
+    slots=[]; limits=[];
 
-  if(!check.ok){
-    alert("現在この時間帯は発券できません");
-    return;
-  }
+    if(data?.slots){
+      data.slots.forEach(f=>{
+        if(!f.start||!f.end) return;
 
-  isSubmitting=true;
+        const interval=Number(f.interval)||10;
+        const limit=Number(f.limit)||1;
 
-  const newPass={
-    ...pendingSubmit,
-    used:false,
-    status:"未使用",
-    createdAt:serverTimestamp()
-  };
+        const gen=generateTimeBlocks(f.start,f.end,interval);
 
-  try{
-    await addDoc(collection(db,"passes"),newPass);
-    savePassToLocal(newPass);
-    document.getElementById("consentModal").style.display="none";
-    pendingSubmit=null;
-  }catch(err){
-    alert("発券失敗:"+err.message);
-  }
+        gen.forEach(g=>{
+          slots.push(g);
+          limits.push(limit);
+        });
+      });
+    }
 
-  isSubmitting=false;
+    updateUI(latestPasses,slots,limits,issueActive);
+  });
+
+  onSnapshot(passesCol,snap=>{
+    latestPasses=snap.docs.map(d=>d.data());
+    updateUI(latestPasses,slots,limits,issueActive);
+  });
+
 });
 </script>
 </head>
