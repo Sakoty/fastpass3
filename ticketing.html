@@ -256,52 +256,6 @@ async function updateUI(latestPasses,slots,limits,issueActive){
 ===================== */
 window.addEventListener("load",()=>{
 
-  /* =====================
-   🎟 発券処理（これが抜けてる）
-===================== */
-document.getElementById("issueBtn").addEventListener("click", async () => {
-
-  const select = document.getElementById("timeSelect");
-  const time = select.value;
-
-  if(!time){
-    alert("時間を選択してください");
-    return;
-  }
-
-  // 🔥 制限チェック
-  const limitCheck = await checkLimit();
-  if(!limitCheck.ok){
-    alert(`発券制限中（あと${limitCheck.resetSec}秒）`);
-    return;
-  }
-
-  try{
-    // 🔥 Firestoreに保存
-    const docRef = await addDoc(collection(db,"passes"),{
-      time: time,
-      used: false,
-      createdAt: serverTimestamp()
-    });
-
-    // 🔥 QRコード表示
-    const qrArea = document.getElementById("qrArea");
-    qrArea.innerHTML = "";
-
-    const qrData = docRef.id;
-
-    new QRCode(qrArea,{
-      text: qrData,
-      width: 200,
-      height: 200
-    });
-
-  }catch(e){
-    console.error(e);
-    alert("発券失敗");
-  }
-
-});
   const passesCol=collection(db,"passes");
   const timeSlotsDoc=doc(db,"settings","timeSlots");
   const issueStatusDoc=doc(db,"settings","issueStatus");
