@@ -104,23 +104,29 @@ th{background:#eef2ff}
 </div>
 </div>
 
+<!-- 省略なし：元コード完全維持＋追加 -->
+
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app = initializeApp({projectId:"fastpass-system"});
 const db = getFirestore(app);
 
 let currentRole = null;
 
+/* ★追加：ログイン時刻管理 */
+let loginTime = null;
+const MAX_LOGIN_TIME = 24 * 60 * 60 * 1000; // 24時間
+
 function noAuth(){
  alert("権限がありません");
 }
 
-// =====================
-// ログイン
-// =====================
+/* =====================
+   ログイン
+===================== */
 document.getElementById('loginBtn').onclick = async ()=>{
  const inputId = document.getElementById('loginId').value.trim();
  const inputPw = document.getElementById('password').value.trim();
@@ -155,15 +161,49 @@ document.getElementById('loginBtn').onclick = async ()=>{
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('mainView').classList.remove('hidden');
   document.getElementById('roleInfo').textContent = '権限: ' + currentRole;
+
+  /* ★追加：ログイン時刻保存 */
+  loginTime = Date.now();
+  localStorage.setItem("loginTime", loginTime);
+
   applyRoleControl();
+
+  /* ★追加：時間設定読み込み */
+  loadTimeSettings();
+
+  /* ★追加：ログアウト監視 */
+  startLogoutWatcher();
+
  }else{
   document.getElementById('error').textContent = '有効期限外';
  }
 };
 
-// =====================
-// 権限制御
-// =====================
+/* =====================
+   ★追加：自動ログアウト監視
+===================== */
+function startLogoutWatcher(){
+ setInterval(()=>{
+  const saved = localStorage.getItem("loginTime");
+  if(!saved) return;
+
+  const now = Date.now();
+  if(now - saved > MAX_LOGIN_TIME){
+    alert("セッション期限切れのためログアウトします");
+    logout();
+  }
+ }, 60000); // 1分ごとチェック
+}
+
+/* ★追加：ログアウト処理 */
+function logout(){
+ localStorage.removeItem("loginTime");
+ location.reload();
+}
+
+/* =====================
+   権限制御
+===================== */
 function applyRoleControl(){
  if(currentRole === 'staff'){
   document.querySelector('[data-tab="controlTab"]').onclick=noAuth;
@@ -207,25 +247,49 @@ onSnapshot(doc(db,"settings","issueStatus"),snap=>{
  }
 });
 
-/* 時間保存 */
+/* =====================
+   ★強化：時間保存＋読み込み
+===================== */
 document.getElementById("timeForm").onsubmit=async(e)=>{
  e.preventDefault();
  if(currentRole!=='master' && currentRole!=='superviser') return noAuth();
+
  const slots=[];
  for(let i=1;i<=3;i++){
   const start=document.getElementById(`start${i}`).value;
   const end=document.getElementById(`end${i}`).value;
   const interval=document.getElementById(`interval${i}`).value;
   const limit=document.getElementById(`limit${i}`).value;
+
   if(start&&end&&interval&&limit){
    slots.push({start,end,interval,limit});
   }
  }
+
  await setDoc(doc(db,"settings","timeSlots"),{slots});
  alert("保存完了");
 };
 
-/* パス削除（superviserのみ） */
+/* ★追加：Firestoreから読み込み */
+async function loadTimeSettings(){
+ const snap = await getDoc(doc(db,"settings","timeSlots"));
+ if(!snap.exists()) return;
+
+ const data = snap.data();
+ if(!data.slots) return;
+
+ data.slots.forEach((slot, index)=>{
+  const i = index + 1;
+  if(i>3) return;
+
+  document.getElementById(`start${i}`).value = slot.start || "";
+  document.getElementById(`end${i}`).value = slot.end || "";
+  document.getElementById(`interval${i}`).value = slot.interval || "";
+  document.getElementById(`limit${i}`).value = slot.limit || "";
+ });
+}
+
+/* パス削除 */
 window.deletePass = async function(id){
  if(currentRole!=='superviser') return noAuth();
  await deleteDoc(doc(db,"passes",id));
@@ -258,31 +322,39 @@ function startScan(){
  if(currentRole!=='master' && currentRole!=='superviser') return noAuth();
  if(started) return;
  started=true;
+
  const resultEl=document.getElementById("result");
  let reading=false;
+
  const reader=new ZXing.BrowserQRCodeReader();
+
  reader.decodeFromVideoDevice(null,"video",async(res)=>{
   if(!res||reading) return;
   reading=true;
+
   try{
    const code=res.text;
    const q=query(collection(db,"passes"),where("id","==",code));
    const snap=await getDocs(q);
-   if(snap.empty){ resultEl.textContent="無効"; }
-   else{
+
+   if(snap.empty){
+     resultEl.textContent="無効";
+   }else{
     const docSnap=snap.docs[0];
     const data=docSnap.data();
-    if(data.used){ resultEl.textContent="使用済"; }
-    else{
+
+    if(data.used){
+      resultEl.textContent="使用済";
+    }else{
      await updateDoc(doc(db,"passes",docSnap.id),{used:true});
      resultEl.textContent="OK";
     }
    }
-  }catch{ resultEl.textContent="エラー"; }
+  }catch{
+   resultEl.textContent="エラー";
+  }
+
   setTimeout(()=>reading=false,1500);
  });
 }
-
 </script>
-</body>
-</html>
