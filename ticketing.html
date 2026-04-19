@@ -5,37 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>プライオリティパス発券</title>
 
+<!-- QR -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
-body { font-family:sans-serif; background:#f0f4f8; padding:20px; }
-h1 { text-align:center; }
-
-form { max-width:340px; margin:auto; background:#fff; padding:20px; border-radius:12px; }
-input,select,button { width:100%; margin:8px 0; padding:10px; }
+body { font-family: "Segoe UI", sans-serif; background:#f0f4f8; margin:0; padding:20px; }
+h1 { text-align:center; color:#004080; }
+form {
+  max-width:340px; margin:0 auto; padding:20px;
+  background:#fff; border-radius:12px;
+}
+input, select, button {
+  width:100%; padding:10px; margin:8px 0;
+}
+button { background:#0066cc; color:#fff; border:none; }
 
 .ticket-card {
   max-width:360px; margin:20px auto; padding:20px;
-  background:#fff; border-radius:16px; text-align:center;
+  background:#fff; border-radius:16px;
+  text-align:center;
   border:2px solid #009933;
-}
-
-/* モーダル */
-.modal {
-  display:none; position:fixed; top:0; left:0;
-  width:100%; height:100%; background:rgba(0,0,0,0.6);
-}
-.modal-content {
-  background:#fff; margin:20% auto; padding:20px;
-  max-width:300px; border-radius:10px;
 }
 </style>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, getDocs,
-  doc, getDoc, setDoc, onSnapshot, serverTimestamp
+  getFirestore, collection, addDoc, doc,
+  onSnapshot, serverTimestamp, getDocs, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app = initializeApp({
@@ -45,44 +42,19 @@ const app = initializeApp({
 });
 const db = getFirestore(app);
 
-/* ===== 日付キー ===== */
-function todayKey(){
-  return new Date().toISOString().slice(0,10);
-}
-
-/* ===== 正規化（ズレ防止） ===== */
-function normalize(str){
-  return (str||"").replace(/\s/g,"");
-}
-
-/* ===== 4桁ID ===== */
-async function generatePassId(){
-  const key=todayKey();
-  const ref=doc(db,"counters",key);
-
-  const snap=await getDoc(ref);
-  let num=0;
-
-  if(snap.exists()) num=snap.data().count || 0;
-
-  num++;
-
-  await setDoc(ref,{count:num});
-
-  return num.toString().padStart(4,"0");
-}
-
-/* ===== 時間生成 ===== */
-function generateTimeBlocks(start,end,interval){
+/* =====================
+   🔥 時間生成（修正版）
+===================== */
+function generateTimeBlocks(start,end,interval=10){
   const blocks=[];
-  let [sh,sm]=start.split(":").map(Number);
-  let [eh,em]=end.split(":").map(Number);
+  const [sh,sm]=start.split(":").map(Number);
+  const [eh,em]=end.split(":").map(Number);
 
   let s=new Date(); s.setHours(sh,sm,0,0);
-  let e=new Date(); e.setHours(eh,em,0,0);
+  const e=new Date(); e.setHours(eh,em,0,0);
 
   while(s<e){
-    let next=new Date(s.getTime()+interval*60000);
+    const next=new Date(s.getTime()+interval*60000);
     if(next>e) break;
 
     const pad=n=>n.toString().padStart(2,"0");
@@ -93,55 +65,111 @@ function generateTimeBlocks(start,end,interval){
   return blocks;
 }
 
-/* ===== チケット表示（修正版） ===== */
+/* =====================
+   🔥 発券コード生成
+===================== */
+function generateCode(){
+  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+}
+
+/* =====================
+   🔥 チケット表示
+===================== */
 function renderTicket(data){
-  const el=document.getElementById("qrcode");
-  el.innerHTML="";
+  const container=document.getElementById("qrcode");
+  container.innerHTML="";
 
   const card=document.createElement("div");
   card.className="ticket-card";
 
   card.innerHTML=`
     <h2>プライオリティパス</h2>
-    <p>ID：${data.id}</p>
-    <p>${data.time}</p>
-    <p>${data.name}</p>
-    <p>${data.people}人</p>
+    <p>コード：${data.code}</p>
+    <p>時間：${data.time}</p>
+    <p>名前：${data.name}</p>
+    <p>人数：${data.people}人</p>
+    <div id="qr"></div>
   `;
 
-  const qrDiv=document.createElement("div");
-  card.appendChild(qrDiv);
+  container.appendChild(card);
 
-  el.appendChild(card);
-
-  new QRCode(qrDiv,{
+  new QRCode(card.querySelector("#qr"),{
     text:JSON.stringify(data),
     width:200,
     height:200
   });
 }
 
-/* ===== UI更新 ===== */
-function updateUI(passes,slots,limits){
+/* =====================
+   🔥 制限チェック
+===================== */
+async function checkLimit(){
+  const snap=await getDoc(doc(db,"settings","timeSlots"));
+  if(!snap.exists()) return {ok:false};
 
+  const slot=snap.data().slots?.[0];
+  if(!slot) return {ok:false};
+
+  const interval=Number(slot.interval)||10;
+  const limit=Number(slot.limit)||1;
+
+  const now=Date.now();
+  const since=new Date(now-interval*60000);
+
+  const passes=await getDocs(collection(db,"passes"));
+
+  let count=0;
+  passes.forEach(d=>{
+    const t=d.data().createdAt;
+    if(t && t.toDate()>=since) count++;
+  });
+
+  return {
+    ok:count<limit,
+    remain:limit-count
+  };
+}
+
+/* =====================
+   🔥 UI更新（完全版）
+===================== */
+async function updateUI(latestPasses,slots,limits,issueActive){
+
+  const form=document.getElementById("form");
+  const info=document.getElementById("info");
   const select=document.getElementById("timeSelect");
-  select.innerHTML="";
 
+  /* 発券停止 */
+  if(!issueActive){
+    form.style.display="none";
+    info.innerHTML="発券停止中";
+    return;
+  }
+
+  if(slots.length===0){
+    form.style.display="none";
+    info.innerHTML="時間設定なし";
+    return;
+  }
+
+  select.innerHTML="";
   const nowTime=new Date().toTimeString().slice(0,5);
 
-  let has=false;
+  let hasAvailable=false;
 
   slots.forEach((slot,i)=>{
 
     const start=slot.split("〜")[0];
+
+    /* 🔥 時刻比較修正 */
     if(start < nowTime) return;
 
-    const count=passes.filter(p=>{
-      return normalize(p.time) === normalize(slot);
-    }).length;
+    const count=latestPasses.filter(p=>p.time===slot).length;
+    const limit=Number(limits[i])||1;
+    const remain=limit-count;
 
-    const remain=(limits[i]||1)-count;
-
+    /* 🔥 満員非表示 */
     if(remain<=0) return;
 
     const opt=document.createElement("option");
@@ -149,92 +177,101 @@ function updateUI(passes,slots,limits){
     opt.textContent=`${slot}（残り${remain}枚）`;
 
     select.appendChild(opt);
-    has=true;
+    hasAvailable=true;
   });
 
-  if(!has){
-    document.getElementById("form").style.display="none";
-    document.getElementById("info").innerText="本日は終了";
+  if(!hasAvailable){
+    form.style.display="none";
+    info.innerHTML="本日は終了";
+  }else{
+    form.style.display="block";
+    info.innerHTML="";
   }
 }
 
-/* ===== 初期 ===== */
+/* =====================
+   🔥 初期化
+===================== */
 window.addEventListener("load",()=>{
 
-  const form=document.getElementById("form");
+  const passesCol=collection(db,"passes");
+  const timeSlotsDoc=doc(db,"settings","timeSlots");
+  const issueStatusDoc=doc(db,"settings","issueStatus");
 
-  /* 🔥 既存チケット */
-  const saved=localStorage.getItem("ticket");
-  if(saved){
-    const data=JSON.parse(saved);
-    if(data.date===todayKey()){
-      form.style.display="none";
-      renderTicket(data);
-      return;
-    }
-  }
-
-  let passes=[];
+  let latestPasses=[];
   let slots=[];
   let limits=[];
+  let issueActive=true;
 
-  /* Firestore監視 */
-  onSnapshot(collection(db,"passes"),snap=>{
-    passes=snap.docs.map(d=>d.data());
-    updateUI(passes,slots,limits);
+  /* 発券ON/OFF */
+  onSnapshot(issueStatusDoc,s=>{
+    issueActive=s.data()?.enabled ?? true;
+    updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  onSnapshot(doc(db,"settings","timeSlots"),snap=>{
+  /* 時間枠 */
+  onSnapshot(timeSlotsDoc,snap=>{
     const data=snap.data();
 
-    slots=[]; limits=[];
+    slots=[];
+    limits=[];
 
-    data?.slots?.forEach(f=>{
-      const gen=generateTimeBlocks(f.start,f.end,Number(f.interval)||10);
-      gen.forEach(g=>{
-        slots.push(g);
-        limits.push(Number(f.limit)||1);
+    if(data?.slots){
+      data.slots.forEach(f=>{
+        const gen=generateTimeBlocks(
+          f.start,
+          f.end,
+          Number(f.interval)||10
+        );
+
+        gen.forEach(g=>{
+          slots.push(g);
+          limits.push(Number(f.limit)||1);
+        });
       });
-    });
+    }
 
-    updateUI(passes,slots,limits);
+    updateUI(latestPasses,slots,limits,issueActive);
   });
 
-  /* 発券 → モーダル */
-  form.addEventListener("submit",(e)=>{
+  /* 発券一覧 */
+  onSnapshot(passesCol,snap=>{
+    latestPasses=snap.docs.map(d=>d.data());
+    updateUI(latestPasses,slots,limits,issueActive);
+  });
+
+  /* 発券 */
+  document.getElementById("form").addEventListener("submit", async(e)=>{
     e.preventDefault();
-    document.getElementById("modal").style.display="block";
-  });
-
-  document.getElementById("cancelBtn").onclick=()=>{
-    document.getElementById("modal").style.display="none";
-  };
-
-  document.getElementById("okBtn").onclick=async ()=>{
 
     const name=document.getElementById("name").value;
     const people=document.getElementById("people").value;
     const time=document.getElementById("timeSelect").value;
 
-    const id=await generatePassId();
+    const check=await checkLimit();
+    if(!check.ok){
+      alert("制限中");
+      return;
+    }
 
-    const data={
-      id,name,people,time,
-      date:todayKey()
-    };
+    const code=generateCode();
 
     await addDoc(collection(db,"passes"),{
-      ...data,
+      code,name,people,time,
       createdAt:serverTimestamp()
     });
 
+    const data={code,name,people,time};
+
     localStorage.setItem("ticket",JSON.stringify(data));
-
-    document.getElementById("modal").style.display="none";
-    form.style.display="none";
-
     renderTicket(data);
-  };
+  });
+
+  /* 復元 */
+  const saved=localStorage.getItem("ticket");
+  if(saved){
+    renderTicket(JSON.parse(saved));
+  }
 
 });
 </script>
@@ -253,14 +290,6 @@ window.addEventListener("load",()=>{
 
 <div id="info"></div>
 <div id="qrcode"></div>
-
-<div id="modal" class="modal">
-  <div class="modal-content">
-    <p>発券しますか？</p>
-    <button id="okBtn">はい</button>
-    <button id="cancelBtn">いいえ</button>
-  </div>
-</div>
 
 </body>
 </html>
