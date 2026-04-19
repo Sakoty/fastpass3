@@ -11,13 +11,16 @@
 <style>
 body { font-family: "Segoe UI", sans-serif; background:#f0f4f8; margin:0; padding:20px; }
 h1 { text-align:center; color:#004080; }
+
 form {
-  max-width:340px; margin:0 auto; padding:20px;
+  max-width:340px; margin:0 auto 20px; padding:20px;
   background:#fff; border-radius:12px;
 }
+
 input, select, button {
   width:100%; padding:10px; margin:8px 0;
 }
+
 button { background:#0066cc; color:#fff; border:none; }
 
 .ticket-card {
@@ -26,13 +29,29 @@ button { background:#0066cc; color:#fff; border:none; }
   text-align:center;
   border:2px solid #009933;
 }
+
+/* モーダル */
+.modal {
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+}
+.modal-content {
+  background:#fff;
+  margin:20% auto;
+  padding:20px;
+  max-width:300px;
+  border-radius:10px;
+}
 </style>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, addDoc, doc,
-  onSnapshot, serverTimestamp, getDocs, getDoc
+  onSnapshot, serverTimestamp, getDocs, getDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app = initializeApp({
@@ -43,73 +62,85 @@ const app = initializeApp({
 const db = getFirestore(app);
 
 /* =====================
-   🔥 時間生成（修正版）
+   日付キー
 ===================== */
-function generateTimeBlocks(start,end,interval=10){
-  const blocks=[];
-  const [sh,sm]=start.split(":").map(Number);
+function getTodayKey(){
+  const d=new Date();
+  return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();
+}
+
+/* =====================
+   4桁ID
+===================== */
+async function generatePassID(){
+  const ref=doc(db,"settings","counter");
+  const snap=await getDoc(ref);
+
+  let val=0;
+  if(snap.exists()) val=snap.data().value||0;
+
+  await updateDoc(ref,{value:val+1});
+
+  return String(val).padStart(4,"0");
+}
+
+/* =====================
+   時間生成
+===================== */
+function generateTimeBlocks(start,end,interval){
+  const list=[];
+  let [h,m]=start.split(":").map(Number);
   const [eh,em]=end.split(":").map(Number);
 
-  let s=new Date(); s.setHours(sh,sm,0,0);
-  const e=new Date(); e.setHours(eh,em,0,0);
+  while(h<eh || (h===eh && m<em)){
+    let nh=h, nm=m+interval;
+    if(nm>=60){ nh++; nm-=60; }
 
-  while(s<e){
-    const next=new Date(s.getTime()+interval*60000);
-    if(next>e) break;
+    const pad=n=>String(n).padStart(2,"0");
+    list.push(`${pad(h)}:${pad(m)}〜${pad(nh)}:${pad(nm)}`);
 
-    const pad=n=>n.toString().padStart(2,"0");
-
-    blocks.push(`${pad(s.getHours())}:${pad(s.getMinutes())}〜${pad(next.getHours())}:${pad(next.getMinutes())}`);
-    s=next;
+    h=nh; m=nm;
   }
-  return blocks;
+  return list;
 }
 
 /* =====================
-   🔥 発券コード生成
-===================== */
-function generateCode(){
-  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
-}
-
-/* =====================
-   🔥 チケット表示
+   QR表示
 ===================== */
 function renderTicket(data){
-  const container=document.getElementById("qrcode");
-  container.innerHTML="";
+  const el=document.getElementById("qrcode");
+  el.innerHTML="";
 
   const card=document.createElement("div");
   card.className="ticket-card";
 
   card.innerHTML=`
     <h2>プライオリティパス</h2>
-    <p>コード：${data.code}</p>
-    <p>時間：${data.time}</p>
-    <p>名前：${data.name}</p>
-    <p>人数：${data.people}人</p>
+    <p>ID：${data.id}</p>
+    <p>${data.time}</p>
+    <p>${data.name}</p>
+    <p>${data.people}人</p>
     <div id="qr"></div>
   `;
 
-  container.appendChild(card);
+  el.appendChild(card);
 
   new QRCode(card.querySelector("#qr"),{
     text:JSON.stringify(data),
     width:200,
     height:200
   });
+
+  document.getElementById("form").style.display="none";
 }
 
 /* =====================
-   🔥 制限チェック
+   制限チェック
 ===================== */
 async function checkLimit(){
   const snap=await getDoc(doc(db,"settings","timeSlots"));
-  if(!snap.exists()) return {ok:false};
-
-  const slot=snap.data().slots?.[0];
-  if(!slot) return {ok:false};
+  const slot=snap.data()?.slots?.[0];
+  if(!slot) return {ok:true};
 
   const interval=Number(slot.interval)||10;
   const limit=Number(slot.limit)||1;
@@ -125,128 +156,103 @@ async function checkLimit(){
     if(t && t.toDate()>=since) count++;
   });
 
-  return {
-    ok:count<limit,
-    remain:limit-count
-  };
+  return {ok:count<limit};
 }
 
 /* =====================
-   🔥 UI更新（完全版）
+   UI更新
 ===================== */
-async function updateUI(latestPasses,slots,limits,issueActive){
+async function updateUI(passes,slots,limits){
 
-  const form=document.getElementById("form");
-  const info=document.getElementById("info");
   const select=document.getElementById("timeSelect");
-
-  /* 発券停止 */
-  if(!issueActive){
-    form.style.display="none";
-    info.innerHTML="発券停止中";
-    return;
-  }
-
-  if(slots.length===0){
-    form.style.display="none";
-    info.innerHTML="時間設定なし";
-    return;
-  }
+  const now=new Date().toTimeString().slice(0,5);
 
   select.innerHTML="";
-  const nowTime=new Date().toTimeString().slice(0,5);
+  let has=false;
 
-  let hasAvailable=false;
+  slots.forEach((s,i)=>{
+    const start=s.split("〜")[0];
+    if(start<now) return;
 
-  slots.forEach((slot,i)=>{
+    const count=passes.filter(p=>p.time===s).length;
+    const remain=(limits[i]||1)-count;
 
-    const start=slot.split("〜")[0];
-
-    /* 🔥 時刻比較修正 */
-    if(start < nowTime) return;
-
-    const count=latestPasses.filter(p=>p.time===slot).length;
-    const limit=Number(limits[i])||1;
-    const remain=limit-count;
-
-    /* 🔥 満員非表示 */
     if(remain<=0) return;
 
     const opt=document.createElement("option");
-    opt.value=slot;
-    opt.textContent=`${slot}（残り${remain}枚）`;
+    opt.value=s;
+    opt.textContent=`${s}（残${remain}）`;
 
     select.appendChild(opt);
-    hasAvailable=true;
+    has=true;
   });
 
-  if(!hasAvailable){
-    form.style.display="none";
-    info.innerHTML="本日は終了";
-  }else{
-    form.style.display="block";
-    info.innerHTML="";
+  if(!has){
+    document.getElementById("form").style.display="none";
+    document.getElementById("info").innerHTML="終了";
   }
 }
 
 /* =====================
-   🔥 初期化
+   初期化
 ===================== */
 window.addEventListener("load",()=>{
 
+  const todayKey=getTodayKey();
+  const saved=localStorage.getItem("ticket_"+todayKey);
+  if(saved){
+    renderTicket(JSON.parse(saved));
+    return;
+  }
+
   const passesCol=collection(db,"passes");
   const timeSlotsDoc=doc(db,"settings","timeSlots");
-  const issueStatusDoc=doc(db,"settings","issueStatus");
 
-  let latestPasses=[];
+  let passes=[];
   let slots=[];
   let limits=[];
-  let issueActive=true;
 
-  /* 発券ON/OFF */
-  onSnapshot(issueStatusDoc,s=>{
-    issueActive=s.data()?.enabled ?? true;
-    updateUI(latestPasses,slots,limits,issueActive);
+  onSnapshot(passesCol,s=>{
+    passes=s.docs.map(d=>d.data());
+    updateUI(passes,slots,limits);
   });
 
-  /* 時間枠 */
-  onSnapshot(timeSlotsDoc,snap=>{
-    const data=snap.data();
+  onSnapshot(timeSlotsDoc,s=>{
+    slots=[]; limits=[];
 
-    slots=[];
-    limits=[];
-
-    if(data?.slots){
-      data.slots.forEach(f=>{
-        const gen=generateTimeBlocks(
-          f.start,
-          f.end,
-          Number(f.interval)||10
-        );
-
-        gen.forEach(g=>{
-          slots.push(g);
-          limits.push(Number(f.limit)||1);
-        });
+    s.data()?.slots?.forEach(f=>{
+      const list=generateTimeBlocks(f.start,f.end,Number(f.interval)||10);
+      list.forEach(l=>{
+        slots.push(l);
+        limits.push(Number(f.limit)||1);
       });
-    }
+    });
 
-    updateUI(latestPasses,slots,limits,issueActive);
+    updateUI(passes,slots,limits);
   });
 
-  /* 発券一覧 */
-  onSnapshot(passesCol,snap=>{
-    latestPasses=snap.docs.map(d=>d.data());
-    updateUI(latestPasses,slots,limits,issueActive);
-  });
+  /* モーダル */
+  const modal=document.getElementById("modal");
 
-  /* 発券 */
-  document.getElementById("form").addEventListener("submit", async(e)=>{
+  document.getElementById("form").addEventListener("submit",(e)=>{
     e.preventDefault();
+    modal.style.display="block";
+  });
+
+  document.getElementById("cancel").onclick=()=>modal.style.display="none";
+
+  document.getElementById("ok").onclick=async()=>{
 
     const name=document.getElementById("name").value;
     const people=document.getElementById("people").value;
     const time=document.getElementById("timeSelect").value;
+
+    const todayKey=getTodayKey();
+    if(localStorage.getItem("ticket_"+todayKey)){
+      renderTicket(JSON.parse(localStorage.getItem("ticket_"+todayKey)));
+      modal.style.display="none";
+      return;
+    }
 
     const check=await checkLimit();
     if(!check.ok){
@@ -254,24 +260,20 @@ window.addEventListener("load",()=>{
       return;
     }
 
-    const code=generateCode();
+    const id=await generatePassID();
+
+    const data={id,name,people,time};
 
     await addDoc(collection(db,"passes"),{
-      code,name,people,time,
+      ...data,
       createdAt:serverTimestamp()
     });
 
-    const data={code,name,people,time};
+    localStorage.setItem("ticket_"+todayKey,JSON.stringify(data));
 
-    localStorage.setItem("ticket",JSON.stringify(data));
     renderTicket(data);
-  });
-
-  /* 復元 */
-  const saved=localStorage.getItem("ticket");
-  if(saved){
-    renderTicket(JSON.parse(saved));
-  }
+    modal.style.display="none";
+  };
 
 });
 </script>
@@ -290,6 +292,15 @@ window.addEventListener("load",()=>{
 
 <div id="info"></div>
 <div id="qrcode"></div>
+
+<!-- モーダル -->
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <p>発券しますか？</p>
+    <button id="ok">OK</button>
+    <button id="cancel">キャンセル</button>
+  </div>
+</div>
 
 </body>
 </html>
